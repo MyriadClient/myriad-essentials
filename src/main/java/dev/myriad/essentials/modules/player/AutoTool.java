@@ -1,6 +1,7 @@
 package dev.myriad.essentials.modules.player;
 
 import dev.myriad.api.Myriad;
+import dev.myriad.api.event.Priority;
 import dev.myriad.api.event.Subscribe;
 import dev.myriad.api.event.events.AttackEvent;
 import dev.myriad.api.event.events.BlockBreakEvent;
@@ -29,14 +30,15 @@ import java.util.function.ToDoubleFunction;
  * the tool and (with Swap Back) returns to your previous slot when you stop. Tools about to break are left alone.
  * A better tool in your inventory is brought into the hotbar (an empty slot, over a worse tool, or over building
  * blocks); while you move, your keys are released for a tick first, since Grim (2b2t) refuses inventory clicks while
- * you move.
+ * you move. Tools and weapons worn down to Preserve are put aside to be mended: Packet Mine and other breaks pass them
+ * over too.
  */
 public class AutoTool extends Module {
 	private final BoolSetting silent = sgGeneral.bool("Silent").description("Swap on the server only; your selected slot stays put.").defaultValue(true).build();
 	private final BoolSetting swapBack = sgGeneral.bool("Swap Back").description("Go back to the slot you had when you stop mining.").defaultValue(true)
 		.visible(() -> !silent.get()).build();
 	private final BoolSetting weapon = sgGeneral.bool("Weapon").description("Switch to your best weapon when you attack.").build();
-	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve").description("Don't use tools with less durability than this (%).").defaultValue(3).range(0, 50).decimals(0).build();
+	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve").description("Put tools and weapons with less durability than this (%) aside, to be mended.").defaultValue(3).range(0, 50).decimals(0).build();
 
 	private boolean holding;
 	private int previousSlot = -1, holdTicks;
@@ -46,16 +48,26 @@ public class AutoTool extends Module {
 	}
 
 	@Override
-	protected void onDisable() {
-		stop();
+	protected void onEnable() {
+		Myriad.inventory().spare(this, s -> ItemInfo.armorSlot(s) == null && worn(s));
 	}
 
-	@Subscribe
+	@Override
+	protected void onDisable() {
+		stop();
+		Myriad.inventory().spare(this, null);
+	}
+
+	/**
+	 * After the others: Packet Mine cancels the clicks it mines itself, and the breaking service picks their tool, so
+	 * Auto Tool never hears of them (its own hold would fight the service's, a slot switch each way every few ticks).
+	 */
+	@Subscribe(priority = Priority.LOW)
 	private void onStart(BlockBreakEvent.Start e) {
 		equipFor(e.pos());
 	}
 
-	@Subscribe
+	@Subscribe(priority = Priority.LOW)
 	private void onProgress(BlockBreakEvent.Progress e) {
 		equipFor(e.pos());
 	}

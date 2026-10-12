@@ -10,6 +10,7 @@ import dev.myriad.api.setting.BoolSetting;
 import dev.myriad.api.setting.EnumSetting;
 import dev.myriad.api.setting.IntSetting;
 import dev.myriad.api.util.Interactions;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
@@ -22,7 +23,8 @@ import org.lwjgl.glfw.GLFW;
  * Middle click does something useful depending on what you're pointing at: in the air, at an entity, at a block, or
  * while flying with an elytra. Each can add or remove a friend, throw experience bottles (for as long as you hold the
  * button), launch a rocket or throw a pearl. Items are used with a silent swap, so your selected slot doesn't change,
- * and vanilla's pick block is skipped when an action runs.
+ * and without your hand swinging on screen (the server still gets the swing vanilla sends with a use); vanilla's pick
+ * block is skipped when an action runs.
  */
 public class MiddleClick extends Module {
 	public enum Action {
@@ -136,7 +138,7 @@ public class MiddleClick extends Module {
 	private void use(Item item) {
 		if (mc.player.getOffhandItem().is(item)) {
 			Interactions.useItem(InteractionHand.OFF_HAND);
-			Interactions.swing(InteractionHand.OFF_HAND);
+			swing(InteractionHand.OFF_HAND);
 			return;
 		}
 		int slot = Myriad.inventory().findInHotbar(s -> s.is(item));
@@ -156,7 +158,12 @@ public class MiddleClick extends Module {
 		Myriad.inventory().borrow(this, slot, null);
 		Myriad.inventory().silentSwap(slot, () -> {
 			Interactions.useItem(InteractionHand.MAIN_HAND);
-			Interactions.swing(InteractionHand.MAIN_HAND);
+			swing(InteractionHand.MAIN_HAND);
 		});
+	}
+
+	/** The swing vanilla sends with a use, without the hand moving on screen. */
+	private void swing(InteractionHand hand) {
+		if (mc.getConnection() != null) mc.getConnection().send(new ServerboundSwingPacket(hand));
 	}
 }

@@ -23,7 +23,7 @@ import java.util.function.Predicate;
 
 /**
  * Swapping the worn elytra with a chestplate held in the off hand or hotbar, by using the held one (as a right-click
- * equips armour): how Elytra Tweaks' No Durability and Elytra Fly's bounce keep the server from gliding long enough to
+ * equips armour): how Elytra Fly's No Durability and its bounce keep the server from gliding long enough to
  * wear the elytra. The server stops a glide on its next tick once the elytra is off; {@link GlideHold} keeps the client
  * (and Grim) gliding meanwhile, and {@link #startGlide()} starts it again with the elytra put back for a moment.
  * <p>
@@ -69,7 +69,7 @@ public final class ChestSwap {
 		boolean gliderOn = ItemInfo.isGlider(worn);
 		if (!gliderOn && !isChestArmor(worn)) return null;
 		Predicate<ItemStack> counterpart = gliderOn ? ChestSwap::isChestArmor : s -> ItemInfo.isGlider(s) && chestEquippable(s);
-		// Not gear No Break put away (an elytra about to wear out) unless it's all there is: the elytra has to go back on,
+		// Not gear a Preserve put aside (an elytra about to wear out) unless it's all there is: the elytra has to go back on,
 		// and a chestplate worn a tick at a time in the air doesn't wear.
 		Pair pair = find(counterpart.and(s -> !Myriad.inventory().isSpared(s)));
 		return pair != null ? pair : find(counterpart);

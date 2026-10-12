@@ -11,6 +11,7 @@ import dev.myriad.api.render.HighlightSettings;
 import dev.myriad.api.setting.ColorSetting;
 import dev.myriad.api.setting.EnumSetting;
 import dev.myriad.api.setting.SettingColor;
+import dev.myriad.essentials.modules.world.AirPlace;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.BlockHitResult;
@@ -20,6 +21,7 @@ import net.minecraft.world.phys.HitResult;
  * Replaces vanilla's thin black outline around the block you're looking at: a shader outline (with glow, a solid or
  * dotted fill and a gradient, like ESP's) or a box, either following the block's real shape. Always just the one block
  * (half a double chest, one end of a bed), outlined on its own even where Blocks or Storage highlight its neighbours.
+ * With nothing under the crosshair, it outlines the space Air Place would put a block in (a full block).
  */
 public class BlockHighlight extends Module {
 	public enum Mode {
@@ -37,9 +39,9 @@ public class BlockHighlight extends Module {
 		LevelRenderEvents.BEFORE_BLOCK_OUTLINE.register((context, state) -> !isEnabled());
 	}
 
-	/** The block under the crosshair, or null. */
+	/** The block under the crosshair, or where Air Place would place with nothing under it, or null. */
 	private BlockPos target() {
-		if (!(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) return null;
+		if (!(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) return AirPlace.target();
 		return mc.level.getBlockState(hit.getBlockPos()).isAir() ? null : hit.getBlockPos();
 	}
 

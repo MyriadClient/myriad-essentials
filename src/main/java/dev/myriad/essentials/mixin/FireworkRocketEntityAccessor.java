@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 import java.util.OptionalInt;
 
-/** Elytra Tweaks: which entity a rocket is boosting (synced from the server). */
+/** Rocket Boost: which entity a rocket is boosting (synced from the server). */
 @Mixin(FireworkRocketEntity.class)
 public interface FireworkRocketEntityAccessor {
 	@Accessor("DATA_ATTACHED_TO_TARGET")

@@ -7,11 +7,13 @@ import dev.myriad.api.event.events.Render3DEvent;
 import dev.myriad.api.event.events.TickEvent;
 import dev.myriad.api.module.Categories;
 import dev.myriad.api.module.Module;
+import dev.myriad.api.module.Modules;
 import dev.myriad.api.render.Renderer3D;
 import dev.myriad.api.service.Placement;
 import dev.myriad.api.setting.DoubleSetting;
 import dev.myriad.api.setting.SettingColor;
 import dev.myriad.api.util.Reach;
+import dev.myriad.essentials.modules.render.BlockHighlight;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.BlockItem;
@@ -21,7 +23,7 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Places blocks in mid-air: with a block in hand and nothing under the crosshair, right-click puts it where you look,
- * {@link #distance} blocks away, outlined beforehand. Farther than the server would accept, it comes back along your
+ * {@link #distance} blocks away, outlined beforehand (in Block Highlight's look while that's on). Farther than the server would accept, it comes back along your
  * look to the farthest space that is: your look has to enter the space within reach, so up to about 5 blocks ahead
  * (6 looking along a diagonal).
  */
@@ -66,6 +68,12 @@ public class AirPlace extends Module {
 		target = findTarget();
 	}
 
+	/** Where a right-click would place now, or null (also while this is off): Block Highlight outlines it. */
+	public static BlockPos target() {
+		AirPlace m = Modules.active(AirPlace.class);
+		return m == null ? null : m.target;
+	}
+
 	@Override
 	protected void onDisable() {
 		target = null;
@@ -84,7 +92,8 @@ public class AirPlace extends Module {
 	@Subscribe
 	private void onRender(Render3DEvent e) {
 		BlockPos pos = target;
-		if (pos == null) return;
+		// Block Highlight draws it in its own look.
+		if (pos == null || Modules.active(BlockHighlight.class) != null) return;
 		int color = SettingColor.role(SettingColor.Mode.ACCENT).argb();
 		Renderer3D.box(new AABB(pos), 0, color, Renderer3D.ShapeMode.LINES, false);
 	}

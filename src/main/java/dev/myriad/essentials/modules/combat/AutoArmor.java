@@ -1,7 +1,7 @@
 package dev.myriad.essentials.modules.combat;
 
 import dev.myriad.api.Myriad;
-import dev.myriad.essentials.modules.movement.ElytraTweaks;
+import dev.myriad.essentials.modules.movement.ElytraFly;
 import dev.myriad.api.event.Subscribe;
 import dev.myriad.api.event.events.KeyEvent;
 import dev.myriad.api.event.events.MouseButtonEvent;
@@ -15,6 +15,7 @@ import dev.myriad.api.setting.IntSetting;
 import dev.myriad.api.setting.KeybindSetting;
 import dev.myriad.api.setting.SettingGroup;
 import dev.myriad.api.util.ItemInfo;
+import dev.myriad.api.util.Slots;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -24,7 +25,9 @@ import net.minecraft.world.item.enchantment.Enchantments;
 
 /**
  * Wears the best armour you're carrying, one piece at a time. Best means most armour and toughness, then your
- * preferred protection enchantment; pieces about to break and curse of binding are skipped.
+ * preferred protection enchantment; curse of binding is skipped. Pieces worn down to Preserve are put aside to be
+ * mended: swapped for another, or taken off when there's none (an elytra once you've landed), and other modules pass
+ * them over too.
  * <p>
  * For the chest slot you choose between a chestplate and an elytra, and the Chest Swap bind flips between them (and
  * swaps straight away). Until you land, an elytra you're flying with is never taken off.
@@ -44,7 +47,8 @@ public class AutoArmor extends Module {
 	private final IntSetting delay = sgGeneral.intSetting("Delay").description("Ticks between equipping pieces.").defaultValue(2).range(0, 20).build();
 	private final EnumSetting<Protection> prefer = sgGeneral.enumSetting("Prefer", Protection.BLAST_LEGS)
 		.description("Protection enchantment to favour between otherwise equal pieces. Blast Legs: Protection, with Blast Protection on leggings.").build();
-	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve").description("Skip pieces with less durability than this (%).").defaultValue(5).range(0, 50).decimals(0).build();
+	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve").description("Put pieces with less durability than this (%) aside, to be mended.")
+		.defaultValue(5).range(0, 50).decimals(0).build();
 
 	private final SettingGroup sgChest = settings.group("Chest Swap");
 	private final EnumSetting<Chest> chest = sgChest.enumSetting("Chest", Chest.CHESTPLATE).description("What to wear in the chest slot.").build();
@@ -53,9 +57,27 @@ public class AutoArmor extends Module {
 	private final BoolSetting notify = sgChest.bool("Notify").description("Say which one you swapped to.").defaultValue(true).build();
 
 	private int wait;
+	/** A worn-down piece couldn't be taken off for lack of room (said once until it can). */
+	private boolean warnedFull;
 
 	public AutoArmor() {
 		super(Categories.COMBAT, "Auto Armor", "Wears your best armour, and swaps between chestplate and elytra on a bind.");
+	}
+
+	@Override
+	protected void onEnable() {
+		warnedFull = false;
+		Myriad.inventory().spare(this, this::wornDown);
+	}
+
+	@Override
+	protected void onDisable() {
+		Myriad.inventory().spare(this, null);
+	}
+
+	/** Armour or an elytra worn down to Preserve. */
+	private boolean wornDown(ItemStack s) {
+		return ItemInfo.armorSlot(s) != null && s.isDamageableItem() && ItemInfo.durabilityFraction(s) * 100 < preserve.get();
 	}
 
 	@Override
@@ -104,8 +126,8 @@ public class AutoArmor extends Module {
 	private Step equipBest(EquipmentSlot slot) {
 		ItemStack worn = mc.player.getItemBySlot(slot);
 		if (slot == EquipmentSlot.CHEST && awaitLanding.get() && mc.player.isFallFlying() && ItemInfo.canGlide(worn)) return Step.NONE;
-		// Elytra Tweaks takes the elytra off for a moment while you fly; it puts it back itself.
-		if (slot == EquipmentSlot.CHEST && ElytraTweaks.holdsChest()) return Step.NONE;
+		// Elytra Fly's No Durability takes the elytra off for a moment while you fly; it puts it back itself.
+		if (slot == EquipmentSlot.CHEST && ElytraFly.holdsChest()) return Step.NONE;
 		if (ItemInfo.isBound(worn)) return Step.NONE;
 		double current = score(worn, slot);
 		int best = -1;
@@ -119,18 +141,38 @@ public class AutoArmor extends Module {
 				best = i;
 			}
 		}
-		if (best < 0) return Step.NONE;
+		if (best < 0) return wornDown(worn) ? takeOff(slot, worn) : Step.NONE;
 		// Grim (2b2t) cancels a click while you move: your keys are let go for a tick first.
 		if (!Myriad.inventory().prepareClick()) return Step.WAITING;
 		return Myriad.inventory().move(best, ItemInfo.inventoryIndex(slot)) ? Step.EQUIPPED : Step.WAITING;
 	}
 
+	/** Takes a worn-down piece off, with nothing to put on instead, into an empty slot (an elytra only on the ground). */
+	private Step takeOff(EquipmentSlot slot, ItemStack worn) {
+		if (ItemInfo.canGlide(worn) && (mc.player.isFallFlying() || !mc.player.onGround())) return Step.NONE;
+		var inv = mc.player.getInventory();
+		int to = -1;
+		for (int i = Slots.MAIN_START; i < Slots.MAIN_END && to < 0; i++) if (inv.getItem(i).isEmpty()) to = i;
+		for (int i = 0; i < 9 && to < 0; i++) if (i != inv.getSelectedSlot() && i != Myriad.inventory().serverSlot() && inv.getItem(i).isEmpty()) to = i;
+		if (to < 0) {
+			if (!warnedFull) warn("No room to take off " + worn.getHoverName().getString() + " before it breaks.");
+			warnedFull = true;
+			return Step.NONE;
+		}
+		if (!Myriad.inventory().prepareClick()) return Step.WAITING;
+		String name = worn.getHoverName().getString();
+		int uses = ItemInfo.durability(worn);
+		if (!Myriad.inventory().move(to, ItemInfo.inventoryIndex(slot))) return Step.WAITING;
+		info("Took off " + name + " (" + uses + " uses left)");
+		warnedFull = false;
+		return Step.EQUIPPED;
+	}
+
 	/** Higher is better; 0 for nothing worth wearing. */
 	private double score(ItemStack s, EquipmentSlot slot) {
 		if (s.isEmpty()) return 0;
-		// No Break put it away to be mended.
+		// Put aside to be mended (a Preserve: here, Auto Tool's or Elytra Fly's).
 		if (ItemInfo.isBound(s) || Myriad.inventory().isSpared(s)) return 0;
-		if (s.isDamageableItem() && ItemInfo.durabilityFraction(s) * 100 < preserve.get()) return 0.01;
 		if (slot == EquipmentSlot.CHEST) {
 			boolean elytra = ItemInfo.canGlide(s);
 			// The wanted kind always beats the other; the other still beats an empty slot.

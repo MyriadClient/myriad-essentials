@@ -3,6 +3,45 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/fyzz-dev/myriad) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.2.16 (unreleased)
+
+Needs Myriad 0.2.10 (`Breaking.Options.withWaitForServer`).
+
+- Packet Mine leaves a block on screen until the server says it's gone (no ghost blocks when a finish is refused). With
+  Myriad 0.2.10 its tool goes back in the same tick as the dig packet: no flags on the local Grim with its experimental
+  checks on, and none on 2b2t.
+- Packet Mine's queue shows again, drawn with the shader outlines (the boxes it drew sat on the blocks' own faces and
+  lost to them): blocks waiting their turn faint and dotted, the block being mined a fill that thickens as it breaks,
+  staying until the server says it's gone.
+- Packet Mine with Auto Tool on: Auto Tool no longer picks a tool for the blocks Packet Mine mines (the breaking service
+  does). Its own hold fought the service's, a slot switch each way every few ticks on 2b2t.
+- Packet Mine sends one swing a tick at most: the click, the start and holding the button each added one (3-4 a click).
+- Middle Click's rockets, experience bottles and pearls no longer swing your hand on screen; the server still gets the
+  swing vanilla sends with a use.
+- No Break is gone: the Preserve settings do its work where the gear is chosen.
+  - Auto Tool's Preserve puts tools and weapons worn down to it aside for everyone: Packet Mine and other breaks pick
+    another tool (brought in from the inventory if need be) and leave the worn one alone.
+  - Auto Armor's Preserve (5%) swaps a worn-down piece for another, or takes it off when there's none (an elytra once
+    you've landed), and other modules pass it over.
+  - Elytra Fly has a Preserve too (5%): an elytra worn down to it is swapped for the freshest other one, in mid-air too,
+    and No Durability's swaps leave it out.
+- Elytra Fly Altitude with No Durability, made to be left alone on 2b2t. A capture there showed 2b2t sometimes ignoring a
+  glide restart (no glide and no stop from the server, though the packets were the same as for every other restart);
+  No Durability waited for a stop that never came while the server wasn't gliding you, and Grim set you back over and
+  over (145 setbacks in two minutes, hanging in place for seconds, losing height). Now every restart is checked against
+  the server's answer: with none in a round trip, the elytra goes back on and the glide starts again at once, and
+  swapping picks up again after 5 seconds of gliding the server agrees with (a dropped start now costs a setback or
+  two, not a storm). Altitude itself glides gently for a few seconds after a run of setbacks, slows down (climbing)
+  while the chunks ahead haven't loaded, and when it can't go on (elytra worn out, the server setting you back or
+  refusing to glide you over and over) comes down to land. New **After Landing** (Altitude): disconnect once landed
+  (default), or stay there.
+- Elytra Tweaks is split up. No Durability, and the catch of a glide dropped in mid-air, are part of Elytra Fly now,
+  in every mode, with a new **Manual** mode for flying yourself (rockets) with just those. Rocket Boost is a module of
+  its own. Set No Durability again in Elytra Fly, and turn Rocket Boost on, if you used them.
+- Air Place's target block is drawn by Block Highlight when it's on (its look, where the block will go), in place of
+  Air Place's own outline.
+- Grim suite: No Break's tests are now Auto Tool, Auto Armor and Elytra Fly Preserve tests.
+
 ## 0.2.15
 
 Needs Myriad 0.2.9 (for the ping 2b2t's tab list doesn't show, which Recast's chestplate swaps wait on).

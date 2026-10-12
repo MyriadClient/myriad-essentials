@@ -1,6 +1,9 @@
 package dev.myriad.essentials.modules.movement;
 
 import dev.myriad.api.Myriad;
+import dev.myriad.api.setting.DoubleSetting;
+import dev.myriad.api.setting.BoolSetting;
+import dev.myriad.api.event.events.InteractEvent;
 import dev.myriad.api.event.Priority;
 import dev.myriad.api.event.Subscribe;
 import dev.myriad.api.event.events.InputEvent;
@@ -19,6 +22,7 @@ import dev.myriad.api.util.ItemInfo;
 import dev.myriad.api.util.Baritone;
 import dev.myriad.api.util.Interactions;
 import dev.myriad.api.util.Packets;
+import dev.myriad.essentials.mixin.EntityAccessor;
 import dev.myriad.essentials.modules.player.AutoEat;
 import dev.myriad.essentials.util.ChestSwap;
 import dev.myriad.essentials.util.GlideHold;
@@ -27,6 +31,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
@@ -46,7 +51,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Two ways to fly an elytra, by what you're doing:
+ * Three ways to fly an elytra, by what you're doing:
  * <ul>
  * <li><b>Recast</b> bounces along a highway along the ground. It jumps each time you touch down and keeps you on the nearest 45°
  * lane. The client keeps gliding through each ground touch instead of letting the elytra close; the server still closes
@@ -74,14 +79,25 @@ import java.util.List;
  * <li><b>Altitude</b> crosses open country without fireworks, "pitch 40" style. It dives until you're fast, pulls up hard, then eases
  * back to level: pulling up gives back more height than the speed it costs, so the cycle holds the altitude you started
  * gliding at (it dives harder when you're above it and climbs more when you're below). Start high, since the first dive
- * from a slow glide drops you 50 or so blocks. Steer with the camera. Works with Elytra Tweaks' No Durability, which
- * swaps the chestplate on and off meanwhile.</li>
+ * from a slow glide drops you 50 or so blocks. Steer with the camera. Works with No Durability, which
+ * swaps the chestplate on and off meanwhile. Made to be left alone: when the server sets you back a few times in a
+ * row it glides gently until the server agrees again, and it slows down (climbing) while the chunks ahead haven't
+ * loaded. When it can't go on (the elytra wearing out, the server setting you back over and over or refusing to
+ * glide you), it comes down to land, levelling out near the ground, and After Landing disconnects you there or
+ * leaves you standing.</li>
+ * <li><b>Manual</b>: you fly (rockets, Rocket Boost); this only keeps the elytra from wearing out and catches a dropped
+ * glide.</li>
  * </ul>
  * The flight rotation only goes to the server and the flight physics, so you can look around freely.
+ * <p>
+ * In every mode, <b>No Durability</b> swaps the elytra with a chestplate while you glide so the server barely wears it
+ * (see {@link NoDurability}), and a glide dropped in mid-air is opened again at once. Elytras worn down to
+ * <b>Preserve</b> are put aside: the freshest other one goes on (in mid-air too), and No Durability's swaps leave them
+ * out.
  */
 public class ElytraFly extends Module {
 	public enum Mode {
-		RECAST, ALTITUDE
+		RECAST, ALTITUDE, MANUAL
 	}
 
 	public enum Obstacles {
@@ -92,14 +108,26 @@ public class ElytraFly extends Module {
 		WAIT, DISCONNECT
 	}
 
+	public enum AfterLanding {
+		STAY, DISCONNECT
+	}
+
 	private final EnumSetting<Mode> mode = sgGeneral.enumSetting("Mode", Mode.RECAST)
-		.description("Recast to bounce along a highway, Altitude to cross open country without fireworks.").build();
+		.description("Recast to bounce along a highway, Altitude to cross open country without fireworks, Manual to fly yourself (No Durability only).").build();
+	private final BoolSetting noDurability = sgGeneral.bool("No Durability")
+		.description("Keep the elytra from wearing out while you glide, by swapping it with a chestplate held in your off hand or hotbar.")
+		.defaultValue(true).build();
+	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve")
+		.description("Put elytras with less durability than this (%) aside, and fly with another.").defaultValue(5).range(0, 50).decimals(0).build();
 	private final EnumSetting<Obstacles> obstacles = sgGeneral.enumSetting("Obstacles", Obstacles.CLEAR)
 		.description("Clear: Baritone takes you past (walking round, mining or placing), or without it, mines through blocks and fills holes at floor level. Stop: stop at them.")
 		.visible(() -> mode.get() == Mode.RECAST).build();
 	private final EnumSetting<IfBlocked> ifBlocked = sgGeneral.enumSetting("If Blocked", IfBlocked.WAIT)
 		.description("When the way can't be cleared (with Stop, anything in the lane): wait there, or disconnect.")
 		.visible(() -> mode.get() == Mode.RECAST).build();
+	private final EnumSetting<AfterLanding> afterLanding = sgGeneral.enumSetting("After Landing", AfterLanding.DISCONNECT)
+		.description("When Altitude has to come down (elytra worn out, the server keeps setting you back): disconnect once landed, or stay there.")
+		.visible(() -> mode.get() == Mode.ALTITUDE).build();
 
 	private enum State {
 		IDLE, BOUNCING, BRAKING, WALKING, MINING, PATHING, WAITING, BLOCKED, UNDER, FILLING
@@ -165,6 +193,19 @@ public class ElytraFly extends Module {
 	private static final float DIVE_PITCH = 36, CLIMB_PITCH = -49, PULL_RATE = 5, EASE_RATE = 0.8f;
 	private static final double DIVE_SPEED = 52, HOLD_GAIN = 0.2, MIN_DIVE_SPEED = 36, MAX_DIVE_SPEED = 58;
 	/**
+	 * Altitude, steadying: this many setbacks within {@code STEADY_WINDOW} ticks, and it glides at {@code STEADY_PITCH}
+	 * (a gentle descent) for {@code STEADY_TICKS} rather than dive and climb; {@code GIVE_UP} within {@code GIVE_UP_WINDOW},
+	 * and it lands.
+	 */
+	private static final int STEADY_SETBACKS = 3, STEADY_WINDOW = 60, STEADY_TICKS = 60, GIVE_UP = 25, GIVE_UP_WINDOW = 600;
+	private static final float STEADY_PITCH = 8;
+	/**
+	 * Altitude: chunks this many seconds of flight ahead that haven't loaded slow you down (climbing at
+	 * {@code SLOW_PITCH} trades speed for height) until they do, down to {@code SLOW_SPEED} blocks a second.
+	 */
+	private static final double LOAD_AHEAD_SECONDS = 4, SLOW_SPEED = 15;
+	private static final float SLOW_PITCH = -20;
+	/**
 	 * Altitude over terrain: how far ahead the ground is checked (loaded chunks' height maps, along your heading and a
 	 * few blocks to each side), and how high above the highest of it the cruise height is kept.
 	 */
@@ -188,8 +229,12 @@ public class ElytraFly extends Module {
 	private Phase phase = Phase.DIVE;
 	private float climbPitch;
 	private double cruiseY = Double.NaN;
-	/** Altitude: coming down to land, the elytra being nearly worn out. */
+	/** Altitude: coming down to land (the elytra nearly worn out, or it can't go on), and why. */
 	private boolean landing;
+	private String landReason = "";
+	/** Altitude: tick counts of recent setbacks, and ticks left gliding steadily after a run of them. */
+	private final java.util.ArrayDeque<Integer> altSetbacks = new java.util.ArrayDeque<>();
+	private int steadyTicks;
 
 	private boolean wantJump, wantForward, wantSneak, spoofing;
 	/** Recast: the lane's height, where you first stood (NaN until then). */
@@ -213,7 +258,7 @@ public class ElytraFly extends Module {
 	/**
 	 * Recast, chestplate on: a start has gone out since you last touched the ground; and ticks since it did. One a hop
 	 * is enough (the glide hold covers the rest of it); a hop that runs long (off an edge) gets another every
-	 * {@link #RESTART_TICKS}, as Elytra Tweaks' swapping does, well inside the hold's second.
+	 * {@link #RESTART_TICKS}, as No Durability's swapping does, well inside the hold's second.
 	 */
 	private boolean hopStarted;
 	private int sinceStart;
@@ -252,24 +297,29 @@ public class ElytraFly extends Module {
 	private final java.util.ArrayDeque<Long> setbacks = new java.util.ArrayDeque<>();
 	/** Recast: stuck, or set back too often: the lane counts as blocked until it's passed. */
 	private boolean forcedBlock;
-	private boolean warned;
+	private boolean warned, preserveWarned;
+	private final NoDurability noDur = new NoDurability(this);
 	/** Ticks spent waiting for the chestplate before bouncing, and the most. */
 	private int readyWait;
 	private static final int READY_WAIT = 40;
 
 	public ElytraFly() {
-		super(Categories.MOVEMENT, "Elytra Fly", "Bounce along highways, or cross open country without fireworks.");
+		super(Categories.MOVEMENT, "Elytra Fly", "Bounce along highways, cross open country without fireworks, and keep the elytra from wearing out.");
 	}
 
 	@Override
 	protected void onEnable() {
 		activeMode = mode.get();
 		reset();
+		noDur.enable();
+		Myriad.inventory().spare(this, this::wornDown);
 	}
 
 	@Override
 	protected void onDisable() {
 		reset();
+		noDur.disable();
+		Myriad.inventory().spare(this, null);
 	}
 
 	private void reset() {
@@ -281,6 +331,8 @@ public class ElytraFly extends Module {
 		phase = Phase.DIVE;
 		cruiseY = groundY = Double.NaN;
 		landing = false;
+		altSetbacks.clear();
+		steadyTicks = 0;
 		wantJump = wantForward = wantSneak = spoofing = holdGlide = flagged = forcedBlock = warned = baritoneFailed = false;
 		laneY = Double.NaN;
 		letGo();
@@ -295,7 +347,8 @@ public class ElytraFly extends Module {
 
 	@Override
 	public String hudInfo() {
-		if (activeMode == Mode.ALTITUDE) return landing ? "Landing" : Double.isNaN(cruiseY) ? "Altitude" : String.format("Y%.0f", cruiseY);
+		if (activeMode == Mode.MANUAL) return null;
+		if (activeMode == Mode.ALTITUDE) return landing ? "Landing" : steadyTicks > 0 ? "Steadying" : Double.isNaN(cruiseY) ? "Altitude" : String.format("Y%.0f", cruiseY);
 		return switch (state) {
 			case BRAKING -> "Stopping";
 			case WALKING, MINING -> "Mining";
@@ -368,7 +421,30 @@ public class ElytraFly extends Module {
 	 * No Durability, all the while it's going, stops for obstacles included.
 	 */
 	public static boolean swapsChest() {
-		return ElytraTweaks.noDurability() && bouncing();
+		return noDurability() && bouncing();
+	}
+
+	/** Whether No Durability is on (Elytra Fly on, with it set). */
+	public static boolean noDurability() {
+		ElytraFly m = Modules.active(ElytraFly.class);
+		return m != null && m.noDurability.get();
+	}
+
+	/**
+	 * Whether the chest slot is No Durability's (or the bounce's) to swap: while it swaps, and with No Durability on any
+	 * time you're off the ground, as a chestplate worn then is one of its swaps. Auto Armor leaves the slot alone
+	 * meanwhile: putting the best elytra on over it would wear each of your elytras in turn.
+	 */
+	public static boolean holdsChest() {
+		ElytraFly m = Modules.active(ElytraFly.class);
+		if (m != null && m.noDur.swapping() || swapsChest()) return true;
+		var p = Minecraft.getInstance().player;
+		return noDurability() && p != null && !p.onGround() && !p.isInWater();
+	}
+
+	/** An elytra worn down to Preserve: put aside, to be mended. */
+	private boolean wornDown(ItemStack s) {
+		return ItemInfo.isGlider(s) && s.isDamageableItem() && ItemInfo.durabilityFraction(s) * 100 < preserve.get();
 	}
 
 	// ---- tick -----------------------------------------------------------------------------------------------------
@@ -396,45 +472,112 @@ public class ElytraFly extends Module {
 		flagged = true;
 	}
 
+	/** The server's own say on your glide (your entity flags), for No Durability to check its starts against. */
+	@Subscribe(priority = Priority.HIGHEST, packets = ClientboundSetEntityDataPacket.class)
+	private void onEntityData(PacketEvent.Receive e) {
+		var p = mc.player;
+		if (p == null || !(e.packet() instanceof ClientboundSetEntityDataPacket data) || data.id() != p.getId()) return;
+		int flagsId = EntityAccessor.essentials$entityFlags().id();
+		for (var v : data.packedItems()) if (v.id() == flagsId && v.value() instanceof Byte flags) NoDurability.onOwnFlags(flags);
+	}
+
+	/**
+	 * No Durability (or Altitude itself) can't keep the flight safe: Altitude comes down to land, and After Landing
+	 * decides what then; in the other modes it's only said.
+	 */
+	void cannotGoOn(String why) {
+		if (activeMode != Mode.ALTITUDE) {
+			warn(why);
+			return;
+		}
+		if (landing) return;
+		landing = true;
+		landReason = why;
+		warn("Coming down to land: " + why);
+	}
+
 	/**
 	 * Before any of this tick's actions (a redeploy sends held ping answers, which must come first: Grim's Post), and
-	 * before Elytra Tweaks, so the flight rotation is asked for before it fixes this tick's rotation.
+	 * before Rocket Boost, so the flight rotation is asked for before it fixes this tick's rotation; No Durability runs at its end.
 	 */
 	@Subscribe(priority = Priority.BEFORE_ACTIONS + 10)
 	private void onTick(TickEvent.Pre e) {
 		wantJump = wantOpen = wantForward = wantSneak = false;
-		if (!inGame()) return;
+		if (!inGame()) {
+			noDur.tick();
+			return;
+		}
 		if (mode.get() != activeMode) {
 			reset();
 			activeMode = mode.get();
 		}
-		if (activeMode == Mode.ALTITUDE) tickAltitude();
-		else tickBounce();
+		switch (activeMode) {
+			case ALTITUDE -> tickAltitude();
+			case RECAST -> tickBounce();
+			case MANUAL -> spoofing = false;
+		}
+		freshElytra();
+		noDur.tick();
+	}
+
+	/** No Durability's input, after everyone else's: jump only as the press that starts a glide again. */
+	@Subscribe(priority = Priority.LOWEST)
+	private void onInputLast(InputEvent e) {
+		noDur.onInput(e);
+	}
+
+	@Subscribe
+	private void onUse(InteractEvent.Item e) {
+		noDur.onUse(e);
+	}
+
+	/**
+	 * Preserve: an elytra worn down to it comes off for the freshest other one, in mid-air too (one elytra for another
+	 * keeps the glide), but not while No Durability or the bounce is swapping the chest slot: their swaps pick a fresh
+	 * one themselves. Said once, on the ground, when there's none to swap in.
+	 */
+	private void freshElytra() {
+		var p = mc.player;
+		ItemStack worn = p.getItemBySlot(EquipmentSlot.CHEST);
+		if (!wornDown(worn)) {
+			preserveWarned = false;
+			return;
+		}
+		if (noDur.swapping() || swapsChest() || p.isCreative()) return;
+		int with = Myriad.inventory().bestInInventory(s -> ItemInfo.isGlider(s) && !ItemInfo.isBound(s) ? 1 + ItemInfo.durabilityFraction(s) : 0);
+		if (with < 0) {
+			if (!preserveWarned && p.onGround()) {
+				warn("Elytra worn down to Preserve, and no other to fly with.");
+				preserveWarned = true;
+			}
+			return;
+		}
+		if (Myriad.inventory().prepareClick()) Myriad.inventory().move(with, ItemInfo.inventoryIndex(EquipmentSlot.CHEST));
 	}
 
 	// ---- Altitude -------------------------------------------------------------------------------------------------
 
 	private void tickAltitude() {
-		flagged = false;
+		var p = mc.player;
+		if (flagged) {
+			flagged = false;
+			countAltitudeSetback(p);
+		}
+		if (landing && (p.onGround() || p.isInWater())) landed();
 		if (!canGlide()) {
 			spoofing = false;
 			return;
 		}
-		var p = mc.player;
 		if (!p.isFallFlying()) {
 			spoofing = false;
 			phase = Phase.DIVE;
 			cruiseY = Double.NaN;
-			if (p.onGround()) landing = false;
 			// Open the elytra once you're falling: off a ledge, or on the way down from a jump.
 			if (!p.onGround() && p.getDeltaMovement().y < -0.3) startGliding();
 			return;
 		}
 		if (Double.isNaN(cruiseY)) cruiseY = p.getY();
-		if (!landing && elytraWearingOut()) {
-			landing = true;
-			warn("Elytra nearly worn out: coming down to land");
-		}
+		if (!landing && elytraWearingOut()) cannotGoOn("elytra nearly worn out");
 		// Higher ground ahead raises the cruise height in time to clear it (it's never lowered again by itself).
 		Vec3 heading = Vec3.directionFromRotation(0, p.getYRot());
 		cruiseY = Math.max(cruiseY, groundAhead(heading, TERRAIN_AHEAD) + TERRAIN_CLEARANCE);
@@ -452,6 +595,19 @@ public class ElytraFly extends Module {
 		if (landing) {
 			double above = p.getY() - mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING, p.getBlockX(), p.getBlockZ());
 			spoof(p.getYRot(), above > FLARE_HEIGHT ? LAND_PITCH : 0);
+			return;
+		}
+		// Set back a few times in a row: glide gently, no diving or climbing, until the server agrees again.
+		if (steadyTicks > 0) {
+			steadyTicks--;
+			phase = Phase.DIVE;
+			spoof(p.getYRot(), STEADY_PITCH);
+			return;
+		}
+		// Chunks ahead not in yet: slow down (climbing) until they are, rather than fly into the edge of the world.
+		if (speed > SLOW_SPEED && !loadedAhead(heading, speed * LOAD_AHEAD_SECONDS)) {
+			phase = Phase.DIVE;
+			spoof(p.getYRot(), SLOW_PITCH);
 			return;
 		}
 		double diveUntil = Mth.clamp(DIVE_SPEED + HOLD_GAIN * (p.getY() - cruiseY), MIN_DIVE_SPEED, MAX_DIVE_SPEED);
@@ -475,6 +631,34 @@ public class ElytraFly extends Module {
 			}
 		};
 		spoof(p.getYRot(), flightPitch);
+	}
+
+	/** Altitude: down safely. After Landing disconnects you or leaves you there. */
+	private void landed() {
+		landing = false;
+		String why = landReason.isEmpty() ? "landed" : "landed: " + landReason;
+		landReason = "";
+		if (afterLanding.get() == AfterLanding.DISCONNECT) leave(why.substring(0, 1).toUpperCase() + why.substring(1));
+		else warn(why.substring(0, 1).toUpperCase() + why.substring(1));
+	}
+
+	/** Altitude: a run of setbacks steadies the flight for a while; far too many and it lands. */
+	private void countAltitudeSetback(net.minecraft.client.player.LocalPlayer p) {
+		int now = p.tickCount;
+		altSetbacks.addLast(now);
+		while (!altSetbacks.isEmpty() && now - altSetbacks.peekFirst() > GIVE_UP_WINDOW) altSetbacks.removeFirst();
+		long recent = altSetbacks.stream().filter(t -> now - t <= STEADY_WINDOW).count();
+		if (recent >= STEADY_SETBACKS) steadyTicks = STEADY_TICKS;
+		if (altSetbacks.size() >= GIVE_UP) cannotGoOn("the server keeps setting you back");
+	}
+
+	/** Whether every chunk within {@code distance} blocks along {@code heading} has loaded. */
+	private boolean loadedAhead(Vec3 heading, double distance) {
+		var p = mc.player;
+		for (double d = 0; d <= distance; d += 8) {
+			if (!mc.level.hasChunk(Mth.floor(p.getX() + heading.x * d) >> 4, Mth.floor(p.getZ() + heading.z * d) >> 4)) return false;
+		}
+		return true;
 	}
 
 	/**
@@ -567,7 +751,7 @@ public class ElytraFly extends Module {
 	 * way, and not for long.
 	 */
 	private boolean readyToBounce() {
-		if (!ElytraTweaks.noDurability() || !mc.player.onGround() || ChestSwap.ensurePair(true) != ChestSwap.Need.WAITING || ++readyWait > READY_WAIT) {
+		if (!noDurability() || !mc.player.onGround() || ChestSwap.ensurePair(true) != ChestSwap.Need.WAITING || ++readyWait > READY_WAIT) {
 			readyWait = 0;
 			return true;
 		}
@@ -593,7 +777,7 @@ public class ElytraFly extends Module {
 
 		boolean gliding = elytraOpen();
 		if (gliding) holdGlide = true;
-		// With Elytra Tweaks' No Durability the chestplate is worn through each hop: 2b2t wears the elytra by every tick
+		// With No Durability the chestplate is worn through each hop: 2b2t wears the elytra by every tick
 		// the server glides you, a stop doesn't reset its count (vanilla needs 20 ticks of one glide), so the server
 		// should glide as little as it can. Each start puts the elytra on, starts the glide and puts the chestplate back
 		// on in the same tick: the server glides for a tick at most, and the glide hold keeps you (and Grim) gliding
@@ -602,10 +786,10 @@ public class ElytraFly extends Module {
 		// on without (a little slower) until you're done. With the elytra on, each would last the whole hop, and eating
 		// can go on for several items. Nothing is swapped meanwhile, so eating can start whenever (Auto Eat, or right
 		// click), the chestplate on or not; between Auto Eat's bites too, or a swap would stop the next one.
-		boolean eating = ElytraTweaks.noDurability() && (mc.player.isUsingItem() || AutoEat.wantsToEat());
-		chestMode = ElytraTweaks.noDurability() && ChestSwap.ready() && !eating;
+		boolean eating = noDurability() && (mc.player.isUsingItem() || AutoEat.wantsToEat());
+		chestMode = noDurability() && ChestSwap.ready() && !eating;
 		boolean mayGlide = !eating;
-		if (ElytraTweaks.noDurability()) ElytraTweaks.chestplateAtHand(false);
+		if (noDurability()) noDur.chestplateAtHand(false);
 		boolean cleared = GlideHold.cleared(this);
 		// What's worn only counts once the server has answered the last swap (see ChestSwap.settled): with jitter the
 		// client can show a moment that's already past, and swapping on that puts the client and Grim out of step.
@@ -1098,7 +1282,7 @@ public class ElytraFly extends Module {
 		boolean blocked = p.getAbilities().flying || p.isPassenger() || p.isInWater() || p.onClimbable() || p.hasEffect(MobEffects.LEVITATION);
 		if (blocked) return false;
 		// With No Durability a chestplate may be worn, with the elytra at hand to swap on.
-		return ItemInfo.isGlider(p.getItemBySlot(EquipmentSlot.CHEST)) || (ElytraTweaks.noDurability() && ChestSwap.hasGlider());
+		return ItemInfo.isGlider(p.getItemBySlot(EquipmentSlot.CHEST)) || (noDurability() && ChestSwap.hasGlider());
 	}
 
 	/** The way the lane runs. */
