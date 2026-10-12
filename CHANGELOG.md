@@ -25,18 +25,20 @@ Needs Myriad 0.2.10 (`Breaking.Options.withWaitForServer`).
     you've landed), and other modules pass it over.
   - Elytra Fly has a Preserve too (5%): an elytra worn down to it is swapped for the freshest other one, in mid-air too,
     and No Durability's swaps leave it out.
-- Elytra Fly Altitude with No Durability, made to be left alone on 2b2t. A capture there showed 2b2t sometimes ignoring a
-  glide restart (no glide and no stop from the server, though the packets were the same as for every other restart);
-  No Durability waited for a stop that never came while the server wasn't gliding you, and Grim set you back over and
-  over (145 setbacks in two minutes, hanging in place for seconds, losing height). Now every restart is checked against
-  the server's answer: with none in a round trip, the elytra goes back on and the glide starts again at once, and
-  swapping picks up again after 5 seconds of gliding the server agrees with (a dropped start now costs a setback or
-  two, not a storm). Altitude itself glides gently for a few seconds after a run of setbacks, slows down (climbing)
-  while the chunks ahead haven't loaded, and when it can't go on (elytra worn out, the server setting you back or
-  refusing to glide you over and over) comes down to land. New **After Landing** (Altitude): disconnect once landed
-  (default), or stay there.
+- Elytra Fly Altitude, made to be left alone on 2b2t. Captures there showed 2b2t now and then ignoring one of No
+  Durability's glide restarts (no glide and no stop from the server), and each ignored one set off a storm of
+  setbacks (145 in two minutes), every one costing speed and so height. No Durability now works the other way round in
+  Altitude: the elytra stays on and the server glides you, and just before its glide would wear the elytra (20 ticks)
+  there's a break: chestplate on, the server's stop held, elytra back on, and the glide started again once the server
+  has the elytra on (on and the start in one tick, as before, is what went unanswered). The server agrees with you
+  most of the time instead of a tick in eight; a start it still doesn't answer is made again after two round trips.
+  Locally: no flags and no wear in a minute of flight, height held. Without No Durability (or without a chestplate)
+  the elytra wears, and once it's down to what landing from where you are takes, a spare from your inventory goes on
+  in mid-air. Altitude glides gently for a few seconds after a run of setbacks, slows down (climbing) while the chunks
+  ahead haven't loaded, and when it can't go on (the last elytra worn out, the server setting you back over and over)
+  comes down to land. New **After Landing** (Altitude): disconnect once landed (default), or stay there.
 - Elytra Tweaks is split up. No Durability, and the catch of a glide dropped in mid-air, are part of Elytra Fly now,
-  in every mode, with a new **Manual** mode for flying yourself (rockets) with just those. Rocket Boost is a module of
+  in every mode (Altitude with the breaks above), with a new **Manual** mode for flying yourself (rockets) with just those. Rocket Boost is a module of
   its own. Set No Durability again in Elytra Fly, and turn Rocket Boost on, if you used them.
 - Air Place's target block is drawn by Block Highlight when it's on (its look, where the block will go), in place of
   Air Place's own outline.

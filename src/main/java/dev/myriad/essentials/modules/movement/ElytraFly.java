@@ -79,11 +79,12 @@ import java.util.List;
  * <li><b>Altitude</b> crosses open country without fireworks, "pitch 40" style. It dives until you're fast, pulls up hard, then eases
  * back to level: pulling up gives back more height than the speed it costs, so the cycle holds the altitude you started
  * gliding at (it dives harder when you're above it and climbs more when you're below). Start high, since the first dive
- * from a slow glide drops you 50 or so blocks. Steer with the camera. Works with No Durability, which
- * swaps the chestplate on and off meanwhile. Made to be left alone: when the server sets you back a few times in a
+ * from a slow glide drops you 50 or so blocks. Steer with the camera. No Durability keeps the elytra on here and only
+ * breaks the server's glide before it wears it (see NoDurability); without it the elytra wears, and once it's down to
+ * what landing from here takes, a spare from your inventory goes on in mid-air. Made to be left alone: when the server sets you back a few times in a
  * row it glides gently until the server agrees again, and it slows down (climbing) while the chunks ahead haven't
- * loaded. When it can't go on (the elytra wearing out, the server setting you back over and over or refusing to
- * glide you), it comes down to land, levelling out near the ground, and After Landing disconnects you there or
+ * loaded. When it can't go on (the last elytra wearing out, the server setting you back over and over), it comes
+ * down to land, levelling out near the ground, and After Landing disconnects you there or
  * leaves you standing.</li>
  * <li><b>Manual</b>: you fly (rockets, Rocket Boost); this only keeps the elytra from wearing out and catches a dropped
  * glide.</li>
@@ -115,7 +116,7 @@ public class ElytraFly extends Module {
 	private final EnumSetting<Mode> mode = sgGeneral.enumSetting("Mode", Mode.RECAST)
 		.description("Recast to bounce along a highway, Altitude to cross open country without fireworks, Manual to fly yourself (No Durability only).").build();
 	private final BoolSetting noDurability = sgGeneral.bool("No Durability")
-		.description("Keep the elytra from wearing out while you glide, by swapping it with a chestplate held in your off hand or hotbar.")
+		.description("Keep the elytra from wearing out while you glide, by swapping it with a chestplate held in your off hand or hotbar. In Altitude the elytra stays on, with a short swap before the server would wear it.")
 		.defaultValue(true).build();
 	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve")
 		.description("Put elytras with less durability than this (%) aside, and fly with another.").defaultValue(5).range(0, 50).decimals(0).build();
@@ -425,6 +426,12 @@ public class ElytraFly extends Module {
 	}
 
 	/** Whether No Durability is on (Elytra Fly on, with it set). */
+	/** Whether Elytra Fly is flying Altitude (No Durability stays out of it). */
+	public static boolean altitude() {
+		ElytraFly m = Modules.active(ElytraFly.class);
+		return m != null && m.activeMode == Mode.ALTITUDE;
+	}
+
 	public static boolean noDurability() {
 		ElytraFly m = Modules.active(ElytraFly.class);
 		return m != null && m.noDurability.get();
@@ -481,15 +488,8 @@ public class ElytraFly extends Module {
 		for (var v : data.packedItems()) if (v.id() == flagsId && v.value() instanceof Byte flags) NoDurability.onOwnFlags(flags);
 	}
 
-	/**
-	 * No Durability (or Altitude itself) can't keep the flight safe: Altitude comes down to land, and After Landing
-	 * decides what then; in the other modes it's only said.
-	 */
-	void cannotGoOn(String why) {
-		if (activeMode != Mode.ALTITUDE) {
-			warn(why);
-			return;
-		}
+	/** Altitude can't keep the flight safe: it comes down to land, and After Landing decides what then. */
+	private void cannotGoOn(String why) {
 		if (landing) return;
 		landing = true;
 		landReason = why;
@@ -577,7 +577,11 @@ public class ElytraFly extends Module {
 			return;
 		}
 		if (Double.isNaN(cruiseY)) cruiseY = p.getY();
-		if (!landing && elytraWearingOut()) cannotGoOn("elytra nearly worn out");
+		if (!landing && elytraWearingOut()) {
+			int spare = spareElytra();
+			if (spare < 0) cannotGoOn("last elytra nearly worn out");
+			else if (Myriad.inventory().prepareClick()) Myriad.inventory().move(spare, ItemInfo.inventoryIndex(EquipmentSlot.CHEST));
+		}
 		// Higher ground ahead raises the cruise height in time to clear it (it's never lowered again by itself).
 		Vec3 heading = Vec3.directionFromRotation(0, p.getYRot());
 		cruiseY = Math.max(cruiseY, groundAhead(heading, TERRAIN_AHEAD) + TERRAIN_CLEARANCE);
@@ -633,6 +637,13 @@ public class ElytraFly extends Module {
 		spoof(p.getYRot(), flightPitch);
 	}
 
+	/** Altitude: the inventory index of the freshest other elytra with more uses left than landing from here takes, or -1. */
+	private int spareElytra() {
+		double need = landingUses();
+		return Myriad.inventory().bestInInventory(s -> ItemInfo.isGlider(s) && !ItemInfo.isBound(s) && (!s.isDamageableItem() || ItemInfo.durability(s) > need)
+			? 1 + ItemInfo.durabilityFraction(s) : 0);
+	}
+
 	/** Altitude: down safely. After Landing disconnects you or leaves you there. */
 	private void landed() {
 		landing = false;
@@ -669,8 +680,14 @@ public class ElytraFly extends Module {
 		var p = mc.player;
 		ItemStack chest = p.getItemBySlot(EquipmentSlot.CHEST);
 		if (!ItemInfo.isGlider(chest) || !chest.isDamageableItem()) return false;
+		return ItemInfo.durability(chest) < landingUses();
+	}
+
+	/** Elytra uses that gliding down from here takes (a point a second while the server glides you), with a margin. */
+	private double landingUses() {
+		var p = mc.player;
 		double above = p.getY() - mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING, p.getBlockX(), p.getBlockZ());
-		return ItemInfo.durability(chest) < above / LAND_DESCENT + LAND_MARGIN;
+		return above / LAND_DESCENT + LAND_MARGIN;
 	}
 
 	/**

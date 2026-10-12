@@ -262,9 +262,12 @@ def t_elytra_no_durability():
         f"tp {P} 3000.5 300 0.5 -90 0")
     time.sleep(1.5)
     sh("flags", "mark")
-    client(".set elytra_fly no_durability true", ".set elytra_fly mode altitude", ".toggle elytra_fly on", "wait 200",
-        ".toggle elytra_fly off", "wait 20", timeout=90)
-    damage = elytra_damage()
+    # Manual: No Durability's own swapping (Altitude has breaks instead). Gliding on its own, looking a little down. A
+    # teleport keeps a glide going: what it wore before Elytra Fly was on doesn't count.
+    client(".set elytra_fly no_durability true", ".set elytra_fly mode manual", "look -90 10", timeout=30)
+    before = elytra_damage()
+    client(".toggle elytra_fly on", "wait 200", ".toggle elytra_fly off", "wait 20", timeout=90)
+    damage = elytra_damage() - before
     hp, x = health(), position()[0]
     return 0 <= damage <= 2 and hp > 0 and x > 3060, f"elytra damage {damage} after 10 s of flight, {x - 3000:.0f} blocks, health {hp:.0f}"
 
@@ -541,6 +544,42 @@ def t_elytra_wearing_out():
     return hp >= 20 and x > 7000, f"landed at y={y:.0f} after {x - 7000:.0f} blocks, health {hp:.0f}, elytra damage {wear.group(1) if wear else '?'} of 432"
 
 
+def t_elytra_altitude_no_durability():
+    # Altitude with No Durability: the elytra stays on, with a break before the server's glide would wear it. 30 s.
+    client("respawn", ".panic", "wait 20")
+    cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate",
+        f"tp {P} 13000.5 300 0.5 -90 0")
+    time.sleep(1.5)
+    sh("flags", "mark")
+    client(".set elytra_fly no_durability true", ".set elytra_fly mode altitude", ".set elytra_fly after_landing stay", "look -90 0", timeout=30)
+    # A teleport keeps a glide going: what it wore before Elytra Fly was on doesn't count.
+    before = elytra_damage()
+    client(".toggle elytra_fly on", "wait 600", timeout=60)
+    damage = elytra_damage() - before
+    hp, (x, y, _) = health(), position()
+    client(".toggle elytra_fly off", timeout=30)
+    return 0 <= damage <= 1 and hp > 0 and y > 180, f"elytra wore {damage} in 30 s, {x - 13000:.0f} blocks, y={y:.0f}, health {hp:.0f}"
+
+
+def t_elytra_altitude_spare():
+    # Altitude with No Durability: the worn elytra (52 uses left, less than landing from 300 takes) is
+    # swapped in mid-air for the spare in the inventory, and the flight goes on.
+    client("respawn", ".panic", "wait 20")
+    cmd(f"clear {P}", f"gamemode survival {P}", f"effect clear {P}", f"effect give {P} instant_health 1 5 true",
+        f"item replace entity {P} armor.chest with elytra[damage=380]", f"item replace entity {P} inventory.5 with elytra",
+        f"item replace entity {P} hotbar.1 with diamond_chestplate")
+    client(".set elytra_fly mode altitude", ".set elytra_fly no_durability true", ".set elytra_fly after_landing stay", "look -90 0", timeout=30)
+    cmd(f"tp {P} 11000.5 300 0.5 -90 0")
+    time.sleep(1.5)
+    sh("flags", "mark")
+    client(".toggle elytra_fly on", "wait 300", timeout=60)
+    x, y, _ = position()
+    # The elytra in use: worn, or in the hotbar during No Durability's break.
+    damage = elytra_damage()
+    client(".toggle elytra_fly off", timeout=30)
+    return damage < 100 and y > 150, f"worn elytra damage {damage} after {x - 11000:.0f} blocks, y={y:.0f}"
+
+
 def online():
     return P in cmd("list")
 
@@ -620,6 +659,8 @@ TESTS = [
     ("elytra_fly no durability", t_elytra_no_durability),
     ("elytra_fly no durability landing", t_elytra_no_durability_landing),
     ("elytra_fly altitude wearing out", t_elytra_wearing_out),
+    ("elytra_fly altitude spare", t_elytra_altitude_spare),
+    ("elytra_fly altitude no durability", t_elytra_altitude_no_durability),
 ]
 # Tests that toggle many modules at once; Grim's opinion of them isn't part of the result.
 FLAGS_IGNORED = {"selftest (every module)"}
