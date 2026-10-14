@@ -545,7 +545,7 @@ def t_elytra_wearing_out():
 
 
 def t_elytra_altitude_no_durability():
-    # Altitude with No Durability: the elytra stays on, with a break before the server's glide would wear it. 30 s.
+    # Altitude with No Durability: the server glides a tick at a time, each start once it has the elytra on. 30 s.
     client("respawn", ".panic", "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate",
         f"tp {P} 13000.5 300 0.5 -90 0")

@@ -16,6 +16,7 @@ import dev.myriad.api.util.MathUtil;
 import dev.myriad.essentials.mixin.FireworkRocketEntityAccessor;
 import dev.myriad.essentials.util.ChestSwap;
 import dev.myriad.essentials.util.GlideHold;
+import dev.myriad.essentials.util.GrimChunks;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
@@ -32,12 +33,6 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Elytra Fly's No Durability, and its catch of a glide dropped in mid-air (on whenever Elytra Fly is).
  * <p>
- * In Altitude it goes the other way round (see {@link #tickBreaks}): the elytra stays on and the server glides you, and
- * just before the server's glide would wear it (every 20 ticks without a break) there's a break: the chestplate on,
- * the server's stop held, the elytra back on and the glide started again. The server agrees with you most of the time
- * (on 2b2t, swapping all the time lost too many restarts on Altitude's long fast glides, each one a run of setbacks),
- * and a restart it doesn't answer is simply made again, the elytra being on already.
- * <p>
  * The server wears an elytra by one for every 20 ticks of gliding without a break. With a
  * chestplate in your off hand or hotbar, the elytra is swapped for it (using it, as a right-click equips armour)
  * while you glide, so the server stops the glide on its next tick; the client keeps gliding through that (see
@@ -51,9 +46,13 @@ import net.minecraft.world.phys.Vec3;
  * with that count would cost all of it. So swaps only run with room around you: below, and along the way you're flying
  * for as long as the server takes to hear from you, or, once you've come down more than a safe fall since you last
  * rose, for as long as it then takes to glide that count away too. The elytra is back on and the server gliding before
- * you could land or hit anything. The server's equip sound for each swap is muted. Eating (or anything you hold to use) pauses the swapping: Grim stops what
- * you're using at every swap, so the elytra goes back on at the next start, and swapping picks up again once you're
- * done.
+ * you could land or hit anything. Nor while you'd fly into a chunk Grim doesn't know you have: it counts a chunk as yours
+ * only once you've answered the ping after it, which the hold holds back, and sets you back in one it doesn't (2b2t
+ * sends chunks just in time in new terrain, and fast flight reaches them during a hold). The swapping waits for those
+ * chunks, the elytra on meanwhile, and a hold about to reach one is cut short (see {@link GrimChunks}). The server's
+ * equip sound for each swap is muted. Eating (or anything you hold to use) pauses the swapping: Grim stops what you're
+ * using each time the chestplate is used, so the elytra goes back on at the next start, and swapping picks up again
+ * once you're done.
  */
 final class NoDurability {
 	private final ElytraFly fly;
@@ -65,23 +64,17 @@ final class NoDurability {
 
 	/** Ticks between glide restarts: well under vanilla's 80-tick floating kick and the 20 ticks that wear the elytra. */
 	private static final int INTERVAL = 8;
+	/** How far ahead (ticks) a hold is cut short for a chunk Grim doesn't know, and the margin on your speed for it. */
+	private static final int BAIL_TICKS = 3;
+	/** How long after a swap waited for chunks Altitude keeps its speed down. */
+	private static final int CHUNKS_LATE_TICKS = 100;
+	private static final double PATH_MARGIN = 1.3;
 	/** Give up if the server hasn't stopped the glide this long after a swap (it refused it). */
 	private static final int CLEAR_TIMEOUT = 40;
 	/** Ticks of gliding with room below before the first swap. */
 	private static final int ARM_TICKS = 10;
 	/** Coming down more than this since you last rose, the server's count of your fall would hurt on landing. */
 	private static final double SAFE_DESCENT = 3;
-	/**
-	 * Altitude: ticks of gliding (from the last start) before a break; the server wears the elytra at 20, and the break
-	 * reaches it half a round trip later.
-	 */
-	private static final int BREAK_AFTER = 13;
-	/** Vanilla's gliding bit in the entity flag byte. */
-	private static final int GLIDING_BIT = 1 << 7;
-	/** Network thread: the server's glide as your entity flags say, and how many times it has started. */
-	private static volatile boolean serverGliding;
-	private static volatile int serverStarts;
-
 	/**
 	 * Ticks of gliding the server needs, elytra back on, before it lets go of that count: it only does while it sees you
 	 * descend gently, and its idea of your speed (a free fall while it wasn't gliding you) takes a while to settle.
@@ -108,52 +101,57 @@ final class NoDurability {
 	private int rocketSlot = -1;
 	private int armTicks, sinceStart;
 	/**
-	 * Altitude: a break is on (chestplate on, waiting for the server's stop), then the elytra is back on and its start
-	 * waits for the server to have it on; ticks gliding since the last start.
+	 * Altitude: the elytra is back on for the next start, which waits for the server to have it on. On and the start in
+	 * one tick, 2b2t ignored a start now and then on Altitude's long fast glides, each one a run of setbacks.
 	 */
-	private boolean breaking, equipping;
-	private int glidingFor;
-	/** Altitude: ticks since a start the server hasn't answered yet (-1: none), and its starts before it. */
-	private int unanswered = -1, startsBefore;
+	private boolean equipping;
+	/** Swaps put off, and holds cut short, for chunks Grim doesn't know you have yet (see {@link #pathKnown}). */
+	private int chunkWaits, chunkBails;
+	/** Ticks since the last of those, and why it was (for the record: how far ahead, and what Grim lacked). */
+	private int sinceChunkWait = Integer.MAX_VALUE;
+	private String lastChunkWait = "";
+	/**
+	 * When the last start went out ({@code System.currentTimeMillis()}, 0 for none yet this round). Now and then 2b2t
+	 * ignores one: no glide comes back, and neither the server nor Grim glides you while the client does, so Grim sets
+	 * you back every second or two. A setback with no glide back since the start says so; the elytra then goes on, the
+	 * start goes again once the server has it ({@link #recovering}), and the swapping waits for the server's glide
+	 * ({@link #confirming}).
+	 */
+	private long startMs;
+	private volatile boolean setBack;
+	private boolean recovering, confirming;
+	private int lostStarts;
 
 	void enable() {
-		swapping = startNow = rocketWanted = stopForUse = finishing = breaking = equipping = false;
-		glidingFor = 0;
-		unanswered = -1;
+		swapping = startNow = rocketWanted = stopForUse = finishing = equipping = recovering = confirming = setBack = false;
 		descent = 0;
 		armTicks = catching = 0;
+		GrimChunks.start();
 	}
 
 	void disable() {
 		if (mc.player != null && mc.level != null) {
 			// No next tick to wait for: start the glide again now rather than drop out of it in mid-air.
 			finish(true);
-			if (breaking || equipping) endBreak(true);
 			// Turning off mid-swap can start the glide again, and Elytra Fly no longer hears the input event that presses
 			// jump with it (Grim's ElytraB): press it from a listener of its own, for that one tick.
 			if (startNow) pressJumpOnce();
 		}
-		swapping = startNow = breaking = equipping = false;
-		unanswered = -1;
+		swapping = startNow = equipping = recovering = confirming = false;
 		catching = 0;
 		GlideHold.disarm(this);
+		GrimChunks.stop();
 	}
 
 	/** Whether the elytra and chestplate are being swapped (or the elytra put back for good) right now. */
 	boolean swapping() {
-		return swapping || breaking || equipping;
-	}
-
-	/** Network thread, from Elytra Fly: the local player's entity flags, as the server sent them. */
-	static void onOwnFlags(byte flags) {
-		boolean gliding = (flags & GLIDING_BIT) != 0;
-		if (gliding && !serverGliding) serverStarts++;
-		serverGliding = gliding;
+		return swapping;
 	}
 
 	/** Before any of this tick's actions, after Elytra Fly's flight: a restart sends held ping answers, which must come first (Grim's Post). */
 	void tick() {
 		startNow = false;
+		if (sinceChunkWait < Integer.MAX_VALUE) sinceChunkWait++;
 		if (mc.player == null || mc.level == null) {
 			swapping = false;
 			return;
@@ -174,18 +172,13 @@ final class NoDurability {
 
 	private void tickNoDurability() {
 		LocalPlayer p = mc.player;
+		boolean wasSetBack = setBack;
+		setBack = false;
 		trackDescent(p);
 		if (!ElytraFly.noDurability()) {
 			finish();
-			if (breaking || equipping) endBreak(true);
 			return;
 		}
-		if (ElytraFly.altitude()) {
-			finish();
-			tickBreaks(p);
-			return;
-		}
-		if (breaking || equipping) endBreak(true);
 		if (!swapping) {
 			// Elytra Fly's bounce does its own swapping.
 			// Not while you eat (or use anything held): a swap would stop it (see onUse).
@@ -198,10 +191,15 @@ final class NoDurability {
 				warnOnce("No Durability can't swap armour with Curse of Binding.");
 				return;
 			}
+			if (!pathKnown(p, cycleTicks())) {
+				chunkWait();
+				return;
+			}
 			if (!GlideHold.arm(this)) return;
 			ChestSwap.swap();
 			swapping = true;
 			sinceStart = 0;
+			startMs = 0;
 			return;
 		}
 		sinceStart++;
@@ -215,106 +213,126 @@ final class NoDurability {
 			finish();
 			return;
 		}
+		// About to fly into a chunk Grim won't count as yours until the held answers go out: start again now.
+		if (GlideHold.clearHeld(this) && !pathKnown(p, BAIL_TICKS)) {
+			chunkBails++;
+			chunkWait();
+			finish(true);
+			return;
+		}
+		if (wasSetBack && !equipping && !confirming && startLost()) {
+			lostStarts++;
+			recovering = true;
+			GlideHold.release(this);
+			equip();
+			return;
+		}
+		if (equipping) {
+			if (ChestSwap.elytraWorn() && ChestSwap.settled() || sinceStart > INTERVAL + CLEAR_TIMEOUT) {
+				if (recovering) {
+					// The start alone; the chestplate once the server glides.
+					recovering = false;
+					restart(false);
+					confirming = true;
+				} else {
+					swapAgainOrStop(p);
+				}
+			}
+			return;
+		}
+		if (confirming) {
+			if (GlideHold.glidingSince(startMs)) {
+				confirming = false;
+				if (pathKnown(p, cycleTicks())) {
+					ChestSwap.swap();
+					sinceStart = 0;
+				} else {
+					chunkWait();
+					finish();
+					armTicks = ARM_TICKS;
+				}
+			} else if (sinceStart > 2 * roundTripTicks() + 10) {
+				confirming = false;
+				finish();
+			}
+			return;
+		}
 		boolean cleared = GlideHold.cleared(this);
 		boolean due = sinceStart >= INTERVAL || rocketWanted || stopForUse || GlideHold.exposed(this);
 		// Not two starts in a row (Grim's ElytraC).
 		if (cleared && due && sinceStart >= 2) {
 			// Something to eat is waiting: this start puts the elytra back for good, and the swapping stops.
 			if (stopForUse) finish();
-			else restart(true);
+			else if (ElytraFly.altitude()) equip();
+			else swapAgainOrStop(p);
 		} else if (!cleared && sinceStart > INTERVAL + CLEAR_TIMEOUT) {
 			finish();
 		}
 	}
 
 	/**
-	 * Altitude: the elytra stays on and the server glides you; before its glide reaches the 20 ticks that wear the elytra,
-	 * a break. The chestplate goes on, so the server stops the glide (held, so you keep gliding and Grim doesn't hear of
-	 * it yet), then the elytra goes back on, and once the server has it on, the glide starts again, which starts the
-	 * server's count over. (On and the start in one tick, a start now and then went unanswered on 2b2t: as if the
-	 * elytra weren't on yet.) A start
-	 * the server doesn't answer (2b2t loses one now and then) leaves it not gliding you: after twice a round trip with no
-	 * answer, it's started again (only then: a second start while the first is still on its way would be one while
-	 * gliding, Grim's ElytraA).
+	 * The start, with the chestplate back on for another round if Grim knows every chunk you'll fly through meanwhile;
+	 * otherwise the elytra stays on and the swapping stops until it does.
 	 */
-	private void tickBreaks(LocalPlayer p) {
-		boolean inAir = p.isFallFlying() && !p.onGround() && !p.isInWater() && !p.isPassenger();
-		if (breaking) {
-			sinceStart++;
-			// About to land, or the stop never came: the elytra back on and the start now.
-			if (!inAir || !room(false) || sinceStart > CLEAR_TIMEOUT) endBreak(true);
-			// The stop is in: the elytra back on, the start once the server has it.
-			else if (GlideHold.cleared(this)) endBreak(false);
-			return;
+	private void swapAgainOrStop(LocalPlayer p) {
+		if (pathKnown(p, cycleTicks())) {
+			restart(true);
+		} else {
+			chunkWait();
+			finish();
+			// Swapping again as soon as Grim knows the chunks (the elytra on until then), not after a fresh arming.
+			armTicks = ARM_TICKS;
 		}
-		if (equipping) {
-			sinceStart++;
-			// Not two starts in a row (Grim's ElytraC).
-			if (!inAir || !room(false) || sinceStart > CLEAR_TIMEOUT || ChestSwap.elytraWorn() && ChestSwap.settled() && sinceStart >= 2) endBreak(true);
-			return;
-		}
-		if (!inAir || !ChestSwap.elytraWorn()) {
-			glidingFor = 0;
-			unanswered = -1;
-			return;
-		}
-		if (unanswered >= 0) {
-			if (serverStarts != startsBefore || serverGliding) {
-				unanswered = -1;
-			} else if (++unanswered > 2 * roundTripTicks() + 4) {
-				fly.info("The server didn't take a glide start: starting again");
-				startAgain();
-				return;
-			} else {
-				return;
-			}
-		}
-		glidingFor++;
-		// While you eat (or use anything held) the break waits: a swap would stop it (Grim), at the cost of a point of wear.
-		if (glidingFor < BREAK_AFTER || p.isUsingItem() || !room(true) || !chestplateAtHand(true)) return;
-		if (!ChestSwap.ready()) {
-			warnOnce("No Durability can't swap armour with Curse of Binding.");
-			return;
-		}
-		if (!GlideHold.arm(this)) return;
-		ChestSwap.swap();
-		breaking = true;
-		sinceStart = 0;
+	}
+
+	/** A setback came in: handled on the next tick (see {@link #startMs}). */
+	void setBack() {
+		setBack = true;
+	}
+
+	/** Whether the last start has had time to come back as a glide from the server, and hasn't. */
+	private boolean startLost() {
+		return startMs > 0 && System.currentTimeMillis() - startMs > Myriad.server().ping() + 150 && !GlideHold.glidingSince(startMs);
+	}
+
+	/** Whether swaps have had to wait for chunks lately (Altitude slows down for them). */
+	boolean chunksLate() {
+		return sinceChunkWait <= CHUNKS_LATE_TICKS;
+	}
+
+	private void chunkWait() {
+		if (sinceChunkWait > 0) chunkWaits++;
+		sinceChunkWait = 0;
+		lastChunkWait = pathWhy(mc.player, cycleTicks());
+	}
+
+	/** Ticks of a round of swapping: from the chestplate going on until the start after it, and the answers out. */
+	private static int cycleTicks() {
+		return INTERVAL + 2 * roundTripTicks() + 4;
 	}
 
 	/**
-	 * Ends a break. Not {@code now}: the elytra goes on, and the start waits for the server to have it (see
-	 * {@link #tickBreaks}). Now: the held answers out, the elytra on, and the glide started again unless the server still
-	 * glides you.
+	 * Whether Grim knows the client has every chunk you'll be in over the next {@code ticks}, at your speed and a
+	 * margin (see {@link GrimChunks}): a hold that runs into one it doesn't would get you set back.
 	 */
-	private void endBreak(boolean now) {
-		breaking = false;
-		glidingFor = 0;
-		if (!now) {
-			ChestSwap.restoreElytra();
-			equipping = true;
-			return;
-		}
-		equipping = false;
-		LocalPlayer p = mc.player;
-		boolean inAir = p.isFallFlying() && !p.onGround() && !p.isInWater();
-		GlideHold.release(this);
-		if (inAir && !serverGliding) {
-			startAgain();
-		} else {
-			ChestSwap.restoreElytra();
-		}
-		GlideHold.disarm(this);
+	private static boolean pathKnown(LocalPlayer p, int ticks) {
+		return pathWhy(p, ticks) == null;
 	}
 
-	/** The elytra on (if it isn't) and a start, jump released the tick before as vanilla; its answer is watched for. */
-	private void startAgain() {
-		if (!ChestSwap.startGlide()) return;
-		if (rocketWanted) fireRocket();
-		startNow = true;
-		glidingFor = 0;
-		unanswered = 0;
-		startsBefore = serverStarts;
+	/** What Grim lacks first along the path, and how many ticks ahead; null if nothing. */
+	private static String pathWhy(LocalPlayer p, int ticks) {
+		Vec3 v = p.getDeltaMovement().scale(PATH_MARGIN);
+		for (int t = 0; t <= ticks; t++) {
+			String why = GrimChunks.why(p.getX() + v.x * t, p.getZ() + v.z * t);
+			if (why != null) return why + " " + t;
+		}
+		return null;
+	}
+
+	/** Altitude: the elytra back on, the start once the server has it (see {@link #equipping}). */
+	private void equip() {
+		ChestSwap.restoreElytra();
+		equipping = true;
 	}
 
 	/**
@@ -324,6 +342,7 @@ final class NoDurability {
 	 * later.
 	 */
 	private void restart(boolean swapBack) {
+		equipping = false;
 		GlideHold.release(this);
 		if (!ChestSwap.startGlide()) {
 			finish();
@@ -332,6 +351,7 @@ final class NoDurability {
 		if (rocketWanted) fireRocket();
 		startNow = true;
 		sinceStart = 0;
+		startMs = System.currentTimeMillis();
 		if (swapBack) ChestSwap.swap();
 	}
 
@@ -359,7 +379,7 @@ final class NoDurability {
 			}
 			if (cleared || ++finishWait <= roundTripTicks() + 4) return;
 		}
-		swapping = finishing = false;
+		swapping = finishing = equipping = recovering = confirming = false;
 		armTicks = 0;
 		if (inAir && cleared) {
 			restart(false);
@@ -383,7 +403,7 @@ final class NoDurability {
 	/** While swapping: jump only as the press that starts the glide again (released the tick before). Same for a catch. */
 	void onInput(InputEvent e) {
 		if (catching > 0) e.jump = catchNow;
-		else if (swapping || breaking || equipping || unanswered >= 0 || startNow) e.jump = startNow;
+		else if (swapping || startNow) e.jump = startNow;
 	}
 
 
@@ -454,7 +474,7 @@ final class NoDurability {
 	 * is back on for good, at the next start (Auto Eat tries again, and holding right click uses it again).
 	 */
 	void onUse(InteractEvent.Item e) {
-		if (!swapping && !breaking && !equipping || firing) return;
+		if (!swapping || firing) return;
 		ItemStack stack = mc.player.getItemInHand(e.hand());
 		if (stack.is(Items.FIREWORK_ROCKET)) {
 			e.cancel();

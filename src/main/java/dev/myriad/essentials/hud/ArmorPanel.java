@@ -1,5 +1,7 @@
 package dev.myriad.essentials.hud;
 
+import dev.myriad.api.util.Slots;
+import dev.myriad.api.Myriad;
 import dev.myriad.api.render.Canvas;
 import dev.myriad.api.render.FontFamily;
 import dev.myriad.api.setting.BoolSetting;
@@ -47,7 +49,8 @@ public final class ArmorPanel extends HudPanel {
 			return list;
 		}
 		for (EquipmentSlot slot : SLOTS) {
-			ItemStack s = mc.player.getItemBySlot(slot);
+			// What the slot shows: a masked swap (Elytra Fly's chestplate swaps) doesn't flicker it.
+			ItemStack s = Myriad.inventory().shown(Slots.FEET + slot.getIndex());
 			if (s.isEmpty() && skipEmpty.get()) continue;
 			list.add(s);
 		}

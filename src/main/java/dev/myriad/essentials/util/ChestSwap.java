@@ -5,6 +5,7 @@ import dev.myriad.api.event.Subscribe;
 import dev.myriad.api.event.events.PacketEvent;
 import dev.myriad.api.util.ItemInfo;
 import dev.myriad.api.util.Packets;
+import dev.myriad.api.util.Slots;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
@@ -22,9 +23,11 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * Swapping the worn elytra with a chestplate held in the off hand or hotbar, by using the held one (as a right-click
- * equips armour): how Elytra Fly's No Durability and its bounce keep the server from gliding long enough to
- * wear the elytra. The server stops a glide on its next tick once the elytra is off; {@link GlideHold} keeps the client
+ * Swapping the worn elytra with a chestplate held in the off hand or hotbar: how Elytra Fly's No Durability and its
+ * bounce keep the server from gliding long enough to wear the elytra. The chestplate goes on by using it (as a
+ * right-click equips armour); the elytra goes back on with one inventory click (as a number key, or F for the off hand,
+ * over the chest slot does) whenever the server takes a click, otherwise by using it too. Either way the hotbar, hands,
+ * armour and model keep showing what they did (a core display mask). The server stops a glide on its next tick once the elytra is off; {@link GlideHold} keeps the client
  * (and Grim) gliding meanwhile, and {@link #startGlide()} starts it again with the elytra put back for a moment.
  * <p>
  * The server plays an equip sound for every swap, several times a second while gliding; those are muted here.
@@ -50,6 +53,12 @@ public final class ChestSwap {
 	private static final long FETCH_GAP_MS = 500, MISSING_MS = 1000;
 	private static volatile long muteUntil;
 	private static boolean subscribed;
+	/** The display mask's owner: the chest slot and the slot the swaps go through look as they did meanwhile. */
+	private static final Object MASK = new Object();
+	/** How long after the last swap the mask stays: longer than a round of No Durability's swaps. */
+	private static final long SHOWN_MS = 1500;
+	/** How many swaps were clicks, and how many uses (for the record). */
+	private static int clickSwaps, useSwaps;
 
 	private ChestSwap() {
 	}
@@ -99,15 +108,29 @@ public final class ChestSwap {
 	}
 
 	/**
-	 * Swaps what's worn with what {@link #pair()} finds, told to the server with the rotation this tick's movement packet
-	 * carries (Grim's BadPacketsJ). False if there's nothing to swap with.
+	 * Swaps what's worn with what {@link #pair()} finds: the elytra on with one click if the server takes one now
+	 * ({@link #clicks()}), otherwise by using it, told to the server with the rotation this tick's movement packet carries (Grim's
+	 * BadPacketsJ). False if there's nothing to swap with.
 	 */
 	public static boolean swap() {
 		Pair pair = pair();
 		if (pair == null) return false;
-		lastSwapMs = System.currentTimeMillis();
+		long now = System.currentTimeMillis();
+		int index = pair.hand() == InteractionHand.OFF_HAND ? Slots.OFF_HAND : pair.slot();
+		// Masked from the elytra's side (a mask shows what each slot held when it began): the elytra shows as worn
+		// throughout, the chestplate where you keep it. Renewed at each swap while it lasts.
+		if (elytraWorn() || now - lastSwapMs < SHOWN_MS) Myriad.inventory().mask(MASK, SHOWN_MS, Slots.CHEST, index);
+		lastSwapMs = now;
 		home = pair;
 		mute(item(pair), mc().player.getItemBySlot(EquipmentSlot.CHEST));
+		// The elytra goes on with a click; the chestplate with a use. Grim takes a click into its copy of your inventory
+		// at once, and with a chestplate there it expects no glide: the client gliding on through the hold is set back.
+		// A use only reaches its copy with the server's answer, which comes with the server's stop the hold holds back.
+		if (!elytraWorn() && clicks() && (index == Slots.OFF_HAND ? Myriad.inventory().swapWithOffhand(Slots.CHEST) : Myriad.inventory().move(Slots.CHEST, index))) {
+			clickSwaps++;
+			return true;
+		}
+		useSwaps++;
 		Runnable use = () -> Packets.sendSequenced(seq -> {
 			var p = mc().player;
 			InteractionHand hand = pair.hand();
@@ -121,6 +144,12 @@ public final class ChestSwap {
 		if (pair.hand() == InteractionHand.OFF_HAND) use.run();
 		else Myriad.inventory().silentSwap(pair.slot(), use);
 		return true;
+	}
+
+	/** Whether the server takes a click now (Grim refuses them while you move or sprint) and your own screen is free for one. */
+	public static boolean clicks() {
+		var p = mc().player;
+		return p != null && p.containerMenu == p.inventoryMenu && p.containerMenu.getCarried().isEmpty() && Myriad.inventory().safeToClick();
 	}
 
 	/**

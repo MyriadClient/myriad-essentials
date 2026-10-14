@@ -45,6 +45,8 @@ public final class GlideHold {
 	/** Network thread: a clear has arrived while armed; answers from {@link #holdFrom} on are held. */
 	private volatile boolean clearArriving;
 	private volatile long clearArrivedMs;
+	/** Network thread: when the server last said it glides you. */
+	private volatile long glideArrivedMs;
 
 	// Game thread.
 	private boolean holdingAnswers, clearApplied, exposed;
@@ -127,11 +129,28 @@ public final class GlideHold {
 			lastPing = ping.getId();
 			return;
 		}
+		if (e.packet() instanceof ClientboundSetEntityDataPacket data && ownGlideBit(data) == 1) glideArrivedMs = System.currentTimeMillis();
 		if (e.packet() instanceof ClientboundSetEntityDataPacket data && owner != null && !clearArriving && endsOwnGlide(data)) {
 			holdFrom = lastPing;
 			clearArrivedMs = System.currentTimeMillis();
 			clearArriving = true;
 		}
+	}
+
+	/** The gliding bit {@code data} sets on the local player: 1, 0, or -1 if it isn't the local player's flags. */
+	private static int ownGlideBit(ClientboundSetEntityDataPacket data) {
+		LocalPlayer p = Minecraft.getInstance().player;
+		if (p == null || data.id() != p.getId()) return -1;
+		int flagsId = EntityAccessor.essentials$entityFlags().id();
+		for (var v : data.packedItems()) {
+			if (v.id() == flagsId && v.value() instanceof Byte flags) return (flags & GLIDING_BIT) != 0 ? 1 : 0;
+		}
+		return -1;
+	}
+
+	/** Whether the server has said it glides you since {@code ms} ({@code System.currentTimeMillis()}), while armed. */
+	public static boolean glidingSince(long ms) {
+		return INSTANCE.glideArrivedMs >= ms;
 	}
 
 	/** Whether {@code data} is the server turning the local player's glide off while the client still glides. */

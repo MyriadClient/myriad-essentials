@@ -5,7 +5,13 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 ## 0.2.16 (unreleased)
 
-Needs Myriad 0.2.10 (`Breaking.Options.withWaitForServer`).
+Needs Myriad 0.2.10 (`Breaking.Options.withWaitForServer`, `Inventory.mask`, `Inventory.clickWaiting`).
+
+- Recast lets you use your inventory while it bounces. Your clicks used to wait for a moment the server takes them
+  (Grim refuses clicks while you sprint, and Recast sprints for the jump boost), and meanwhile jump was let go of: the
+  bounce slid along the ground and was set back. Now Recast stops sprinting for a tick in the air (where sprint changes
+  nothing) whenever a click waits, and keeps its jumps: the click goes mid-hop, a tick or two later. Locally, 31 clicks
+  while bouncing with No Durability: all made, no flags, no wear, 35 b/s.
 
 - Packet Mine leaves a block on screen until the server says it's gone (no ghost blocks when a finish is refused). With
   Myriad 0.2.10 its tool goes back in the same tick as the dig packet: no flags on the local Grim with its experimental
@@ -27,16 +33,31 @@ Needs Myriad 0.2.10 (`Breaking.Options.withWaitForServer`).
     and No Durability's swaps leave it out.
 - Elytra Fly Altitude, made to be left alone on 2b2t. Captures there showed 2b2t now and then ignoring one of No
   Durability's glide restarts (no glide and no stop from the server), and each ignored one set off a storm of
-  setbacks (145 in two minutes), every one costing speed and so height. No Durability now works the other way round in
-  Altitude: the elytra stays on and the server glides you, and just before its glide would wear the elytra (20 ticks)
-  there's a break: chestplate on, the server's stop held, elytra back on, and the glide started again once the server
-  has the elytra on (on and the start in one tick, as before, is what went unanswered). The server agrees with you
-  most of the time instead of a tick in eight; a start it still doesn't answer is made again after two round trips.
-  Locally: no flags and no wear in a minute of flight, height held. Without No Durability (or without a chestplate)
-  the elytra wears, and once it's down to what landing from where you are takes, a spare from your inventory goes on
-  in mid-air. Altitude glides gently for a few seconds after a run of setbacks, slows down (climbing) while the chunks
-  ahead haven't loaded, and when it can't go on (the last elytra worn out, the server setting you back over and over)
-  comes down to land. New **After Landing** (Altitude): disconnect once landed (default), or stay there.
+  setbacks (145 in two minutes), every one costing speed and so height. In Altitude each restart now puts the elytra
+  on first and sends the start only once the server has it on (on and the start in one tick is what went
+  unanswered). Gliding most of the time with a break before every 20 ticks instead flew smoothly on 2b2t, but wore
+  the elytra all the same: there a mid-air break only pauses the server's count of glide ticks. Locally: two
+  minutes, 3,000 blocks, no flags and no wear, height held. On 2b2t the setbacks that were left came in new terrain
+  at speed: Grim counts a chunk as yours only once you've answered the ping after it, and sets you back in one it
+  doesn't; No Durability holds those answers back for most of each round of swaps, and 2b2t sends chunks just in
+  time. Now each round only starts when Grim knows every chunk on its way (the elytra stays on until it does, and
+  swapping picks up again as soon as it does), and a hold about to reach one it doesn't is cut short. On 2b2t: 6
+  minutes, 9,800 blocks, no setbacks, 1 point of wear. With No Durability Altitude now flies a slower cycle (diving to
+  33-40 b/s rather than 36-58, about 18-20 b/s on average rather than 27, height held the same), so chunks are in
+  well before the swaps reach them, and the slowest of it while they come in late. A start 2b2t ignores no longer
+  sets off a storm: the first setback with no glide back from the server since the start puts the elytra on, starts
+  again once the server has it, and swaps on once the server glides (locally, a dropped start costs a second or two of
+  setbacks). Without No Durability (or without a chestplate) the
+  elytra wears, and once it's down to what landing from where you are takes, a spare from your inventory goes on in
+  mid-air. Altitude glides gently for a few seconds after a run of setbacks, slows down (climbing) while the chunks
+  ahead haven't loaded, and when it can't go on (the last elytra worn out, the server setting you back over and
+  over) comes down to land. New **After Landing** (Altitude): disconnect once landed (default), or stay there.
+- The chestplate swaps (No Durability, Recast) no longer flicker on screen (Myriad's display masks): the hotbar slot
+  or hand they go through keeps showing the chestplate, held still, without its name flashing up, and the armour bar,
+  Armor panel, inventory screen and your model keep showing the elytra. Only the drawing; the inventory is as it is.
+- No Durability puts the elytra back on with one inventory click when the server takes one (you're not moving or
+  sprinting: Altitude, Manual), instead of using it from the hand. The chestplate still goes on by using it: Grim takes
+  a click into its copy of your inventory at once and, with a chestplate there, sets back the glide the hold keeps up.
 - Elytra Tweaks is split up. No Durability, and the catch of a glide dropped in mid-air, are part of Elytra Fly now,
   in every mode (Altitude with the breaks above), with a new **Manual** mode for flying yourself (rockets) with just those. Rocket Boost is a module of
   its own. Set No Durability again in Elytra Fly, and turn Rocket Boost on, if you used them.

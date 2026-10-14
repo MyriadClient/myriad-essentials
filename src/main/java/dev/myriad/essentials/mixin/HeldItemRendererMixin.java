@@ -1,5 +1,7 @@
 package dev.myriad.essentials.mixin;
 
+import dev.myriad.api.util.Slots;
+import dev.myriad.api.Myriad;
 import dev.myriad.api.module.Modules;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -45,8 +47,8 @@ public abstract class HeldItemRendererMixin {
 	@Inject(method = "tick", at = @At("TAIL"))
 	private void essentials$noSwitchAnimation(CallbackInfo ci) {
 		if (!ViewModel.noSwitchAnimation() || minecraft.player == null) return;
-		mainHandItem = minecraft.player.getMainHandItem();
-		offHandItem = minecraft.player.getOffhandItem();
+		mainHandItem = Myriad.inventory().shown(minecraft.player.getInventory().getSelectedSlot());
+		offHandItem = Myriad.inventory().shown(Slots.OFF_HAND);
 		mainHandHeight = oMainHandHeight = 1;
 		offHandHeight = oOffHandHeight = 1;
 	}

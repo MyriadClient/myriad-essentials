@@ -22,7 +22,6 @@ import dev.myriad.api.util.ItemInfo;
 import dev.myriad.api.util.Baritone;
 import dev.myriad.api.util.Interactions;
 import dev.myriad.api.util.Packets;
-import dev.myriad.essentials.mixin.EntityAccessor;
 import dev.myriad.essentials.modules.player.AutoEat;
 import dev.myriad.essentials.util.ChestSwap;
 import dev.myriad.essentials.util.GlideHold;
@@ -31,7 +30,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
@@ -57,7 +55,8 @@ import java.util.List;
  * lane. The client keeps gliding through each ground touch instead of letting the elytra close; the server still closes
  * it on landing, so it's reopened (one packet) once you're back in the air, but your own physics never drop to walking
  * while that round trip happens. Jump is only pressed on the ticks you're on the ground and forward is never pressed
- * (strict anticheats check both against the glide); sprint stays on so every jump still adds its boost. The pitch dives
+ * (strict anticheats check both against the glide); sprint stays on so every jump still adds its boost, but for a
+ * tick in the air whenever a click is waiting, so you can use your inventory while it bounces. The pitch dives
  * while you're rising and levels out as you fall, which turns each bounce into the most forward speed. The server
  * stops the glide at each landing; the answers to Grim's pings from then on are held back until you're in the air again
  * (see GlideHold), so Grim keeps expecting the glide the client keeps up, and the elytra is opened again (with a jump
@@ -79,9 +78,9 @@ import java.util.List;
  * <li><b>Altitude</b> crosses open country without fireworks, "pitch 40" style. It dives until you're fast, pulls up hard, then eases
  * back to level: pulling up gives back more height than the speed it costs, so the cycle holds the altitude you started
  * gliding at (it dives harder when you're above it and climbs more when you're below). Start high, since the first dive
- * from a slow glide drops you 50 or so blocks. Steer with the camera. No Durability keeps the elytra on here and only
- * breaks the server's glide before it wears it (see NoDurability); without it the elytra wears, and once it's down to
- * what landing from here takes, a spare from your inventory goes on in mid-air. Made to be left alone: when the server sets you back a few times in a
+ * from a slow glide drops you 50 or so blocks. Steer with the camera. With No Durability each glide start waits for
+ * the server to have the elytra on (see NoDurability); without it the elytra wears, and once it's down to what landing
+ * from here takes, a spare from your inventory goes on in mid-air. Made to be left alone: when the server sets you back a few times in a
  * row it glides gently until the server agrees again, and it slows down (climbing) while the chunks ahead haven't
  * loaded. When it can't go on (the last elytra wearing out, the server setting you back over and over), it comes
  * down to land, levelling out near the ground, and After Landing disconnects you there or
@@ -116,7 +115,7 @@ public class ElytraFly extends Module {
 	private final EnumSetting<Mode> mode = sgGeneral.enumSetting("Mode", Mode.RECAST)
 		.description("Recast to bounce along a highway, Altitude to cross open country without fireworks, Manual to fly yourself (No Durability only).").build();
 	private final BoolSetting noDurability = sgGeneral.bool("No Durability")
-		.description("Keep the elytra from wearing out while you glide, by swapping it with a chestplate held in your off hand or hotbar. In Altitude the elytra stays on, with a short swap before the server would wear it.")
+		.description("Keep the elytra from wearing out while you glide, by swapping it with a chestplate held in your off hand or hotbar.")
 		.defaultValue(true).build();
 	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve")
 		.description("Put elytras with less durability than this (%) aside, and fly with another.").defaultValue(5).range(0, 50).decimals(0).build();
@@ -193,6 +192,13 @@ public class ElytraFly extends Module {
 	 */
 	private static final float DIVE_PITCH = 36, CLIMB_PITCH = -49, PULL_RATE = 5, EASE_RATE = 0.8f;
 	private static final double DIVE_SPEED = 52, HOLD_GAIN = 0.2, MIN_DIVE_SPEED = 36, MAX_DIVE_SPEED = 58;
+	/**
+	 * Altitude with No Durability: a slower cycle, about 18 blocks a second, so that 2b2t's chunks (sent just in time in
+	 * new terrain) are in well before the swaps reach them. Down there the climb gains most from about 40 and nothing
+	 * from 33, so the threshold works the other way round: it falls by {@code SLOW_HOLD_GAIN} for every block above the
+	 * cruise height (less climb) and rises below it. {@code SLOW_LATE_SPEED} while chunks still come in late.
+	 */
+	private static final double SLOW_DIVE_SPEED = 34.5, SLOW_HOLD_GAIN = 0.1, SLOW_MIN_DIVE_SPEED = 33, SLOW_MAX_DIVE_SPEED = 40, SLOW_LATE_SPEED = 36;
 	/**
 	 * Altitude, steadying: this many setbacks within {@code STEADY_WINDOW} ticks, and it glides at {@code STEADY_PITCH}
 	 * (a gentle descent) for {@code STEADY_TICKS} rather than dive and climb; {@code GIVE_UP} within {@code GIVE_UP_WINDOW},
@@ -400,12 +406,17 @@ public class ElytraFly extends Module {
 
 	/**
 	 * Keep sprinting while gliding, so each jump off the ground adds the sprint boost without holding forward: when you
-	 * could sprint at all (enough food, not blind), as Grim checks that.
+	 * could sprint at all (enough food, not blind), as Grim checks that. Except in the air while a click waits (yours
+	 * from the inventory, or a module's): gliding, sprint changes nothing, and the server only takes a click from you
+	 * while you don't sprint (Grim's MultiActionsC), so it goes on the next tick, mid-hop.
 	 */
 	public static boolean holdsSprint() {
 		var p = Minecraft.getInstance().player;
-		return holdsGlide() && p != null && p.getFoodData().hasEnoughFood() && !p.hasEffect(MobEffects.BLINDNESS);
+		return holdsGlide() && !Modules.active(ElytraFly.class).yieldSprint && p != null && p.getFoodData().hasEnoughFood() && !p.hasEffect(MobEffects.BLINDNESS);
 	}
+
+	/** Recast: in the air with a click waiting, sprint is let go of for it (see {@link #holdsSprint}). */
+	private boolean yieldSprint;
 
 	/** Whether Recast has you on foot for now (walking round or clearing something, waiting): no gliding meanwhile. */
 	public static boolean onFoot() {
@@ -425,13 +436,13 @@ public class ElytraFly extends Module {
 		return noDurability() && bouncing();
 	}
 
-	/** Whether No Durability is on (Elytra Fly on, with it set). */
-	/** Whether Elytra Fly is flying Altitude (No Durability stays out of it). */
+	/** Whether Elytra Fly is flying Altitude. */
 	public static boolean altitude() {
 		ElytraFly m = Modules.active(ElytraFly.class);
 		return m != null && m.activeMode == Mode.ALTITUDE;
 	}
 
+	/** Whether No Durability is on (Elytra Fly on, with it set). */
 	public static boolean noDurability() {
 		ElytraFly m = Modules.active(ElytraFly.class);
 		return m != null && m.noDurability.get();
@@ -472,20 +483,14 @@ public class ElytraFly extends Module {
 		// held, then press it.
 		if (wantOpen) e.jump = !jumpedLastTick;
 		jumpedLastTick = e.jump;
+		// The bounce's jumps can't wait for a click (see holdsSprint): it gets its still tick in the air instead.
+		if (e.jump && (wantJump || wantOpen) && state == State.BOUNCING) Myriad.inventory().keepKeys();
 	}
 
 	@Subscribe(packets = ClientboundPlayerPositionPacket.class)
 	private void onPacket(PacketEvent.Receive e) {
 		flagged = true;
-	}
-
-	/** The server's own say on your glide (your entity flags), for No Durability to check its starts against. */
-	@Subscribe(priority = Priority.HIGHEST, packets = ClientboundSetEntityDataPacket.class)
-	private void onEntityData(PacketEvent.Receive e) {
-		var p = mc.player;
-		if (p == null || !(e.packet() instanceof ClientboundSetEntityDataPacket data) || data.id() != p.getId()) return;
-		int flagsId = EntityAccessor.essentials$entityFlags().id();
-		for (var v : data.packedItems()) if (v.id() == flagsId && v.value() instanceof Byte flags) NoDurability.onOwnFlags(flags);
+		noDur.setBack();
 	}
 
 	/** Altitude can't keep the flight safe: it comes down to land, and After Landing decides what then. */
@@ -502,7 +507,7 @@ public class ElytraFly extends Module {
 	 */
 	@Subscribe(priority = Priority.BEFORE_ACTIONS + 10)
 	private void onTick(TickEvent.Pre e) {
-		wantJump = wantOpen = wantForward = wantSneak = false;
+		wantJump = wantOpen = wantForward = wantSneak = yieldSprint = false;
 		if (!inGame()) {
 			noDur.tick();
 			return;
@@ -615,6 +620,11 @@ public class ElytraFly extends Module {
 			return;
 		}
 		double diveUntil = Mth.clamp(DIVE_SPEED + HOLD_GAIN * (p.getY() - cruiseY), MIN_DIVE_SPEED, MAX_DIVE_SPEED);
+		if (noDurability()) {
+			diveUntil = Mth.clamp(SLOW_DIVE_SPEED - SLOW_HOLD_GAIN * (p.getY() - cruiseY), SLOW_MIN_DIVE_SPEED, SLOW_MAX_DIVE_SPEED);
+			// While No Durability's swaps wait for chunks, the slowest that still climbs.
+			if (noDur.chunksLate()) diveUntil = Math.min(diveUntil, SLOW_LATE_SPEED);
+		}
 		float flightPitch = switch (phase) {
 			case DIVE -> {
 				if (speed > diveUntil) {
@@ -785,6 +795,7 @@ public class ElytraFly extends Module {
 		Interactions.setJumpCooldown(0);
 		boolean ground = mc.player.onGround();
 		airTicks = ground ? 0 : airTicks + 1;
+		yieldSprint = !ground && Myriad.inventory().clickWaiting();
 		sinceStart++;
 		if (ground) hopStarted = false;
 		if (ground) {
