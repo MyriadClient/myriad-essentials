@@ -2,6 +2,7 @@ package dev.myriad.essentials.modules.movement;
 
 import dev.myriad.api.Myriad;
 import dev.myriad.api.module.Categories;
+import dev.myriad.api.setting.BoolSetting;
 import dev.myriad.api.setting.EnumSetting;
 import dev.myriad.api.util.ItemInfo;
 import net.minecraft.client.player.LocalPlayer;
@@ -17,8 +18,9 @@ import java.util.ArrayDeque;
  * Crosses open country without fireworks, "pitch 40" style. It dives until you're fast, pulls up hard, then eases back to
  * level: pulling up gives back more height than the speed it costs, so the cycle holds the altitude you started gliding
  * at (it dives harder when you're above it and climbs more when you're below). Start high, since the first dive from a
- * slow glide drops you 50 or so blocks. Steer with the camera; the flight's pitch only goes to the server and the flight
- * physics, so you can look around freely. With No Durability each glide start waits for the server to have the elytra
+ * slow glide drops you 50 or so blocks. Steer with the camera, or turn on Lock Heading to keep flying the way you faced
+ * when the glide started; the flight's pitch (and a locked heading) only goes to the server and the flight physics, so
+ * you can look around freely. With No Durability each glide start waits for the server to have the elytra
  * on (see {@link NoDurability}); without it the elytra wears, and once it's down to what landing from here takes, a spare
  * from your inventory goes on in mid-air. Made to be left alone: when the server sets you back a few times in a row it
  * glides gently until the server agrees again, and it slows down (climbing) while the chunks ahead haven't loaded. When
@@ -34,6 +36,9 @@ public class Altitude extends ElytraModule {
 		DIVE, PULL_UP, CLIMB
 	}
 
+	private final BoolSetting lockHeading = sgGeneral.bool("Lock Heading")
+		.description("Keep flying the way you faced when the glide started, whatever the camera does (to any angle, not snapped). Until you land or turn it off.")
+		.defaultValue(false).build();
 	private final EnumSetting<AfterLanding> afterLanding = sgGeneral.enumSetting("After Landing", AfterLanding.DISCONNECT)
 		.description("When it has to come down (elytra worn out, the server keeps setting you back): disconnect once landed, or stay there.").build();
 
@@ -87,6 +92,8 @@ public class Altitude extends ElytraModule {
 	private Phase phase = Phase.DIVE;
 	private float climbPitch;
 	private double cruiseY = Double.NaN;
+	/** With Lock Heading, the yaw it flies at: where you faced when the glide started (NaN until then). */
+	private float lockedYaw = Float.NaN;
 	/** Coming down to land (the elytra nearly worn out, or it can't go on), and why. */
 	private boolean landing;
 	private String landReason = "";
@@ -103,6 +110,7 @@ public class Altitude extends ElytraModule {
 	protected void resetFlight() {
 		phase = Phase.DIVE;
 		cruiseY = Double.NaN;
+		lockedYaw = Float.NaN;
 		landing = false;
 		landReason = "";
 		setbacks.clear();
@@ -135,6 +143,8 @@ public class Altitude extends ElytraModule {
 			countSetback(p);
 		}
 		if (landing && (p.onGround() || p.isInWater())) landed();
+		// The lock lasts the flight: a glide No Durability restarts in the air keeps it, a landing ends it.
+		if (!lockHeading.get() || p.onGround() || p.isInWater()) lockedYaw = Float.NaN;
 		if (!canGlide()) {
 			spoofing = false;
 			return;
@@ -148,13 +158,15 @@ public class Altitude extends ElytraModule {
 			return;
 		}
 		if (Double.isNaN(cruiseY)) cruiseY = p.getY();
+		if (lockHeading.get() && Float.isNaN(lockedYaw)) lockedYaw = p.getYRot();
+		float yaw = Float.isNaN(lockedYaw) ? p.getYRot() : lockedYaw;
 		if (!landing && elytraWearingOut()) {
 			int spare = spareElytra();
 			if (spare < 0) cannotGoOn("last elytra nearly worn out");
 			else if (Myriad.inventory().prepareClick()) Myriad.inventory().move(spare, ItemInfo.inventoryIndex(EquipmentSlot.CHEST));
 		}
 		// Higher ground ahead raises the cruise height in time to clear it (it's never lowered again by itself).
-		Vec3 heading = Vec3.directionFromRotation(0, p.getYRot());
+		Vec3 heading = Vec3.directionFromRotation(0, yaw);
 		cruiseY = Math.max(cruiseY, groundAhead(heading, TERRAIN_AHEAD) + TERRAIN_CLEARANCE);
 
 		double speed = p.getDeltaMovement().length() * 20;
@@ -164,25 +176,25 @@ public class Altitude extends ElytraModule {
 		if (groundAhead(heading, near) > p.getY() - PULL_UP_MARGIN) {
 			climbPitch = CLIMB_PITCH;
 			phase = Phase.CLIMB;
-			spoof(p.getYRot(), CLIMB_PITCH);
+			spoof(yaw, CLIMB_PITCH);
 			return;
 		}
 		if (landing) {
 			double above = p.getY() - mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING, p.getBlockX(), p.getBlockZ());
-			spoof(p.getYRot(), above > FLARE_HEIGHT ? LAND_PITCH : 0);
+			spoof(yaw, above > FLARE_HEIGHT ? LAND_PITCH : 0);
 			return;
 		}
 		// Set back a few times in a row: glide gently, no diving or climbing, until the server agrees again.
 		if (steadyTicks > 0) {
 			steadyTicks--;
 			phase = Phase.DIVE;
-			spoof(p.getYRot(), STEADY_PITCH);
+			spoof(yaw, STEADY_PITCH);
 			return;
 		}
 		// Chunks ahead not in yet: slow down (climbing) until they are, rather than fly into the edge of the world.
 		if (speed > SLOW_SPEED && !loadedAhead(heading, speed * LOAD_AHEAD_SECONDS)) {
 			phase = Phase.DIVE;
-			spoof(p.getYRot(), SLOW_PITCH);
+			spoof(yaw, SLOW_PITCH);
 			return;
 		}
 		double diveUntil = Mth.clamp(DIVE_SPEED + HOLD_GAIN * (p.getY() - cruiseY), MIN_DIVE_SPEED, MAX_DIVE_SPEED);
@@ -210,7 +222,7 @@ public class Altitude extends ElytraModule {
 				yield climbPitch;
 			}
 		};
-		spoof(p.getYRot(), flightPitch);
+		spoof(yaw, flightPitch);
 	}
 
 	/** The inventory index of the freshest other elytra with more uses left than landing from here takes, or -1. */

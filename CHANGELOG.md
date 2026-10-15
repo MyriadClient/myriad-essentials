@@ -3,6 +3,12 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/fyzz-dev/myriad) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.2.19 (unreleased)
+
+- Altitude: Lock Heading (off by default) keeps the flight going the way you faced when the glide started, to the
+  degree rather than snapped to 45° like Recast, so the camera is free to look around. It lasts until you land (No
+  Durability's mid-air glide restarts keep it) or turn it off.
+
 ## 0.2.18
 
 Needs Myriad 0.2.11.

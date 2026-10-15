@@ -656,6 +656,21 @@ def t_elytra_altitude_no_durability():
     return 0 <= damage <= 1 and hp > 0 and y > 180, f"elytra wore {damage} in 30 s, {x - 13000:.0f} blocks, y={y:.0f}, health {hp:.0f}"
 
 
+def t_altitude_lock_heading():
+    # Lock Heading with No Durability: the camera turns 90° (and back and forth) mid-flight, the flight keeps going
+    # east, through No Durability's glide restarts too.
+    client("respawn", ".panic", "wait 20")
+    cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate",
+        f"tp {P} 15000.5 300 0.5 -90 0")
+    time.sleep(1.5)
+    mark()
+    client(".set altitude no_durability true", ".set altitude after_landing stay", ".set altitude lock_heading true", "look -90 0", timeout=30)
+    client(".toggle altitude on", "wait 40", "look 0 0", "wait 120", "look 60 30", "wait 120", "look 0 -20", "wait 120", timeout=60)
+    x, y, z = position()
+    client(".toggle altitude off", ".set altitude lock_heading false", timeout=30)
+    return x - 15000 > 150 and abs(z) < 5 and y > 180, f"{x - 15000:.0f} blocks east, {z:.1f} sideways, y={y:.0f}"
+
+
 def t_elytra_altitude_spare():
     # Altitude with No Durability: the worn elytra (52 uses left, less than landing from 300 takes) is
     # swapped in mid-air for the spare in the inventory, and the flight goes on.
@@ -758,6 +773,7 @@ TESTS = [
     ("altitude wearing out", t_elytra_wearing_out),
     ("altitude spare", t_elytra_altitude_spare),
     ("altitude no durability", t_elytra_altitude_no_durability),
+    ("altitude lock heading", t_altitude_lock_heading),
 ]
 # Tests that toggle many modules at once; Grim's opinion of them isn't part of the result.
 FLAGS_IGNORED = {"selftest (every module)"}
