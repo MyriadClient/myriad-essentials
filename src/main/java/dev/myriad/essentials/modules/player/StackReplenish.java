@@ -7,6 +7,7 @@ import dev.myriad.api.module.Categories;
 import dev.myriad.api.module.Module;
 import dev.myriad.api.setting.BoolSetting;
 import dev.myriad.api.setting.IntSetting;
+import dev.myriad.api.setting.SavedSettings;
 import dev.myriad.api.util.Slots;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -21,13 +22,25 @@ import net.minecraft.world.item.ItemStack;
 public class StackReplenish extends Module {
 	private final IntSetting threshold = sgGeneral.intSetting("Threshold").description("Refill a stack when it drops to this percent of a full one.")
 		.defaultValue(25).range(1, 99).build();
-	private final BoolSetting offhand = sgGeneral.bool("Offhand").description("Refill the off hand too (crystals, golden apples).").defaultValue(true).build();
+	private final BoolSetting mainHand = sgGeneral.bool("Main Hand").description("Refill the stack you're holding.").defaultValue(true).build();
+	private final BoolSetting offHand = sgGeneral.bool("Off Hand").description("Refill the off hand (crystals, golden apples).").defaultValue(true).build();
+	private final BoolSetting hotbar = sgGeneral.bool("Hotbar").description("Refill the other hotbar slots.").defaultValue(true).build();
 
 	/** What each hotbar slot (and the off hand, last) held last tick, so an emptied slot can get the same item back. */
 	private final ItemStack[] last = new ItemStack[10];
 
 	public StackReplenish() {
 		super(Categories.PLAYER, "Stack Replenish", "Refills hotbar stacks from your inventory.");
+	}
+
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) saved.rename("General", "Offhand", "Off Hand");
 	}
 
 	@Override
@@ -42,10 +55,11 @@ public class StackReplenish extends Module {
 		// With a screen open, slots empty because you're moving things: just keep track. And while a click would have
 		// to wait (remembering what each slot held, so one used up meanwhile is still refilled then).
 		boolean clicks = mc.gui.screen() == null && Myriad.inventory().safeToClick();
+		int selected = inv.getSelectedSlot();
 		for (int i = 0; i < last.length; i++) {
 			int slot = i < 9 ? i : Slots.OFF_HAND;
-			if (slot == Slots.OFF_HAND && !offhand.get()) continue;
-			if (clicks) refill(slot, inv.getItem(slot), last[i]);
+			boolean wanted = slot == Slots.OFF_HAND ? offHand.get() : slot == selected ? mainHand.get() : hotbar.get();
+			if (clicks && wanted) refill(slot, inv.getItem(slot), last[i]);
 			last[i] = inv.getItem(slot).copy();
 		}
 	}
