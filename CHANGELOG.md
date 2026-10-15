@@ -3,7 +3,9 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/fyzz-dev/myriad) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
-## 0.2.17 (unreleased)
+## 0.2.17
+
+Needs Myriad 0.2.11 (clicks that don't slow you while sprinting, and on 2b2t over held keys).
 
 - Elytra Fly is now two modules, **Recast** and **Altitude**, each with its own No Durability and Preserve; turning one
   on turns the other off. Recast keeps Elytra Fly's saved settings, keybind and on/off state.
@@ -13,7 +15,8 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 - An elytra one hit from breaking is never used to start a glide (the server refuses it, and Grim sets you back): the
   swaps pick another one, and Recast and Altitude stop rather than try.
 - Stack Replenish tops up every low slot at once (as far as the packet budget goes), the first tick no screen is open,
-  and while you sprint or (on 2b2t) walk or jump; with Myriad 0.2.11 sprinting never breaks for it. Recast no longer
+  and while you sprint or (on 2b2t) walk or jump; sprinting never breaks for it. Main Hand, Off Hand and Hotbar choose
+  which slots it refills (Offhand carries over as Off Hand). Recast no longer
   lets go of sprint mid-hop for a click unless the server judges held keys.
 - The Grim test server is set like 2b2t where they're known to differ (clicks over held keys only flag), with
   `--strict` for current Grim; see tools/grim-test/README.
