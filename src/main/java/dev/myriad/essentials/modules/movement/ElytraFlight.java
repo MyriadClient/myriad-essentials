@@ -57,7 +57,9 @@ public final class ElytraFlight {
 	/** Whether the local player should count as gliding even though the elytra closed (Recast's landings). */
 	public static boolean holdsGlide() {
 		ElytraModule m = flying();
-		return m != null && m.holdGlide;
+		if (m != null) return m.holdGlide;
+		ElytraControl c = Modules.active(ElytraControl.class);
+		return c != null && c.holdsGlide();
 	}
 
 	/** Whether to keep sprinting while gliding (see {@link Recast#holdsSprint}). */
@@ -88,6 +90,8 @@ public final class ElytraFlight {
 	public static boolean holdsChest() {
 		ElytraModule m = flying();
 		if (m != null && (m.noDur.swapping() || m.swapsChest())) return true;
+		ElytraControl c = Modules.active(ElytraControl.class);
+		if (c != null && c.holdsChest()) return true;
 		AutoArmor armor = Modules.active(AutoArmor.class);
 		if (m == null && armor != null && armor.elytraSwapping()) return true;
 		var p = Minecraft.getInstance().player;

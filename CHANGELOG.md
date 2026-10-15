@@ -9,7 +9,11 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
   go along your heading at Speed (built up at Acceleration a tick), jump climbs and sneak descends at Vertical Speed, and
   with neither you hold your height (or drift down at Sink). Stops at the edge of chunks that haven't loaded. For
   loosely checked servers (6b6t's NoCheatPlus): one that simulates the glide, as Grim does on 2b2t, sets it back.
-  Turning it on turns off Recast and Altitude, and Auto Armor's No Durability Elytra stands down meanwhile.
+  Turning it on turns off Recast and Altitude, and Auto Armor's No Durability Elytra stands down meanwhile. Its own
+  No Durability (off by default) keeps the elytra from wearing: every 12 ticks a chestplate from your hotbar or off hand
+  goes on for one server tick (clicked on just after the tick's movement, the elytra used back on before the next
+  one's), which breaks the server's 20-tick glide count without any movement it checks finding the chestplate on.
+  Not while sprinting (NoCheatPlus refuses the click then).
 
 ## 0.2.19
 
