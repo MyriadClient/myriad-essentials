@@ -19,9 +19,12 @@ public final class ElytraFlight {
 		return m != null ? m : Modules.active(Altitude.class);
 	}
 
-	/** Whether Recast or Altitude is on: they do their own swapping, and Auto Armor's No Durability Elytra stands down. */
+	/**
+	 * Whether Recast, Altitude or Elytra Control is on: the first two do their own swapping, and Elytra Control's flight
+	 * has no glide to restart, so Auto Armor's No Durability Elytra stands down for all three.
+	 */
 	public static boolean flightModuleOn() {
-		return flying() != null;
+		return flying() != null || Modules.active(ElytraControl.class) != null;
 	}
 
 	/** Whether flight physics should use the flight module's rotation instead of the camera's. */

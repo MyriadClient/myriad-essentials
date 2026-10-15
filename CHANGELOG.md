@@ -3,6 +3,14 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/fyzz-dev/myriad) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.2.20 (unreleased)
+
+- Elytra Control (Movement): fly the elytra with the movement keys, like a creative flight. Forward, back and the sides
+  go along your heading at Speed (built up at Acceleration a tick), jump climbs and sneak descends at Vertical Speed, and
+  with neither you hold your height (or drift down at Sink). Stops at the edge of chunks that haven't loaded. For
+  loosely checked servers (6b6t's NoCheatPlus): one that simulates the glide, as Grim does on 2b2t, sets it back.
+  Turning it on turns off Recast and Altitude, and Auto Armor's No Durability Elytra stands down meanwhile.
+
 ## 0.2.19
 
 Needs Myriad 0.2.11.

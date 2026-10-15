@@ -206,7 +206,7 @@ public class Recast extends ElytraModule {
 
 	public Recast() {
 		super(Categories.MOVEMENT, "Recast", "Bounce along highways on an elytra, past whatever's in the way.");
-		conflictsWith(Altitude.class);
+		conflictsWith(Altitude.class, ElytraControl.class);
 		// It was Elytra Fly's Recast mode: its settings, keybind and on/off state carry over.
 		formerNames("Elytra Fly");
 	}

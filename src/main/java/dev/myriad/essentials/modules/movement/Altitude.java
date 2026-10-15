@@ -103,7 +103,7 @@ public class Altitude extends ElytraModule {
 
 	public Altitude() {
 		super(Categories.MOVEMENT, "Altitude", "Cross open country on an elytra without fireworks, holding your height.");
-		conflictsWith(Recast.class);
+		conflictsWith(Recast.class, ElytraControl.class);
 	}
 
 	@Override

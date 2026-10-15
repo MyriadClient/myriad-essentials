@@ -21,6 +21,7 @@ import dev.myriad.essentials.modules.combat.AutoDisconnect;
 import dev.myriad.essentials.modules.combat.KillAura;
 import dev.myriad.essentials.modules.combat.Offhand;
 import dev.myriad.essentials.modules.movement.Altitude;
+import dev.myriad.essentials.modules.movement.ElytraControl;
 import dev.myriad.essentials.modules.movement.Recast;
 import dev.myriad.essentials.modules.movement.RocketBoost;
 import dev.myriad.essentials.modules.movement.InventoryMove;
@@ -65,7 +66,7 @@ public final class Essentials implements MyriadAddon {
 			// Combat
 			new Offhand(), new AutoArmor(), new AutoDisconnect(), new KillAura(),
 			// Movement
-			new Recast(), new Altitude(), new RocketBoost(), new InventoryMove(), new Velocity(),
+			new Recast(), new Altitude(), new ElytraControl(), new RocketBoost(), new InventoryMove(), new Velocity(),
 			// Player
 			new AutoEat(), new AutoTool(), new InventoryTweaks(), new MiddleClick(), new PacketMine(), new Reach(), new StackReplenish(), new WallInteract(), new XCarry(),
 			// Render
