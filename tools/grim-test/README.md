@@ -15,6 +15,13 @@ Needs JDK 21 for the server (path in `versions.env`) and Python 3.
 | 2b2t's world seed, hard survival, PvP, no spawn protection, Nether and End | Paper tweaks, the queue proxy, plugins |
 | About 2b2t's ping, with `./lag.py` | |
 
+Where 2b2t is known to differ from current Grim, the server is set like 2b2t: Grim's MultiActionsC takes inventory
+clicks over held movement keys and jump (live captures on 2b2t, 2026-10-14, showed its Grim doesn't judge them). The
+test players get `grim.nomodifypacket.multiactionsc` (through `myriad.like2b2t` in `server/permissions.yml`), so it
+still flags them but cancels nothing, and `./suite` lets a keys-only flag pass while a sprinting or sneaking one fails.
+Dev clients click on `localhost` as on 2b2t (`-Dmyriad.noInputRuleHosts`). For current Grim as shipped: `./start.sh
+--strict`, the client with `-Pstrict` (`./clients N --strict`), and `GRIM_STRICT=1 ./suite`.
+
 Passing here means "passes current Grim as configured here", not "safe on 2b2t". Grim alerts on every violation in
 this setup (it normally waits for several); that only changes the messages, not what it cancels or sets back.
 

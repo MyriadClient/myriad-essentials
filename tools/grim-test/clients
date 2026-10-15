@@ -2,7 +2,8 @@
 """Starts extra dev clients beside the first, for ./suite --workers.
 
   ./clients 3              GrimTester2 and GrimTester3, from run2 and run3, joined to the test server
-  ./clients 3 --hotswap    on the JetBrains Runtime with debug ports 5006, 5007 (GRIM_RUN=run2 ./reload --port...)
+  ./clients 3 --hotswap    on the JetBrains Runtime with debug ports 5006, 5007 (./reload reaches them all)
+  ./clients 3 --strict     clicking by current Grim's rules (with ./start.sh --strict and GRIM_STRICT=1 ./suite)
   ./clients stop           stops the extra clients (never the first, nor any other Minecraft)
 
 The first client is the one ./gradlew runClient starts (run, GrimTester). The extra ones run the same build from
@@ -56,9 +57,15 @@ def start(k, hotswap):
         src, dst = os.path.join(first, item), os.path.join(run, item)
         if os.path.exists(src) and not os.path.exists(dst):
             (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)
+    # The version it joins as follows the first client's (-Pvia), every start.
+    via = os.path.join("config", "viafabricplus", "settings.json")
+    if os.path.exists(os.path.join(first, via)):
+        os.makedirs(os.path.dirname(os.path.join(run, via)), exist_ok=True)
+        shutil.copy2(os.path.join(first, via), os.path.join(run, via))
     java = jbr() if hotswap else shutil.which("java")
     args = [java, f"-Dfabric.dli.config={LAUNCH_CFG}", "-Dfabric.dli.env=client", "-Dfabric.dli.main=net.fabricmc.loader.impl.launch.knot.KnotClient",
-            "-Dmyriad.devConsole=myriad-dev-inbox", "-Dmyriad.openDesktop=false", "-Dmyriad.auditMixins=false", f"@{ARGFILE}",
+            "-Dmyriad.devConsole=myriad-dev-inbox", "-Dmyriad.openDesktop=false", "-Dmyriad.auditMixins=false",
+            "-Dmyriad.noInputRuleHosts=" + ("" if "--strict" in sys.argv else "localhost,127.0.0.1"), f"@{ARGFILE}",
             "-XX:StackShadowPages=32", "--sun-misc-unsafe-memory-access=allow", "--enable-native-access=ALL-UNNAMED", "-Dfile.encoding=UTF-8"]
     if hotswap:
         args += ["-XX:+AllowEnhancedClassRedefinition", f"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=localhost:{5004 + k}"]

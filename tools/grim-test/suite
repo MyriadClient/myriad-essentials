@@ -21,6 +21,8 @@ RUN = "run" if WORKER == 1 else f"run{WORKER}"
 DIM = None if WORKER == 1 else f"myriad:t{WORKER}"
 CONSOLE = os.path.join(HERE, "server", "console.log")
 TIMES = os.path.join(HERE, ".suite-times.json")
+# GRIM_STRICT=1: the server was started with --strict and the client with -Pstrict (current Grim, keys judged).
+STRICT = os.environ.get("GRIM_STRICT") == "1"
 # The test floor: stone at y=99, air above, around x=1000 z=0. The air in two fills: one would be over the server's
 # 32768-block limit, fail, and leave what earlier tests built.
 ARENA = ["fill 980 99 -20 1040 99 20 stone", "fill 980 100 -20 1040 107 20 air", "fill 980 108 -20 1040 115 20 air"]
@@ -56,7 +58,13 @@ def flags():
     with open(CONSOLE, "rb") as f:
         f.seek(_mark)
         text = re.sub(r"\x1b\[[0-9;]*m", "", f.read().decode(errors="replace"))
-    return sorted({m.group(1) for m in re.finditer(rf"(?<![\w]){P} failed (\w+)", text)})
+    found = set()
+    for m in re.finditer(rf"(?<![\w]){P} failed (\w+)[^\n]*", text):
+        # Like 2b2t (start.sh): a click over held keys only flags there. Over sprinting or sneaking it still fails.
+        if not STRICT and m.group(1) in ("MultiActionsC", "MultiActionsD") and "sprinting=false, sneaking=false, input=true" in m.group(0):
+            continue
+        found.add(m.group(1))
+    return sorted(found)
 
 
 def passed(condition):
@@ -250,6 +258,18 @@ def t_stack_replenish_walking():
     cmd(f"item replace entity {P} hotbar.0 with cobblestone 1", f"item replace entity {P} inventory.0 with cobblestone 64")
     client("hold forward 40", "wait 2", ".toggle stack_replenish on", "wait 38", ".toggle stack_replenish off")
     return count(0) > 1, f"hotbar stack now {count(0)}"
+
+
+def t_stack_replenish_sprinting():
+    # Two low stacks while sprinting: both topped up in one go, the click got past Grim's sprint check in the same tick
+    # (stop and start around it), so the sprint never breaks.
+    reset()
+    cmd(f"item replace entity {P} hotbar.0 with cobblestone 1", f"item replace entity {P} inventory.0 with cobblestone 64",
+        f"item replace entity {P} hotbar.1 with dirt 2", f"item replace entity {P} inventory.1 with dirt 64")
+    client("hold forward,sprint 40", "wait 5", ".toggle stack_replenish on", "wait 35", ".toggle stack_replenish off")
+    x = position()[0]
+    # Sprinting covers about 5.6 blocks a second: 2 s of it, less the run-up.
+    return count(0) == 64 and count(1) == 64 and x > 1010, f"hotbar stacks now {count(0)} and {count(1)}, ran to x={x:.1f}"
 
 
 def t_auto_armor():
@@ -701,6 +721,7 @@ TESTS = [
     ("offhand hotbar sprinting", t_offhand_hotbar_sprinting),
     ("auto_armor sprinting", t_auto_armor_sprinting),
     ("stack_replenish walking", t_stack_replenish_walking),
+    ("stack_replenish sprinting", t_stack_replenish_sprinting),
     ("auto_eat", t_auto_eat),
     ("auto_eat choice", t_auto_eat_choice),
     ("auto_disconnect", t_auto_disconnect),

@@ -86,6 +86,9 @@ loom {
 			// Lines appended to run/myriad-dev-inbox are run in game (Myriad commands, held keys, the menu, screenshots);
 			// tools/grim-test/client writes there.
 			property("myriad.devConsole", "myriad-dev-inbox")
+			// The Grim test server is set up like 2b2t's (tools/grim-test/start.sh), so the client clicks there as on 2b2t.
+			// -Pstrict (with ./start.sh --strict) for current Grim's rules.
+			property("myriad.noInputRuleHosts", project.hasProperty("strict") ? "" : "localhost,127.0.0.1")
 			if (project.hasProperty("quickPlay")) programArgs("--quickPlaySingleplayer", project.property("quickPlay").toString())
 			// -PquickPlayServer=localhost:25565 joins a server (the Grim test server in tools/grim-test).
 			if (project.hasProperty("quickPlayServer")) programArgs("--quickPlayMultiplayer", project.property("quickPlayServer").toString())

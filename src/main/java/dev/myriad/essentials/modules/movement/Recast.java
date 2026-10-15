@@ -53,8 +53,9 @@ import java.util.List;
  * 45° lane. The client keeps gliding through each ground touch instead of letting the elytra close; the server still
  * closes it on landing, so it's reopened (one packet) once you're back in the air, but your own physics never drop to
  * walking while that round trip happens. Jump is only pressed on the ticks you're on the ground and forward is never
- * pressed (strict anticheats check both against the glide); sprint stays on so every jump still adds its boost, but for
- * a tick in the air whenever a click is waiting, so you can use your inventory while it bounces. The pitch dives while
+ * pressed (strict anticheats check both against the glide); sprint stays on so every jump still adds its boost, and you
+ * can use your inventory while it bounces (clicks go through sprinting; where Grim also judges held keys, sprint lets go
+ * for a tick in the air for them). The pitch dives while
  * you're rising and levels out as you fall, which turns each bounce into the most forward speed; it only goes to the
  * server and the flight physics, so you can look around freely. The server stops the glide at each landing; the answers
  * to Grim's pings from then on are held back until you're in the air again (see GlideHold), so Grim keeps expecting the
@@ -254,9 +255,10 @@ public class Recast extends ElytraModule {
 
 	/**
 	 * Keep sprinting while gliding, so each jump off the ground adds the sprint boost without holding forward: when you
-	 * could sprint at all (enough food, not blind), as Grim checks that. Except in the air while a click waits (yours
-	 * from the inventory, or a module's): gliding, sprint changes nothing, and the server only takes a click from you
-	 * while you don't sprint (Grim's MultiActionsC), so it goes on the next tick, mid-hop.
+	 * could sprint at all (enough food, not blind), as Grim checks that. Clicks go through sprinting (core stops it for
+	 * the server around them in the same tick); except in the air while a click waits for a still tick (where Grim also
+	 * judges the keys you hold, see Inventory.clickWaiting): gliding, sprint changes nothing, so it's let go of with
+	 * the keys and the click goes on the next tick, mid-hop.
 	 */
 	boolean holdsSprint() {
 		var p = mc.player;

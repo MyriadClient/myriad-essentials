@@ -13,9 +13,10 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * Keeps hotbar stacks topped up from the rest of your inventory: a stack running low is refilled with the same item,
- * and a slot you've just used up gets the same item back. One refill a tick, and only with no screen open, so it never
- * fights you rearranging your inventory, and only while you stand still, since Grim (2b2t) refuses inventory clicks
- * while you move.
+ * and a slot you've just used up gets the same item back. Every slot that needs it at once (as far as the packet budget
+ * goes; the rest the next tick), the first tick there's no screen open, so it never fights you rearranging your
+ * inventory. Sprinting doesn't hold it up (core gets a click past Grim in the same tick); where Grim judges the keys you
+ * hold (newer versions, not 2b2t), it waits for a moment you aren't pressing any.
  */
 public class StackReplenish extends Module {
 	private final IntSetting threshold = sgGeneral.intSetting("Threshold").description("Refill a stack when it drops to this percent of a full one.")
@@ -38,17 +39,14 @@ public class StackReplenish extends Module {
 	private void onTick(TickEvent.Pre e) {
 		if (!inGame() || mc.player.containerMenu != mc.player.inventoryMenu || !mc.player.inventoryMenu.getCarried().isEmpty()) return;
 		Inventory inv = mc.player.getInventory();
-		// With a screen open, slots empty because you're moving things; just keep track.
-		boolean refilled = mc.gui.screen() != null;
-		// Grim cancels inventory clicks while you move, so refills wait until you stand still (remembering what each
-		// slot held, so one used up meanwhile is still refilled then).
-		if (!refilled && !Myriad.inventory().safeToClick()) return;
+		// With a screen open, slots empty because you're moving things: just keep track. And while a click would have
+		// to wait (remembering what each slot held, so one used up meanwhile is still refilled then).
+		boolean clicks = mc.gui.screen() == null && Myriad.inventory().safeToClick();
 		for (int i = 0; i < last.length; i++) {
 			int slot = i < 9 ? i : Slots.OFF_HAND;
 			if (slot == Slots.OFF_HAND && !offhand.get()) continue;
-			ItemStack stack = inv.getItem(slot);
-			if (!refilled) refilled = refill(slot, stack, last[i]);
-			last[i] = stack.copy();
+			if (clicks) refill(slot, inv.getItem(slot), last[i]);
+			last[i] = inv.getItem(slot).copy();
 		}
 	}
 

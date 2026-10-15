@@ -12,6 +12,11 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
   again. It stands down while Recast or Altitude is on: they swap the way their flight needs.
 - An elytra one hit from breaking is never used to start a glide (the server refuses it, and Grim sets you back): the
   swaps pick another one, and Recast and Altitude stop rather than try.
+- Stack Replenish tops up every low slot at once (as far as the packet budget goes), the first tick no screen is open,
+  and while you sprint or (on 2b2t) walk or jump; with Myriad 0.2.11 sprinting never breaks for it. Recast no longer
+  lets go of sprint mid-hop for a click unless the server judges held keys.
+- The Grim test server is set like 2b2t where they're known to differ (clicks over held keys only flag), with
+  `--strict` for current Grim; see tools/grim-test/README.
 - Rocket Boost flies vanilla's way on a tick after you brushed a wall or the ground, or went through water, cobwebs,
   soul sand or the like: Grim carries on from what's left of last tick's movement then, which Rocket Boost can't know.
 
