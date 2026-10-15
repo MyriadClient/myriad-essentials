@@ -4,15 +4,23 @@
   ./suite              every test
   ./suite kill_aura    tests whose name contains any of the words given
   ./suite --list       the tests
+  ./suite --workers 3  shared out between three dev clients (./clients 3 starts them), side by side
 
 Needs the server (./start.sh) and the dev client in game as GrimTester (op). Each test sets up its own scene (most of
 them on a stone floor around x=1000 so they don't touch the rest of the world), runs client steps, then checks the
 result on the server and that Grim flagged nothing. Exit code 1 if anything failed.
 """
-import math, os, re, subprocess, sys, time
+import json, math, os, re, subprocess, sys, threading, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-P = "GrimTester"
+# Which dev client this runs with (./suite --workers runs one copy per client): the first is GrimTester in the overworld,
+# the others GrimTester2.. each in a flat world of its own (datapack/myriad-tests), so every test keeps its coordinates.
+WORKER = int(os.environ.get("GRIM_WORKER", "1"))
+P = "GrimTester" if WORKER == 1 else f"GrimTester{WORKER}"
+RUN = "run" if WORKER == 1 else f"run{WORKER}"
+DIM = None if WORKER == 1 else f"myriad:t{WORKER}"
+CONSOLE = os.path.join(HERE, "server", "console.log")
+TIMES = os.path.join(HERE, ".suite-times.json")
 # The test floor: stone at y=99, air above, around x=1000 z=0. The air in two fills: one would be over the server's
 # 32768-block limit, fail, and leave what earlier tests built.
 ARENA = ["fill 980 99 -20 1040 99 20 stone", "fill 980 100 -20 1040 107 20 air", "fill 980 108 -20 1040 115 20 air"]
@@ -24,11 +32,31 @@ def sh(*args, timeout=180):
 
 
 def cmd(*commands):
+    """Server commands; in this worker's world (so its tests can use the same coordinates as the others')."""
+    if DIM:
+        commands = [f"execute in {DIM} " + c[len("execute "):] if c.startswith("execute ") else f"execute in {DIM} run {c}" for c in commands]
     return sh("cmd", *commands)
 
 
 def client(*steps, timeout=120):
-    return sh("client", "--timeout", str(timeout), *steps, timeout=timeout + 30)
+    return sh("client", "--run", RUN, "--timeout", str(timeout), *steps, timeout=timeout + 30)
+
+
+_mark = 0
+
+
+def mark():
+    """Grim's flags count from here (for this worker's player)."""
+    global _mark
+    _mark = os.path.getsize(CONSOLE)
+
+
+def flags():
+    """The checks Grim flagged this worker's player for since the mark."""
+    with open(CONSOLE, "rb") as f:
+        f.seek(_mark)
+        text = re.sub(r"\x1b\[[0-9;]*m", "", f.read().decode(errors="replace"))
+    return sorted({m.group(1) for m in re.finditer(rf"(?<![\w]){P} failed (\w+)", text)})
 
 
 def passed(condition):
@@ -58,16 +86,51 @@ def position():
     return tuple(float(n) for n in nums[:3]) if len(nums) >= 3 else (0, 0, 0)
 
 
+def forceload(*chunks, timeout=30):
+    """Force-loads chunks (as (chunk x, chunk z)) and waits until the server has them all: a new world generates them
+    first, and a fill reaching one that isn't in yet fails."""
+    cmd(*[f"forceload add {cx * 16} {cz * 16}" for cx, cz in chunks])
+    end = time.time() + timeout
+    left = list(chunks)
+    while left and time.time() < end:
+        out = cmd(*[f"execute if loaded {cx * 16} 0 {cz * 16}" for cx, cz in left])
+        # One answer per command, in order.
+        answers = re.findall(r"Test (passed|failed)", out)
+        if len(answers) == len(left):
+            left = [c for c, a in zip(left, answers) if a == "failed"]
+        if left: time.sleep(0.25)
+
+
+def forceload_area(x1, z1, x2, z2):
+    forceload(*[(cx, cz) for cx in range(x1 >> 4, (x2 >> 4) + 1) for cz in range(z1 >> 4, (z2 >> 4) + 1)])
+
+
+_arena_loaded = False
+
+
+def settle(x, y, z, timeout=5.0):
+    """Waits until the client stands where the tester was teleported (it has taken the teleport and has the chunks
+    there), then a few ticks more for Grim to have its answer, a few seconds at most."""
+    end = time.time() + timeout
+    while time.time() < end:
+        m = re.search(r"status: pos ([-\d.]+) ([-\d.]+) ([-\d.]+) .* ground=(\w+)", client("status", timeout=10))
+        if m and abs(float(m.group(1)) - x) < 0.05 and abs(float(m.group(2)) - y) < 0.05 and abs(float(m.group(3)) - z) < 0.05 and m.group(4) == "true":
+            break
+    client("wait 5", timeout=10)
+
+
 def reset(x=1000.5, y=100, z=0.5, yaw=-90, pitch=0, arena=True):
-    client("respawn", ".panic", "wait 20")
-    # The server only changes loaded chunks: go there first, then build, then stand on it.
-    cmd(f"gamemode survival {P}", f"tp {P} {x} {y + 30} {z} {yaw} {pitch}", f"effect give {P} slow_falling 3 0 true")
-    time.sleep(1.5)
-    cmd(*(ARENA if arena else []), f"clear {P}", f"effect clear {P}", f"kill @e[type=!player,distance=..64,x={x},y={y},z={z}]",
+    global _arena_loaded
+    client("respawn", ".panic", "wait 5")
+    # The server only changes loaded chunks: the arena's stay loaded, so it's built before the tester gets there.
+    if not _arena_loaded:
+        forceload_area(976, -32, 1047, 31)
+        _arena_loaded = True
+    cmd(*(ARENA if arena else []), f"gamemode survival {P}", f"clear {P}", f"effect clear {P}", f"kill @e[type=!player,distance=..64,x={x},y={y},z={z}]",
         f"tp {P} {x} {y} {z} {yaw} {pitch}", f"effect give {P} saturation 1 20 true")
-    time.sleep(1.5)
-    # Grim's opinion of the setup (teleports, slow falling) isn't the module's: count flags from here.
-    sh("flags", "mark")
+    settle(x, y, z)
+    # Grim's opinion of the setup (teleports) isn't the module's: count flags from here.
+    mark()
 
 
 # ---- tests: each returns (ok, detail) -----------------------------------------------------------------------------------
@@ -124,7 +187,7 @@ def t_kill_aura_walking():
     for x in range(1004, 1030, 4):
         cmd(f'summon husk {x}.5 100 2.5 {{NoAI:1b,Health:1000f,attributes:[{{id:"minecraft:max_health",base:1000}}],Tags:["suite"]}}')
     time.sleep(0.5)
-    sh("flags", "mark")
+    mark()
     client("select 1", ".set kill_aura weapon holding", ".toggle kill_aura on", "hold forward,sprint 80", "wait 82", ".toggle kill_aura off")
     x, _, _ = position()
     return x > 1012, f"walked to x={x:.1f} beside the husks"
@@ -248,9 +311,9 @@ def t_elytra_altitude():
     client("respawn", ".panic", "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"tp {P} 2000.5 230 0.5 -90 0")
     time.sleep(1.5)
-    sh("flags", "mark")
+    mark()
     x0 = position()[0]
-    client(".set elytra_fly mode altitude", ".toggle elytra_fly on", "wait 200", ".toggle elytra_fly off", timeout=90)
+    client(".toggle altitude on", "wait 200", ".toggle altitude off", timeout=90)
     x, y, _ = position()
     wear = re.search(r"damage\"?: (\d+)", data("Inventory[{Slot:102b}]"))
     return x - x0 > 60 and y > 150, f"{x - x0:.0f} blocks in 10 s, y={y:.0f}, elytra damage {wear.group(1) if wear else 0}"
@@ -261,12 +324,13 @@ def t_elytra_no_durability():
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate",
         f"tp {P} 3000.5 300 0.5 -90 0")
     time.sleep(1.5)
-    sh("flags", "mark")
-    # Manual: No Durability's own swapping (Altitude has breaks instead). Gliding on its own, looking a little down. A
-    # teleport keeps a glide going: what it wore before Elytra Fly was on doesn't count.
-    client(".set elytra_fly no_durability true", ".set elytra_fly mode manual", "look -90 10", timeout=30)
+    mark()
+    # Auto Armor's No Durability Elytra: the swapping for flying yourself (Altitude has breaks instead). The elytra opened
+    # as a player does, jump pressed while falling, then gliding on its own, looking a little down. What it wore before
+    # No Durability was on doesn't count.
+    client(".set auto_armor no_durability_elytra true", "look -90 10", "hold jump 2", "wait 5", timeout=30)
     before = elytra_damage()
-    client(".toggle elytra_fly on", "wait 200", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".toggle auto_armor on", "wait 200", ".toggle auto_armor off", ".set auto_armor no_durability_elytra false", "wait 20", timeout=90)
     damage = elytra_damage() - before
     hp, x = health(), position()[0]
     return 0 <= damage <= 2 and hp > 0 and x > 3060, f"elytra damage {damage} after 10 s of flight, {x - 3000:.0f} blocks, health {hp:.0f}"
@@ -282,15 +346,15 @@ def t_elytra_no_durability_landing():
     # to the ground afterwards must not cost any of it.
     client("respawn", ".panic", "wait 20")
     # Force-loaded chunks take the fill without anyone there; then stand on the floor while setting up.
-    cmd("forceload add 4990 -24 5400 24")
+    forceload_area(4990, -24, 5400, 24)
     time.sleep(1)
     cmd("fill 4990 150 -20 5400 150 20 stone", f"tp {P} 5000.5 151 10.5 -90 0", f"clear {P}", f"gamemode survival {P}", f"effect clear {P}",
         f"effect give {P} instant_health 1 5 true", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate")
-    client(".set elytra_fly no_durability true", ".set elytra_fly mode altitude", "look -90 0", timeout=30)
+    client(".set altitude no_durability true", ".set auto_armor no_durability_elytra true", "look -90 0", timeout=30)
     cmd(f"tp {P} 5000.5 230 10.5 -90 0")
-    # Altitude flies a while, then Manual: you glide down yourself, No Durability still swapping.
-    client(".toggle elytra_fly on", "wait 120", ".set elytra_fly mode manual", "look -90 25", "wait 200", ".toggle elytra_fly off", "wait 10",
-        timeout=90)
+    # Altitude flies a while, then you glide down yourself, Auto Armor's No Durability Elytra taking over the swapping.
+    client(".toggle auto_armor on", ".toggle altitude on", "wait 120", ".toggle altitude off", "look -90 25", "wait 200", ".toggle auto_armor off",
+        ".set auto_armor no_durability_elytra false", "wait 10", timeout=90)
     x, y, _ = position()
     hp = health()
     # Dying puts you back at spawn, at full health: only a landing out here counts.
@@ -300,7 +364,7 @@ def t_elytra_no_durability_landing():
 def recast_highway(*setup, end=4400):
     """A 3-wide obsidian highway at y=200 from x=4000 to `end`, the tester on it facing east, then `setup` commands."""
     client("respawn", ".panic", "wait 20")
-    cmd(f"forceload add 3990 -8 {end} 8")
+    forceload_area(3990, -8, end, 8)
     cmd(f"tp {P} 4000.5 201 0.5 -90 0")
     time.sleep(1.5)
     # In pieces: a fill takes at most 32768 blocks.
@@ -310,12 +374,12 @@ def recast_highway(*setup, end=4400):
         f"effect give {P} saturation 1 20 true", f"item replace entity {P} armor.chest with elytra", f"tp {P} 4000.5 201 0.5 -90 0", *setup)
     time.sleep(1)
     # Grim's opinion of the setup (teleporting you mid-move) isn't the module's: count flags from here.
-    sh("flags", "mark")
+    mark()
 
 
 def t_elytra_recast():
     recast_highway()
-    client(".set elytra_fly mode recast", ".set elytra_fly obstacles stop", "wait 10", ".toggle elytra_fly on", "wait 200", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".set recast obstacles stop", "wait 10", ".toggle recast on", "wait 200", ".toggle recast off", "wait 20", timeout=90)
     x, _, z = position()
     return x - 4000 > 200 and abs(z - 0.5) < 0.2, f"{x - 4000:.0f} blocks in 10 s, {abs(z - 0.5):.2f} off the line"
 
@@ -325,7 +389,7 @@ def t_elytra_recast_obstacles():
     # at the hole either stopped before it (no Baritone and no blocks) or across it with Baritone.
     recast_highway("setblock 4150 201 0 ender_chest", "fill 4250 198 -1 4250 200 1 air",
         f"item replace entity {P} hotbar.0 with netherite_pickaxe[enchantments={{efficiency:5}}]")
-    client(".set elytra_fly mode recast", ".set elytra_fly obstacles clear", "wait 10", ".toggle elytra_fly on", "wait 400", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".set recast obstacles clear", "wait 10", ".toggle recast on", "wait 400", ".toggle recast off", "wait 20", timeout=90)
     x, y, _ = position()
     mined = "passed" in cmd("execute if block 4150 201 0 air")
     baritone = has_baritone()
@@ -346,8 +410,8 @@ def elytra_damage():
 def t_elytra_recast_no_durability():
     # 30 s of bouncing with No Durability: the server's glides must never last the 20 ticks that wear the elytra.
     recast_highway(f"item replace entity {P} hotbar.1 with diamond_chestplate", end=4980)
-    client(".set elytra_fly no_durability true", ".set elytra_fly mode recast", ".set elytra_fly obstacles stop", "wait 10",
-        ".toggle elytra_fly on", "wait 600", ".toggle elytra_fly off", "wait 20", timeout=120)
+    client(".set recast no_durability true", ".set recast obstacles stop", "wait 10",
+        ".toggle recast on", "wait 600", ".toggle recast off", "wait 20", timeout=120)
     x = position()[0]
     damage = elytra_damage()
     return 0 <= damage <= 1 and x - 4000 > 300, f"elytra damage {damage} after {x - 4000:.0f} blocks of bouncing (30 s)"
@@ -360,7 +424,7 @@ def t_elytra_recast_diagonal():
     client("respawn", ".panic", "wait 20")
     cmd("forceload remove all")
     chunks = {((x0 + i + dx) >> 4, (i + dz) >> 4) for i in range(-8, length + 8) for dx in (-6, 6) for dz in (-6, 6)}
-    cmd(*[f"forceload add {cx * 16} {cz * 16}" for cx, cz in chunks])
+    forceload(*chunks)
     cmd(f"tp {P} {x0}.5 201 0.5 -45 0")
     time.sleep(2)
     lane = []
@@ -370,9 +434,9 @@ def t_elytra_recast_diagonal():
     cmd(f"clear {P}", f"gamemode survival {P}", f"effect clear {P}", f"effect give {P} saturation 1 20 true", f"item replace entity {P} armor.chest with elytra",
         f"item replace entity {P} inventory.5 with diamond_chestplate", f"tp {P} {x0}.5 201 0.5 -45 0")
     time.sleep(1)
-    sh("flags", "mark")
-    client(".set elytra_fly no_durability true", ".set elytra_fly mode recast", ".set elytra_fly obstacles stop", "wait 10",
-        ".toggle elytra_fly on", "wait 300", ".toggle elytra_fly off", "wait 20", timeout=90)
+    mark()
+    client(".set recast no_durability true", ".set recast obstacles stop", "wait 10",
+        ".toggle recast on", "wait 300", ".toggle recast off", "wait 20", timeout=90)
     x, y, z = position()
     worn = elytra_damage()
     cmd("forceload remove all")
@@ -382,7 +446,7 @@ def t_elytra_recast_diagonal():
 def has_baritone():
     """Whether the running dev client loaded Baritone (a jar in run/mods)."""
     try:
-        log = open(os.path.join(HERE, "..", "..", "run", "logs", "latest.log"), errors="replace").read()
+        log = open(os.path.join(HERE, "..", "..", RUN, "logs", "latest.log"), errors="replace").read()
     except OSError:
         return False
     return re.search(r"(?m)^\s*- baritone", log) is not None
@@ -404,9 +468,9 @@ def t_elytra_recast_spare_elytras():
     # the same elytra keeps being used, spares stay where they are and don't wear, and nothing warns.
     recast_highway(f"item replace entity {P} inventory.5 with diamond_chestplate", f"item replace entity {P} inventory.10 with elytra",
         f"item replace entity {P} inventory.11 with elytra", f"item replace entity {P} inventory.12 with elytra", end=4980)
-    client(".set auto_armor chest elytra", ".set auto_armor await_landing false", ".toggle auto_armor on", ".set elytra_fly no_durability true",
-        ".set elytra_fly mode recast", ".set elytra_fly obstacles stop", "wait 10", ".toggle elytra_fly on", "wait 400",
-        ".toggle elytra_fly off", "wait 40", ".toggle auto_armor off", ".set auto_armor chest chestplate",
+    client(".set auto_armor chest elytra", ".set auto_armor await_landing false", ".toggle auto_armor on", ".set recast no_durability true",
+        ".set recast obstacles stop", "wait 10", ".toggle recast on", "wait 400",
+        ".toggle recast off", "wait 40", ".toggle auto_armor off", ".set auto_armor chest chestplate",
         ".set auto_armor await_landing true", timeout=90)
     found = elytras()
     hotbar = [slot for slot, _ in found if slot < 9]
@@ -420,8 +484,8 @@ def t_elytra_recast_full_hotbar():
     # keys every tick trying).
     recast_highway(f"item replace entity {P} inventory.5 with diamond_chestplate",
         *[f"item replace entity {P} hotbar.{i} with {item} 64" for i, item in enumerate(["dirt", "cobblestone", "stone", "oak_planks", "glass", "sand", "gravel", "netherrack", "andesite"])])
-    client(".set elytra_fly no_durability true", ".set elytra_fly mode recast", ".set elytra_fly obstacles stop", "wait 10",
-        ".toggle elytra_fly on", "wait 200", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".set recast no_durability true", ".set recast obstacles stop", "wait 10",
+        ".toggle recast on", "wait 200", ".toggle recast off", "wait 20", timeout=90)
     x = position()[0]
     # (The warning is a toast, not in the log.) Nothing was clicked: the chestplate is where it was, the hotbar unchanged.
     untouched = item(14) == "minecraft:diamond_chestplate" and item(0) == "minecraft:dirt"
@@ -432,7 +496,7 @@ def t_elytra_recast_fill_hole():
     # A 3-deep hole across the lane: Clear fills it at floor level with blocks from the hotbar (without Baritone), or
     # Baritone bridges it with them, and bounces on.
     recast_highway("fill 4100 197 -1 4101 200 1 air", f"item replace entity {P} hotbar.2 with obsidian 64")
-    client(".set elytra_fly mode recast", ".set elytra_fly obstacles clear", "wait 10", ".toggle elytra_fly on", "wait 400", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".set recast obstacles clear", "wait 10", ".toggle recast on", "wait 400", ".toggle recast off", "wait 20", timeout=90)
     x, y, _ = position()
     filled = sum(passed(f"if block {bx} 200 {bz} obsidian") for bx in (4100, 4101) for bz in (-1, 0, 1))
     above = sum(passed(f"if block {bx} 201 {bz} obsidian") for bx in range(4095, 4106) for bz in (-1, 0, 1))
@@ -442,9 +506,9 @@ def t_elytra_recast_fill_hole():
 def t_elytra_recast_disconnect():
     # Stop with If Blocked Disconnect: a chest in the lane logs you out (then the tester joins again).
     recast_highway("setblock 4100 201 0 ender_chest")
-    client(".set elytra_fly mode recast", ".set elytra_fly obstacles stop", ".set elytra_fly if_blocked disconnect", "wait 10", ".toggle elytra_fly on", "wait 160", timeout=60)
-    left = P not in cmd("list")
-    client("wait 40", "connect localhost:25565", "wait 100", ".set elytra_fly if_blocked wait", ".set elytra_fly obstacles clear", ".toggle elytra_fly off", timeout=60)
+    client(".set recast obstacles stop", ".set recast if_blocked disconnect", "wait 10", ".toggle recast on", "wait 160", timeout=60)
+    left = not online()
+    client("wait 40", "connect localhost:25565", "wait 100", ".set recast if_blocked wait", ".set recast obstacles clear", ".toggle recast off", timeout=60)
     return left, "disconnected" if left else "still online"
 
 
@@ -452,7 +516,7 @@ def t_elytra_recast_walk_round():
     # Baritone installed: an ender chest and a bedrock pillar in the lane are walked round (the chest left alone).
     recast_highway("setblock 4100 201 0 ender_chest", "fill 4160 201 0 4160 202 0 bedrock", f"item replace entity {P} hotbar.0 with netherite_pickaxe")
     if not has_baritone(): return True, "skipped: Baritone isn't installed in the dev client (run/mods)"
-    client(".set elytra_fly mode recast", ".set elytra_fly obstacles clear", "wait 10", ".toggle elytra_fly on", "wait 500", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".set recast obstacles clear", "wait 10", ".toggle recast on", "wait 500", ".toggle recast off", "wait 20", timeout=90)
     x, y, _ = position()
     chest = "passed" in cmd("execute if block 4100 201 0 ender_chest")
     return chest and x > 4170 and y > 200.5, f"chest {'left' if chest else 'mined'}, x={x:.0f}, y={y:.1f}"
@@ -463,13 +527,13 @@ def t_elytra_recast_back_on_lane():
     # at its height, and the bounce goes on.
     recast_highway("fill 4055 195 2 4095 206 9 air", "fill 4060 195 3 4090 195 9 stone", f"item replace entity {P} hotbar.3 with dirt 64")
     if not has_baritone(): return True, "skipped: Baritone isn't installed in the dev client (run/mods)"
-    client(".set elytra_fly mode recast", ".set elytra_fly obstacles clear", "wait 10", ".toggle elytra_fly on", "wait 40", timeout=30)
+    client(".set recast obstacles clear", "wait 10", ".toggle recast on", "wait 40", timeout=30)
     cmd(f"tp {P} 4075.5 196 6.5")
     # The knock-off is the test's teleport: Grim's take on it isn't the module's.
     client("wait 40", timeout=10)
     time.sleep(1)
-    sh("flags", "mark")
-    client("wait 560", ".toggle elytra_fly off", "wait 20", timeout=90)
+    mark()
+    client("wait 560", ".toggle recast off", "wait 20", timeout=90)
     x, y, z = position()
     return y > 200.5 and x > 4120 and abs(z - 0.5) < 1.5, f"x={x:.0f}, y={y:.1f}, {abs(z - 0.5):.1f} off the line"
 
@@ -477,7 +541,7 @@ def t_elytra_recast_back_on_lane():
 def t_elytra_recast_low_ceiling():
     # Turned on under a two-high roof: it walks out from under it (mining nothing) and bounces on from there.
     recast_highway("fill 3995 203 -1 4030 203 1 stone", f"item replace entity {P} hotbar.0 with netherite_pickaxe[enchantments={{efficiency:5}}]")
-    client(".set elytra_fly mode recast", ".set elytra_fly obstacles clear", "wait 10", ".toggle elytra_fly on", "wait 300", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".set recast obstacles clear", "wait 10", ".toggle recast on", "wait 300", ".toggle recast off", "wait 20", timeout=90)
     x = position()[0]
     roof = sum(passed(f"if block {bx} 203 0 stone") for bx in range(3995, 4031))
     return roof == 36 and x > 4150, f"{x - 4000:.0f} blocks in 15 s, {36 - roof} roof blocks mined"
@@ -514,15 +578,15 @@ def t_auto_armor_preserve():
     return ok, f"chest {chest or 'empty'}, legs {legs or 'empty'}"
 
 
-def t_elytra_fly_preserve():
+def t_altitude_preserve():
     # Flying with an elytra 12 uses from wearing out and a fresh one carried: swapped in mid-air, still flying.
     client("respawn", ".panic", "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra[damage=420]", f"item replace entity {P} inventory.5 with elytra",
         f"tp {P} 6000.5 300 0.5 -90 0")
     time.sleep(1.5)
-    sh("flags", "mark")
-    client(".set elytra_fly no_durability false", ".set elytra_fly mode altitude", ".toggle elytra_fly on", "wait 60", "status", ".toggle elytra_fly off",
-        ".set elytra_fly no_durability true", timeout=60)
+    mark()
+    client(".set altitude no_durability false", ".toggle altitude on", "wait 60", "status", ".toggle altitude off",
+        ".set altitude no_durability true", timeout=60)
     y = position()[1]
     worn, spare = damage(102), damage(14)
     # The fresh one wears a point a second for the rest of the flight.
@@ -535,9 +599,9 @@ def t_elytra_wearing_out():
     client("respawn", ".panic", "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"effect clear {P}", f"effect give {P} instant_health 1 5 true",
         f"item replace entity {P} armor.chest with elytra[damage=330]")
-    client(".set elytra_fly mode altitude", ".set elytra_fly after_landing stay", "look -90 0", timeout=30)
+    client(".set altitude after_landing stay", "look -90 0", timeout=30)
     cmd(f"tp {P} 7000.5 300 0.5 -90 0")
-    client(".toggle elytra_fly on", "wait 1400", ".toggle elytra_fly off", timeout=120)
+    client(".toggle altitude on", "wait 1400", ".toggle altitude off", timeout=120)
     x, y, _ = position()
     hp = health()
     wear = re.search(r"damage\": (\d+)", data("Inventory[{Slot:102b}]"))
@@ -550,14 +614,14 @@ def t_elytra_altitude_no_durability():
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate",
         f"tp {P} 13000.5 300 0.5 -90 0")
     time.sleep(1.5)
-    sh("flags", "mark")
-    client(".set elytra_fly no_durability true", ".set elytra_fly mode altitude", ".set elytra_fly after_landing stay", "look -90 0", timeout=30)
-    # A teleport keeps a glide going: what it wore before Elytra Fly was on doesn't count.
+    mark()
+    client(".set altitude no_durability true", ".set altitude after_landing stay", "look -90 0", timeout=30)
+    # A teleport keeps a glide going: what it wore before Altitude was on doesn't count.
     before = elytra_damage()
-    client(".toggle elytra_fly on", "wait 600", timeout=60)
+    client(".toggle altitude on", "wait 600", timeout=60)
     damage = elytra_damage() - before
     hp, (x, y, _) = health(), position()
-    client(".toggle elytra_fly off", timeout=30)
+    client(".toggle altitude off", timeout=30)
     return 0 <= damage <= 1 and hp > 0 and y > 180, f"elytra wore {damage} in 30 s, {x - 13000:.0f} blocks, y={y:.0f}, health {hp:.0f}"
 
 
@@ -568,20 +632,20 @@ def t_elytra_altitude_spare():
     cmd(f"clear {P}", f"gamemode survival {P}", f"effect clear {P}", f"effect give {P} instant_health 1 5 true",
         f"item replace entity {P} armor.chest with elytra[damage=380]", f"item replace entity {P} inventory.5 with elytra",
         f"item replace entity {P} hotbar.1 with diamond_chestplate")
-    client(".set elytra_fly mode altitude", ".set elytra_fly no_durability true", ".set elytra_fly after_landing stay", "look -90 0", timeout=30)
+    client(".set altitude no_durability true", ".set altitude after_landing stay", "look -90 0", timeout=30)
     cmd(f"tp {P} 11000.5 300 0.5 -90 0")
     time.sleep(1.5)
-    sh("flags", "mark")
-    client(".toggle elytra_fly on", "wait 300", timeout=60)
+    mark()
+    client(".toggle altitude on", "wait 300", timeout=60)
     x, y, _ = position()
     # The elytra in use: worn, or in the hotbar during No Durability's break.
     damage = elytra_damage()
-    client(".toggle elytra_fly off", timeout=30)
+    client(".toggle altitude off", timeout=30)
     return damage < 100 and y > 150, f"worn elytra damage {damage} after {x - 11000:.0f} blocks, y={y:.0f}"
 
 
 def online():
-    return P in cmd("list")
+    return re.search(rf"(?<![\w]){P}(?![\w])", cmd("list").split(":", 1)[-1]) is not None
 
 
 def rejoin():
@@ -643,27 +707,83 @@ TESTS = [
     ("stack_replenish", t_stack_replenish),
     ("auto_tool preserve", t_auto_tool_preserve),
     ("auto_armor preserve", t_auto_armor_preserve),
-    ("elytra_fly preserve", t_elytra_fly_preserve),
-    ("elytra_fly altitude", t_elytra_altitude),
-    ("elytra_fly recast", t_elytra_recast),
-    ("elytra_fly recast obstacles", t_elytra_recast_obstacles),
-    ("elytra_fly recast no durability", t_elytra_recast_no_durability),
-    ("elytra_fly recast low ceiling", t_elytra_recast_low_ceiling),
-    ("elytra_fly recast diagonal", t_elytra_recast_diagonal),
-    ("elytra_fly recast spare elytras", t_elytra_recast_spare_elytras),
-    ("elytra_fly recast full hotbar", t_elytra_recast_full_hotbar),
-    ("elytra_fly recast fill hole", t_elytra_recast_fill_hole),
-    ("elytra_fly recast walk round", t_elytra_recast_walk_round),
-    ("elytra_fly recast back on lane", t_elytra_recast_back_on_lane),
-    ("elytra_fly recast disconnect", t_elytra_recast_disconnect),
-    ("elytra_fly no durability", t_elytra_no_durability),
-    ("elytra_fly no durability landing", t_elytra_no_durability_landing),
-    ("elytra_fly altitude wearing out", t_elytra_wearing_out),
-    ("elytra_fly altitude spare", t_elytra_altitude_spare),
-    ("elytra_fly altitude no durability", t_elytra_altitude_no_durability),
+    ("altitude preserve", t_altitude_preserve),
+    ("altitude", t_elytra_altitude),
+    ("recast", t_elytra_recast),
+    ("recast obstacles", t_elytra_recast_obstacles),
+    ("recast no durability", t_elytra_recast_no_durability),
+    ("recast low ceiling", t_elytra_recast_low_ceiling),
+    ("recast diagonal", t_elytra_recast_diagonal),
+    ("recast spare elytras", t_elytra_recast_spare_elytras),
+    ("recast full hotbar", t_elytra_recast_full_hotbar),
+    ("recast fill hole", t_elytra_recast_fill_hole),
+    ("recast walk round", t_elytra_recast_walk_round),
+    ("recast back on lane", t_elytra_recast_back_on_lane),
+    ("recast disconnect", t_elytra_recast_disconnect),
+    ("no durability elytra", t_elytra_no_durability),
+    ("no durability elytra landing", t_elytra_no_durability_landing),
+    ("altitude wearing out", t_elytra_wearing_out),
+    ("altitude spare", t_elytra_altitude_spare),
+    ("altitude no durability", t_elytra_altitude_no_durability),
 ]
 # Tests that toggle many modules at once; Grim's opinion of them isn't part of the result.
 FLAGS_IGNORED = {"selftest (every module)"}
+
+
+def run_tests(chosen):
+    results = []
+    for name, test in chosen:
+        mark()
+        start = time.time()
+        try:
+            ok, detail = test()
+        except Exception as e:
+            ok, detail = False, f"error: {e}"
+        flagged = flags()
+        if flagged and name not in FLAGS_IGNORED: ok = False
+        took = time.time() - start
+        results.append((name, ok, detail, flagged, took))
+        print(f"{'PASS' if ok else 'FAIL'}  {took:5.1f}s  {name:<30} {detail}" + (f"  [flags: {', '.join(flagged)}]" if flagged else ""), flush=True)
+        print("RESULT " + json.dumps([name, ok, took]), flush=True)
+    return results
+
+
+def share(chosen, workers):
+    """Splits the tests between the workers, longest first onto whoever has least so far (by the last run's times)."""
+    try:
+        times = json.load(open(TIMES))
+    except (OSError, ValueError):
+        times = {}
+    loads = [[0.0, []] for _ in range(workers)]
+    order = {n: i for i, (n, _) in enumerate(chosen)}
+    for name, _ in sorted(chosen, key=lambda t: -times.get(t[0], 15)):
+        least = min(loads, key=lambda l: l[0])
+        least[0] += times.get(name, 15)
+        least[1].append(name)
+    # Each worker runs its share in the suite's own order.
+    return [sorted(names, key=order.get) for _, names in loads]
+
+
+def run_workers(chosen, workers):
+    """One copy of the suite per dev client, each with its share; their lines come through prefixed with the client."""
+    shares = share(chosen, workers)
+    results, lock = [], threading.Lock()
+
+    def worker(k, names):
+        env = dict(os.environ, GRIM_WORKER=str(k), GRIM_TESTS=json.dumps(names))
+        proc = subprocess.Popen([sys.executable, os.path.abspath(__file__)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in proc.stdout:
+            with lock:
+                if line.startswith("RESULT "):
+                    results.append(json.loads(line[7:]))
+                elif line.strip() and not re.match(r"\d+/\d+ passed", line.strip()):
+                    print(f"[{k}] {line}", end="", flush=True)
+        proc.wait()
+
+    threads = [threading.Thread(target=worker, args=(k + 1, names)) for k, names in enumerate(shares) if names]
+    for t in threads: t.start()
+    for t in threads: t.join()
+    return results
 
 
 def main():
@@ -671,24 +791,32 @@ def main():
     if args == ["--list"]:
         for name, _ in TESTS: print(name)
         return
-    if "no dev client" in client("echo ping", timeout=10):
-        sys.exit("no dev client running (see README)")
-    chosen = [(n, f) for n, f in TESTS if not args or any(a in n for a in args)]
-    results = []
-    for name, test in chosen:
-        sh("flags", "mark")
-        start = time.time()
-        try:
-            ok, detail = test()
-        except Exception as e:
-            ok, detail = False, f"error: {e}"
-        flags = sh("flags")
-        flagged = sorted(set(re.findall(r"failed (\w+)", flags)))
-        if flagged and name not in FLAGS_IGNORED: ok = False
-        results.append((name, ok, detail, flagged, time.time() - start))
-        print(f"{'PASS' if ok else 'FAIL'}  {name:<30} {detail}" + (f"  [flags: {', '.join(flagged)}]" if flagged else ""), flush=True)
+    workers = 1
+    if args[:1] == ["--workers"]:
+        workers, args = int(args[1]), args[2:]
+    only = json.loads(os.environ["GRIM_TESTS"]) if "GRIM_TESTS" in os.environ else None
+    chosen = [(n, f) for n, f in TESTS if (only is None or n in only) and (not args or any(a in n for a in args))]
+    for k in range(1, workers + 1):
+        run = "run" if k == 1 else f"run{k}"
+        if "no dev client" in sh("client", "--run", run, "--timeout", "10", "echo ping", timeout=40):
+            sys.exit(f"no dev client running in {run} (./clients {workers} starts them; see README)")
+    started = time.time()
+    if workers > 1:
+        results = [(n, ok, "", [], took) for n, ok, took in run_workers(chosen, workers)]
+    else:
+        results = run_tests(chosen)
+    if only is not None: return
+    # The times for next run's sharing out.
+    try:
+        times = json.load(open(TIMES))
+    except (OSError, ValueError):
+        times = {}
+    # Only from tests that passed: one that failed early says nothing about how long it takes.
+    times.update({r[0]: round(r[4], 1) for r in results if r[1]})
+    json.dump(times, open(TIMES, "w"), indent=1)
     failed = [r for r in results if not r[1]]
-    print(f"\n{len(results) - len(failed)}/{len(results)} passed")
+    print(f"\n{len(results) - len(failed)}/{len(results)} passed in {time.time() - started:.0f} s" + (f" ({workers} clients)" if workers > 1 else "")
+          + ("; failed: " + ", ".join(r[0] for r in failed) if failed else ""))
     sys.exit(1 if failed else 0)
 
 

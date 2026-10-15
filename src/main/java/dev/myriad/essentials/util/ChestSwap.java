@@ -23,7 +23,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * Swapping the worn elytra with a chestplate held in the off hand or hotbar: how Elytra Fly's No Durability and its
+ * Swapping the worn elytra with a chestplate held in the off hand or hotbar: how No Durability and Recast's
  * bounce keep the server from gliding long enough to wear the elytra. The chestplate goes on by using it (as a
  * right-click equips armour); the elytra goes back on with one inventory click (as a number key, or F for the off hand,
  * over the chest slot does) whenever the server takes a click, otherwise by using it too. Either way the hotbar, hands,
@@ -79,8 +79,11 @@ public final class ChestSwap {
 		if (!gliderOn && !isChestArmor(worn)) return null;
 		Predicate<ItemStack> counterpart = gliderOn ? ChestSwap::isChestArmor : s -> ItemInfo.isGlider(s) && chestEquippable(s);
 		// Not gear a Preserve put aside (an elytra about to wear out) unless it's all there is: the elytra has to go back on,
-		// and a chestplate worn a tick at a time in the air doesn't wear.
-		Pair pair = find(counterpart.and(s -> !Myriad.inventory().isSpared(s)));
+		// and a chestplate worn a tick at a time in the air doesn't wear. Nor an elytra one hit from breaking while
+		// another will do: the server won't start a glide with it.
+		Predicate<ItemStack> usable = s -> !ItemInfo.isGlider(s) || ItemInfo.canGlide(s);
+		Pair pair = find(counterpart.and(usable).and(s -> !Myriad.inventory().isSpared(s)));
+		if (pair == null) pair = find(counterpart.and(usable));
 		return pair != null ? pair : find(counterpart);
 	}
 
@@ -105,6 +108,17 @@ public final class ChestSwap {
 		if (elytraWorn()) return true;
 		Pair pair = pair();
 		return pair != null && ItemInfo.isGlider(item(pair));
+	}
+
+	/**
+	 * Whether a glide could start: an elytra is worn, or ready to be swapped on, that isn't one hit from breaking (the
+	 * server refuses a glide start with that one, and Grim sets you back for it).
+	 */
+	public static boolean canGlide() {
+		var worn = mc().player.getItemBySlot(EquipmentSlot.CHEST);
+		if (ItemInfo.isGlider(worn)) return ItemInfo.canGlide(worn);
+		Pair pair = pair();
+		return pair != null && ItemInfo.canGlide(item(pair));
 	}
 
 	/**

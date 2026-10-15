@@ -77,7 +77,7 @@ public class AutoEat extends Module {
 
 	/**
 	 * Whether Auto Eat is eating, or about to (hungry or hurt enough, with something to eat): what would stop it waits
-	 * meanwhile, as Elytra Fly's swaps do (Grim stops eating at each), also between one bite and the next.
+	 * meanwhile, as No Durability's swaps do (Grim stops eating at each), also between one bite and the next.
 	 */
 	public static boolean wantsToEat() {
 		AutoEat m = Modules.active(AutoEat.class);

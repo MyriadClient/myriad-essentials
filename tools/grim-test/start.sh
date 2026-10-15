@@ -25,6 +25,11 @@ PY
 	sed -i -E 's/"[0-9]+:[0-9]+ \[alert\]"/"1:1 [alert]"/' server/plugins/GrimAC/punishments.yml
 fi
 
+# The suite's flat worlds, one per extra test client (./suite --workers): datapack dimensions, made on the first start.
+mkdir -p server/world/datapacks
+rm -rf server/world/datapacks/myriad-tests
+cp -r datapack/myriad-tests server/world/datapacks/
+
 cd server
 nohup "$JAVA" -Xms2G -Xmx3G -jar paper.jar nogui > console.log 2>&1 < /dev/null &
 echo $! > server.pid

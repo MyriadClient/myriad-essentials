@@ -1,0 +1,6 @@
+{
+	"pack": {
+		"description": "Myriad suite: flat worlds, one per extra test client, so tests can run side by side at the same coordinates",
+		"pack_format": 61
+	}
+}

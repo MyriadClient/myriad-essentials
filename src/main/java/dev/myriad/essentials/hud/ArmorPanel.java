@@ -49,7 +49,7 @@ public final class ArmorPanel extends HudPanel {
 			return list;
 		}
 		for (EquipmentSlot slot : SLOTS) {
-			// What the slot shows: a masked swap (Elytra Fly's chestplate swaps) doesn't flicker it.
+			// What the slot shows: a masked swap (No Durability's chestplate swaps) doesn't flicker it.
 			ItemStack s = Myriad.inventory().shown(Slots.FEET + slot.getIndex());
 			if (s.isEmpty() && skipEmpty.get()) continue;
 			list.add(s);

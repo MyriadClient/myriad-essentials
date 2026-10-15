@@ -31,7 +31,8 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Elytra Fly's No Durability, and its catch of a glide dropped in mid-air (on whenever Elytra Fly is).
+ * No Durability for an elytra, and its catch of a glide dropped in mid-air (on while its owner is: Recast, Altitude, or
+ * Auto Armor's No Durability Elytra for flying yourself).
  * <p>
  * The server wears an elytra by one for every 20 ticks of gliding without a break. With a
  * chestplate in your off hand or hotbar, the elytra is swapped for it (using it, as a right-click equips armour)
@@ -54,11 +55,26 @@ import net.minecraft.world.phys.Vec3;
  * using each time the chestplate is used, so the elytra goes back on at the next start, and swapping picks up again
  * once you're done.
  */
-final class NoDurability {
-	private final ElytraFly fly;
+public final class NoDurability {
+	/** Who runs it: says what it has to say, and whether swapping is on. */
+	public interface Owner {
+		/** Whether to swap the elytra with a chestplate while you glide (the catch runs either way). */
+		boolean noDurability();
+
+		/** Altitude flies long fast glides: each start waits for the server to have the elytra on (see {@link #equipping}). */
+		default boolean altitude() {
+			return false;
+		}
+
+		void info(String message);
+
+		void warn(String message);
+	}
+
+	private final Owner fly;
 	private final Minecraft mc = Minecraft.getInstance();
 
-	NoDurability(ElytraFly fly) {
+	public NoDurability(Owner fly) {
 		this.fly = fly;
 	}
 
@@ -122,18 +138,18 @@ final class NoDurability {
 	private boolean recovering, confirming;
 	private int lostStarts;
 
-	void enable() {
+	public void enable() {
 		swapping = startNow = rocketWanted = stopForUse = finishing = equipping = recovering = confirming = setBack = false;
 		descent = 0;
 		armTicks = catching = 0;
 		GrimChunks.start();
 	}
 
-	void disable() {
+	public void disable() {
 		if (mc.player != null && mc.level != null) {
 			// No next tick to wait for: start the glide again now rather than drop out of it in mid-air.
 			finish(true);
-			// Turning off mid-swap can start the glide again, and Elytra Fly no longer hears the input event that presses
+			// Turning off mid-swap can start the glide again, and the owner no longer hears the input event that presses
 			// jump with it (Grim's ElytraB): press it from a listener of its own, for that one tick.
 			if (startNow) pressJumpOnce();
 		}
@@ -144,12 +160,12 @@ final class NoDurability {
 	}
 
 	/** Whether the elytra and chestplate are being swapped (or the elytra put back for good) right now. */
-	boolean swapping() {
+	public boolean swapping() {
 		return swapping;
 	}
 
-	/** Before any of this tick's actions, after Elytra Fly's flight: a restart sends held ping answers, which must come first (Grim's Post). */
-	void tick() {
+	/** Before any of this tick's actions, after the owner's flight: a restart sends held ping answers, which must come first (Grim's Post). */
+	public void tick() {
 		startNow = false;
 		if (sinceChunkWait < Integer.MAX_VALUE) sinceChunkWait++;
 		if (mc.player == null || mc.level == null) {
@@ -175,15 +191,15 @@ final class NoDurability {
 		boolean wasSetBack = setBack;
 		setBack = false;
 		trackDescent(p);
-		if (!ElytraFly.noDurability()) {
+		if (!fly.noDurability()) {
 			finish();
 			return;
 		}
 		if (!swapping) {
-			// Elytra Fly's bounce does its own swapping.
+			// Recast's bounce does its own swapping.
 			// Not while you eat (or use anything held): a swap would stop it (see onUse).
 			boolean ready = p.isFallFlying() && ChestSwap.elytraWorn() && !p.onGround() && !p.isInWater() && !p.isPassenger() && !p.isUsingItem()
-				&& !ElytraFly.holdsGlide() && room(true);
+				&& !ElytraFlight.holdsGlide() && room(true);
 			armTicks = ready ? armTicks + 1 : 0;
 			if (armTicks < ARM_TICKS) return;
 			if (!chestplateAtHand(true)) return;
@@ -263,7 +279,7 @@ final class NoDurability {
 		if (cleared && due && sinceStart >= 2) {
 			// Something to eat is waiting: this start puts the elytra back for good, and the swapping stops.
 			if (stopForUse) finish();
-			else if (ElytraFly.altitude()) equip();
+			else if (fly.altitude()) equip();
 			else swapAgainOrStop(p);
 		} else if (!cleared && sinceStart > INTERVAL + CLEAR_TIMEOUT) {
 			finish();
@@ -286,7 +302,7 @@ final class NoDurability {
 	}
 
 	/** A setback came in: handled on the next tick (see {@link #startMs}). */
-	void setBack() {
+	public void setBack() {
 		setBack = true;
 	}
 
@@ -399,9 +415,7 @@ final class NoDurability {
 	}
 
 	/** While swapping: jump only as the press that starts the glide again (released the tick before). Same for a catch. */
-
-	/** While swapping: jump only as the press that starts the glide again (released the tick before). Same for a catch. */
-	void onInput(InputEvent e) {
+	public void onInput(InputEvent e) {
 		if (catching > 0) e.jump = catchNow;
 		else if (swapping || startNow) e.jump = startNow;
 	}
@@ -427,7 +441,7 @@ final class NoDurability {
 	private void catchGlide(LocalPlayer p) {
 		boolean gliding = p.isFallFlying();
 		boolean free = !p.onGround() && !p.isInWater() && !p.isPassenger() && !p.onClimbable() && !p.getAbilities().flying;
-		if (wasGliding && !gliding && free && !ElytraFly.bouncing() && !softLanding(p)) {
+		if (wasGliding && !gliding && free && !ElytraFlight.bouncing() && !softLanding(p)) {
 			catching = CATCH_TICKS;
 			fly.info("Glide dropped in mid-air: opening the elytra again");
 		}
@@ -473,7 +487,7 @@ final class NoDurability {
 	 * each time you use another item (each swap) or change slot, so you'd never finish eating. It's used once the elytra
 	 * is back on for good, at the next start (Auto Eat tries again, and holding right click uses it again).
 	 */
-	void onUse(InteractEvent.Item e) {
+	public void onUse(InteractEvent.Item e) {
 		if (!swapping || firing) return;
 		ItemStack stack = mc.player.getItemInHand(e.hand());
 		if (stack.is(Items.FIREWORK_ROCKET)) {

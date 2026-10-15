@@ -1,8 +1,13 @@
 package dev.myriad.essentials.modules.combat;
 
 import dev.myriad.api.Myriad;
-import dev.myriad.essentials.modules.movement.ElytraFly;
+import dev.myriad.essentials.modules.movement.ElytraFlight;
+import dev.myriad.essentials.modules.movement.NoDurability;
+import dev.myriad.api.event.Priority;
 import dev.myriad.api.event.Subscribe;
+import dev.myriad.api.event.events.InputEvent;
+import dev.myriad.api.event.events.InteractEvent;
+import dev.myriad.api.event.events.PacketEvent;
 import dev.myriad.api.event.events.KeyEvent;
 import dev.myriad.api.event.events.MouseButtonEvent;
 import dev.myriad.api.event.events.TickEvent;
@@ -17,6 +22,7 @@ import dev.myriad.api.setting.SettingGroup;
 import dev.myriad.api.util.ItemInfo;
 import dev.myriad.api.util.Slots;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
@@ -30,9 +36,11 @@ import net.minecraft.world.item.enchantment.Enchantments;
  * them over too.
  * <p>
  * For the chest slot you choose between a chestplate and an elytra, and the Chest Swap bind flips between them (and
- * swaps straight away). Until you land, an elytra you're flying with is never taken off.
+ * swaps straight away). Until you land, an elytra you're flying with is never taken off. No Durability Elytra keeps an
+ * elytra you fly yourself (rockets, Rocket Boost) from wearing out (see {@link NoDurability}); Recast and Altitude
+ * do their own swapping, so it stands down while one of them is on.
  */
-public class AutoArmor extends Module {
+public class AutoArmor extends Module implements NoDurability.Owner {
 	public enum Protection {
 		/** Protection, but Blast Protection on leggings: the usual PvP kit. */
 		BLAST_LEGS, PROTECTION, BLAST, FIRE, PROJECTILE
@@ -55,6 +63,13 @@ public class AutoArmor extends Module {
 	private final KeybindSetting swapKey = sgChest.keybind("Swap Bind").description("Flip between chestplate and elytra.").build();
 	private final BoolSetting awaitLanding = sgChest.bool("Await Landing").description("Keep the elytra on until you land.").defaultValue(true).build();
 	private final BoolSetting notify = sgChest.bool("Notify").description("Say which one you swapped to.").defaultValue(true).build();
+	private final BoolSetting noDurabilityElytra = sgChest.bool("No Durability Elytra")
+		.description("While you fly an elytra yourself, swap it with a chestplate from your inventory so the server barely wears it, and open it again if the glide drops in mid-air. Recast and Altitude do their own.")
+		.build();
+
+	/** No Durability Elytra's swapping, and whether it's running (not while Recast or Altitude flies). */
+	private final NoDurability noDur = new NoDurability(this);
+	private boolean noDurRunning;
 
 	private int wait;
 	/** A worn-down piece couldn't be taken off for lack of room (said once until it can). */
@@ -72,12 +87,63 @@ public class AutoArmor extends Module {
 
 	@Override
 	protected void onDisable() {
+		stopNoDurability();
 		Myriad.inventory().spare(this, null);
 	}
 
 	/** Armour or an elytra worn down to Preserve. */
 	private boolean wornDown(ItemStack s) {
 		return ItemInfo.armorSlot(s) != null && s.isDamageableItem() && ItemInfo.durabilityFraction(s) * 100 < preserve.get();
+	}
+
+	/** Whether No Durability Elytra swaps for you: on, with neither Recast nor Altitude flying. */
+	public boolean noDurabilityElytra() {
+		return isEnabled() && noDurabilityElytra.get() && !ElytraFlight.flightModuleOn();
+	}
+
+	/** Whether No Durability Elytra is swapping the elytra and chestplate right now. */
+	public boolean elytraSwapping() {
+		return noDurRunning && noDur.swapping();
+	}
+
+	@Override
+	public boolean noDurability() {
+		return true;
+	}
+
+	/** With the flight modules' own, before the tick's actions (see NoDurability.tick). */
+	@Subscribe(priority = Priority.BEFORE_ACTIONS + 10)
+	private void tickNoDurability(TickEvent.Pre e) {
+		if (noDurabilityElytra() && inGame()) {
+			if (!noDurRunning) {
+				noDur.enable();
+				noDurRunning = true;
+			}
+			noDur.tick();
+		} else {
+			stopNoDurability();
+		}
+	}
+
+	private void stopNoDurability() {
+		if (!noDurRunning) return;
+		noDurRunning = false;
+		noDur.disable();
+	}
+
+	@Subscribe(priority = Priority.LOWEST)
+	private void noDurabilityInput(InputEvent e) {
+		if (noDurRunning) noDur.onInput(e);
+	}
+
+	@Subscribe
+	private void noDurabilityUse(InteractEvent.Item e) {
+		if (noDurRunning) noDur.onUse(e);
+	}
+
+	@Subscribe(packets = ClientboundPlayerPositionPacket.class)
+	private void noDurabilitySetBack(PacketEvent.Receive e) {
+		if (noDurRunning) noDur.setBack();
 	}
 
 	@Override
@@ -126,8 +192,8 @@ public class AutoArmor extends Module {
 	private Step equipBest(EquipmentSlot slot) {
 		ItemStack worn = mc.player.getItemBySlot(slot);
 		if (slot == EquipmentSlot.CHEST && awaitLanding.get() && mc.player.isFallFlying() && ItemInfo.canGlide(worn)) return Step.NONE;
-		// Elytra Fly's No Durability takes the elytra off for a moment while you fly; it puts it back itself.
-		if (slot == EquipmentSlot.CHEST && ElytraFly.holdsChest()) return Step.NONE;
+		// No Durability takes the elytra off for a moment while you fly; it puts it back itself.
+		if (slot == EquipmentSlot.CHEST && ElytraFlight.holdsChest()) return Step.NONE;
 		if (ItemInfo.isBound(worn)) return Step.NONE;
 		double current = score(worn, slot);
 		int best = -1;
@@ -171,7 +237,7 @@ public class AutoArmor extends Module {
 	/** Higher is better; 0 for nothing worth wearing. */
 	private double score(ItemStack s, EquipmentSlot slot) {
 		if (s.isEmpty()) return 0;
-		// Put aside to be mended (a Preserve: here, Auto Tool's or Elytra Fly's).
+		// Put aside to be mended (a Preserve: here, Auto Tool's, Recast's or Altitude's).
 		if (ItemInfo.isBound(s) || Myriad.inventory().isSpared(s)) return 0;
 		if (slot == EquipmentSlot.CHEST) {
 			boolean elytra = ItemInfo.canGlide(s);

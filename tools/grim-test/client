@@ -4,6 +4,7 @@
   ./client ".toggle kill_aura" "hold forward,sprint 40" "wait 40" status
   ./client - < script.txt          one step per line (# comments allowed)
   ./client --timeout 120 ...       wait longer for long scripts (default 60 s)
+  ./client --run run2 ...          the client started with -PrunDir=run2 (GRIM_RUN does the same)
 
 Steps: .myriad command | /server command | hold <keys> <ticks> | release | look <yaw> <pitch> | select <1-9>
 | attack | use | middle | wait <ticks> | respawn | selftest [ticks] [-module] | status | echo <text>.
@@ -12,15 +13,17 @@ Keys: forward, back, left, right, jump, sneak, sprint.
 import os, sys, time, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUN = os.path.join(HERE, "..", "..", "run")
-INBOX = os.path.join(RUN, "myriad-dev-inbox")
-LOG = os.path.join(RUN, "logs", "latest.log")
 
 def main():
     args = sys.argv[1:]
-    timeout = 60
-    if args[:1] == ["--timeout"]:
-        timeout, args = float(args[1]), args[2:]
+    timeout, run = 60, os.environ.get("GRIM_RUN", "run")
+    while args[:1] in (["--timeout"], ["--run"]):
+        if args[0] == "--timeout": timeout = float(args[1])
+        else: run = args[1]
+        args = args[2:]
+    RUN = os.path.join(HERE, "..", "..", run)
+    INBOX = os.path.join(RUN, "myriad-dev-inbox")
+    LOG = os.path.join(RUN, "logs", "latest.log")
     if args == ["-"]:
         args = [l.strip() for l in sys.stdin if l.strip() and not l.strip().startswith("#")]
     if not args:

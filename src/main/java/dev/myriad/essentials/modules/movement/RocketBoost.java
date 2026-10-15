@@ -18,6 +18,7 @@ import dev.myriad.essentials.util.ChestSwap;
 import dev.myriad.essentials.util.GlideHold;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
@@ -26,6 +27,11 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.FireworkRocketEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.PowderSnowBlock;
+import net.minecraft.world.level.block.SweetBerryBushBlock;
+import net.minecraft.world.level.block.WebBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -102,6 +108,8 @@ public class RocketBoost extends Module {
 		// Grim works from the movement it saw last tick, not the client's velocity.
 		Vec3 carried = here.subtract(there);
 		if (carried.lengthSqr() > 40 * 40) return vanilla;
+		// Unless something cut or slowed that movement: Grim carries on from what was left of it, which isn't known here.
+		if (p.horizontalCollision || p.verticalCollision || heldBack(p, there)) return vanilla;
 		Vec3 aim = MathUtil.direction(p.getYRot(), p.getXRot());
 		Vec3 prevAim = MathUtil.direction(Myriad.rotations().serverYaw(), Myriad.rotations().serverPitch());
 		Vec3 coast = vanillaGlide(p, carried, aim, p.getXRot());
@@ -151,6 +159,29 @@ public class RocketBoost extends Module {
 			next = next.add((dirX * flatSpeed - next.x) * 0.1, 0, (dirZ * flatSpeed - next.z) * 0.1);
 		}
 		return next.multiply(0.99f, 0.98f, 0.99f);
+	}
+
+	/**
+	 * Whether a block along last tick's path held the movement back: a liquid, one that slows whatever is on or in it
+	 * (soul sand, honey: from up to half a block below, as vanilla looks), or one you get stuck in (cobwebs, sweet berry
+	 * bushes, powder snow).
+	 */
+	private static boolean heldBack(LocalPlayer p, Vec3 from) {
+		AABB box = p.getBoundingBox().expandTowards(from.subtract(p.position())).expandTowards(0, -0.5, 0);
+		var level = p.level();
+		var pos = new BlockPos.MutableBlockPos();
+		for (int x = Mth.floor(box.minX); x <= Mth.floor(box.maxX); x++) {
+			for (int y = Mth.floor(box.minY); y <= Mth.floor(box.maxY); y++) {
+				for (int z = Mth.floor(box.minZ); z <= Mth.floor(box.maxZ); z++) {
+					BlockState state = level.getBlockState(pos.set(x, y, z));
+					if (state.isAir()) continue;
+					Block block = state.getBlock();
+					if (!state.getFluidState().isEmpty() || block.getSpeedFactor() != 1 || block instanceof WebBlock
+						|| block instanceof SweetBerryBushBlock || block instanceof PowderSnowBlock) return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/** Whether a rocket is boosting {@code p}, as the server told us (the same moment Grim learns it). */

@@ -1,3 +1,4 @@
 server/
 .flags-mark
 __pycache__/
+.suite-times.json

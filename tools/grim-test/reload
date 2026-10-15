@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Swaps freshly compiled classes into the running dev client, without restarting it.
+
+  ./gradlew classes && tools/grim-test/reload       Essentials' classes (and core's, with -PcoreDir, after :core:classes)
+  ./reload --all                                    every class, not only the ones changed since the last reload
+
+Every client listening is reloaded: the first (port 5005, ./gradlew runClient -Photswap) and ./clients N --hotswap's.
+
+Needs the client started with -Photswap (JetBrains Runtime, whose enhanced redefinition takes added and removed methods
+and fields too, and a debug port the reload talks to). What it can't do: run constructors or static initialisers again
+(a module's new setting, a changed default, a new static field's value), or load a mixin change: restart for those.
+Classes the game hasn't loaded yet need nothing; they load from the new files when first used.
+"""
+import glob, os, socket, struct, sys, time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
+PORTS = [5005] + [5004 + k for k in range(2, 10)]
+# Essentials' classes, and core's when the client runs a sibling checkout (-PcoreDir).
+DIRS = [os.path.join(ROOT, "build", "classes", "java", "main"), os.path.join(ROOT, "..", "myriad", "core", "build", "classes", "java", "main")]
+
+
+class Jdwp:
+    def __init__(self, port):
+        self.s = socket.create_connection(("localhost", port), timeout=10)
+        self.s.sendall(b"JDWP-Handshake")
+        if self.recv(14) != b"JDWP-Handshake":
+            raise RuntimeError("not a JDWP port")
+        self.id = 0
+        sizes = self.call(1, 7)
+        self.ref_size = struct.unpack(">5i", sizes)[3]
+
+    def recv(self, n):
+        buf = b""
+        while len(buf) < n:
+            chunk = self.s.recv(n - len(buf))
+            if not chunk: raise ConnectionError("the client closed the debug connection")
+            buf += chunk
+        return buf
+
+    def call(self, cmd_set, cmd, data=b""):
+        self.id += 1
+        self.s.sendall(struct.pack(">iibbb", 11 + len(data), self.id, 0, cmd_set, cmd) + data)
+        while True:
+            length, pid, flags = struct.unpack(">iib", self.recv(9))
+            rest = self.recv(length - 9)
+            # Events (a command packet from the VM) aren't ours: skip them.
+            if not flags & 0x80 or pid != self.id: continue
+            error = struct.unpack(">h", rest[:2])[0]
+            if error: raise RuntimeError(f"JDWP error {error} ({ERRORS.get(error, 'see the JDWP spec')})")
+            return rest[2:]
+
+    def loaded(self, name):
+        """The reference type ids the VM has for the class named like "dev/myriad/Foo"."""
+        sig = f"L{name};".encode()
+        out = self.call(1, 2, struct.pack(">i", len(sig)) + sig)
+        n, out, ids = struct.unpack(">i", out[:4])[0], out[4:], []
+        for _ in range(n):
+            ids.append(out[1:1 + self.ref_size])
+            out = out[1 + self.ref_size + 4:]
+        return ids
+
+    def redefine(self, classes):
+        data = struct.pack(">i", len(classes))
+        for ref, bytecode in classes:
+            data += ref + struct.pack(">i", len(bytecode)) + bytecode
+        self.call(1, 18, data)
+
+
+ERRORS = {60: "invalid class format", 62: "failed verification", 63: "add method not implemented: start the client with -Photswap",
+          64: "schema change not implemented: start the client with -Photswap", 66: "hierarchy change not implemented",
+          67: "delete method not implemented: start the client with -Photswap", 68: "unsupported version",
+          70: "class modifiers change not implemented", 71: "method modifiers change not implemented", 99: "not implemented"}
+
+
+def client_started(port):
+    """When the client listening on `port` started (its classes up to then are the ones it loaded), or 0."""
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit(): continue
+        try:
+            if f"address=localhost:{port}" in open(f"/proc/{pid}/cmdline").read():
+                return os.stat(f"/proc/{pid}").st_mtime
+        except OSError:
+            pass
+    return 0
+
+
+def reload(port, every):
+    """Reloads the client on `port`; a line saying what it did, or None if nothing listens there."""
+    stamp = os.path.join(ROOT, "run", f".reload-stamp-{port}")
+    since = 0 if every else max(client_started(port), os.path.getmtime(stamp) if os.path.exists(stamp) else 0)
+    started = time.time()
+    try:
+        vm = Jdwp(port)
+    except OSError:
+        return None
+    found, skipped = [], 0
+    for root in DIRS:
+        for path in glob.glob(os.path.join(root, "**", "*.class"), recursive=True):
+            if os.path.getmtime(path) <= since: continue
+            name = os.path.relpath(path, root)[:-6].replace(os.sep, "/")
+            # Mixins are applied to the game's classes when those load, never redefined.
+            if "/mixin/" in name: continue
+            refs = vm.loaded(name)
+            if not refs:
+                skipped += 1
+                continue
+            bytecode = open(path, "rb").read()
+            found += [(ref, bytecode, name) for ref in refs]
+    if found:
+        try:
+            vm.redefine([(ref, b) for ref, b, _ in found])
+        except RuntimeError as e:
+            return f"port {port}: reload failed, nothing changed: {e}"
+    os.makedirs(os.path.dirname(stamp), exist_ok=True)
+    open(stamp, "w").close()
+    os.utime(stamp, (started, started))
+    names = sorted({n.rsplit("/", 1)[-1] for _, _, n in found})
+    return (f"port {port}: reloaded {len(found)} classes" + (f" ({', '.join(names[:12])}{', ...' if len(names) > 12 else ''})" if names else "")
+            + (f"; {skipped} changed but not loaded yet (they load as they are)" if skipped else ""))
+
+
+def main():
+    lines = [l for l in (reload(port, "--all" in sys.argv) for port in PORTS) if l]
+    if not lines: sys.exit("no dev client listening for reloads: start it with -Photswap (./clients N --hotswap for the others)")
+    print("\n".join(lines))
+    if any("failed" in l for l in lines): sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

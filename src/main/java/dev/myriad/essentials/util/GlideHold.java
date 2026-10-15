@@ -17,7 +17,7 @@ import java.util.ArrayDeque;
 
 /**
  * Keeps the local player gliding through a moment the server stops the glide, without Grim (2b2t) noticing: the
- * trick behind Elytra Fly's No Durability and its bounce.
+ * trick behind No Durability and Recast's bounce.
  * <p>
  * The server stops a glide (it sees the elytra come off, or you land) by sending your entity flags with the gliding bit
  * cleared. Grim sends one of its pings just before those flags, and only takes the glide as stopped once that ping is

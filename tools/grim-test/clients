@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""Starts extra dev clients beside the first, for ./suite --workers.
+
+  ./clients 3              GrimTester2 and GrimTester3, from run2 and run3, joined to the test server
+  ./clients 3 --hotswap    on the JetBrains Runtime with debug ports 5006, 5007 (GRIM_RUN=run2 ./reload --port...)
+  ./clients stop           stops the extra clients (never the first, nor any other Minecraft)
+
+The first client is the one ./gradlew runClient starts (run, GrimTester). The extra ones run the same build from
+Loom's own launch files (no second Gradle build), each from its own game directory: on first use it gets a copy of
+run's options, config, mods and Myriad profile. Each is op'd on the server.
+"""
+import glob, os, shutil, signal, subprocess, sys, time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
+ARGFILE = os.path.join(ROOT, "build", "loom-cache", "argFiles", "runClient")
+LAUNCH_CFG = os.path.join(ROOT, ".gradle", "loom-cache", "launch.cfg")
+CONSOLE = os.path.join(HERE, "server", "console.log")
+COPIED = ["options.txt", "config", "mods", "myriad"]
+
+
+def jbr():
+    found = sorted(glob.glob("/usr/lib/jvm/jbr*25*/bin/java") + glob.glob(os.path.expanduser("~/.gradle/jdks/jbr*25*/bin/java")))
+    if not found: sys.exit("no JetBrains Runtime 25 found (/usr/lib/jvm/jbr*): install one, or leave out --hotswap")
+    return found[-1]
+
+
+def pids(run):
+    """The extra client running from `run`, by its working directory."""
+    out = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit(): continue
+        try:
+            if os.readlink(f"/proc/{pid}/cwd") == run and "devlaunchinjector" in open(f"/proc/{pid}/cmdline").read():
+                out.append(int(pid))
+        except OSError:
+            pass
+    return out
+
+
+def stop():
+    for run in sorted(glob.glob(os.path.join(ROOT, "run[0-9]*"))):
+        for pid in pids(run):
+            os.kill(pid, signal.SIGTERM)
+            print(f"stopped {os.path.basename(run)} ({pid})")
+
+
+def start(k, hotswap):
+    name, run = f"GrimTester{k}", os.path.join(ROOT, f"run{k}")
+    if pids(run):
+        print(f"{name}: already running")
+        return None
+    first = os.path.join(ROOT, "run")
+    os.makedirs(run, exist_ok=True)
+    for item in COPIED:
+        src, dst = os.path.join(first, item), os.path.join(run, item)
+        if os.path.exists(src) and not os.path.exists(dst):
+            (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)
+    java = jbr() if hotswap else shutil.which("java")
+    args = [java, f"-Dfabric.dli.config={LAUNCH_CFG}", "-Dfabric.dli.env=client", "-Dfabric.dli.main=net.fabricmc.loader.impl.launch.knot.KnotClient",
+            "-Dmyriad.devConsole=myriad-dev-inbox", "-Dmyriad.openDesktop=false", "-Dmyriad.auditMixins=false", f"@{ARGFILE}",
+            "-XX:StackShadowPages=32", "--sun-misc-unsafe-memory-access=allow", "--enable-native-access=ALL-UNNAMED", "-Dfile.encoding=UTF-8"]
+    if hotswap:
+        args += ["-XX:+AllowEnhancedClassRedefinition", f"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=localhost:{5004 + k}"]
+    args += ["net.fabricmc.devlaunchinjector.Main", "--quickPlayMultiplayer", "localhost:25565", "--username", name]
+    log = open(os.path.join(run, "launch.log"), "w")
+    subprocess.Popen(args, cwd=run, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    subprocess.run([os.path.join(HERE, "cmd"), f"op {name}"], capture_output=True)
+    print(f"{name}: starting from run{k}" + (f" (reload port {5004 + k})" if hotswap else ""))
+    return name
+
+
+def main():
+    args = sys.argv[1:]
+    if args[:1] == ["stop"]:
+        stop()
+        return
+    if not args or not args[0].isdigit():
+        print(__doc__.strip())
+        sys.exit(2)
+    if not os.path.exists(ARGFILE):
+        sys.exit("start the first client once with ./gradlew runClient: the others use the launch files it writes")
+    since = os.path.getsize(CONSOLE) if os.path.exists(CONSOLE) else 0
+    names = [n for n in (start(k, "--hotswap" in args) for k in range(2, int(args[0]) + 1)) if n]
+    # Until they've all joined (a minute at most).
+    deadline = time.time() + 120
+    while names and time.time() < deadline:
+        with open(CONSOLE, errors="replace") as f:
+            f.seek(since)
+            text = f.read()
+        names = [n for n in names if f"{n} joined the game" not in text]
+        time.sleep(1)
+    if names: sys.exit(f"not joined yet: {', '.join(names)} (see run<k>/launch.log)")
+    print("all in game")
+
+
+if __name__ == "__main__":
+    main()

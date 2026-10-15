@@ -35,7 +35,7 @@ Then a test is: set the scene, mark the log, act, read the flags.
 ```bash
 ./cmd "clear GrimTester" "item replace entity GrimTester armor.chest with elytra" "tp GrimTester 0 220 0 0 0"
 ./flags mark
-./client ".set elytra_fly mode altitude" ".toggle elytra_fly" "wait 200" status ".toggle elytra_fly"
+./client ".toggle altitude on" "wait 200" status ".toggle altitude off"
 ./flags                    # "no flags", or each flag with Grim's details (exit code 1)
 ```
 
@@ -47,6 +47,8 @@ Then a test is: set the scene, mark the log, act, read the flags.
 | `./lag.py [ms] [jitter]` | a latency proxy on the lag port |
 | `./setup.sh --update` | shows the newest builds, to move `versions.env` to on purpose |
 | `./stop.sh` | stops the server |
+| `./reload` | swaps freshly compiled classes into the running client(s) (see below) |
+| `./clients N`, `./clients stop` | starts (or stops) dev clients 2..N beside the first, for `./suite --workers N` |
 
 The client steps come from `DevConsole` in core, which dev runs turn on: Myriad commands (`.toggle kill_aura on`),
 server commands as the player (`/gamemode survival`), `hold forward,sprint,jump 40`, `look <yaw> <pitch>`,
@@ -76,5 +78,31 @@ With the server and the dev client running, `./suite` turns every module off, th
 its own (mostly on a stone floor around x=1000, away from the rest of the world), runs the client steps, checks the
 result on the server (the husk is dead, the block is gone, the totem is in the off hand, the elytra didn't wear) and
 fails the test if Grim flagged anything while the module ran. It covers the self-test, Kill Aura (holding and switch),
-Packet Mine, Scaffold, Offhand, Auto Armor, Auto Eat, Stack Replenish, Elytra Fly and No Durability, and that Auto
-detects Grim. Run it after changing core or Essentials; add a test when you add a module.
+Packet Mine, Scaffold, Offhand, Auto Armor, Auto Eat, Stack Replenish, Recast, Altitude and No Durability, and that
+Auto detects Grim. Run it after changing core or Essentials; add a test when you add a module.
+
+## Iterating fast
+
+Restarting the game for every change is the slow part. Start the client once with `-Photswap` (the JetBrains Runtime 25,
+found in `/usr/lib/jvm/jbr*` or as a Gradle toolchain, with a debug port), then after each change:
+
+```bash
+./gradlew classes && tools/grim-test/reload       # from the repo root; with -PcoreDir, ../myriad's :core:classes too
+```
+
+`./reload` swaps in every class that changed since the last reload, in every client listening (one call for all of
+them), added and removed methods and fields included. It can't run constructors or static initialisers again (a module's
+new setting or default, a new static field's value) or load a mixin change: restart for those. Classes the game hasn't
+loaded yet load from the new files by themselves.
+
+The suite runs side by side on several clients, each testing in a world of its own (the first in the overworld,
+GrimTester2.. in flat copies made by `datapack/myriad-tests`, so every test keeps its coordinates):
+
+```bash
+./clients 3                 # GrimTester2 and GrimTester3, from run2 and run3 (--hotswap for reload ports 5006, 5007)
+./suite --workers 3         # the tests shared out by how long each took last time (.suite-times.json)
+./clients stop
+```
+
+Extra clients run the build the first client's `runClient` set up (Loom's launch files), so start the first one once
+after changing dependencies. `./client --run run2 ...` drives a single extra client.

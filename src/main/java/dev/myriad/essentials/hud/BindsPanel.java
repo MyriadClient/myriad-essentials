@@ -29,6 +29,6 @@ public final class BindsPanel extends TextHudPanel {
 			if (m.isEnabled()) out.parts("", m.name(), key, "");
 			else out.parts(m.name() + key, "");
 		}
-		if (bound.isEmpty() && preview()) out.parts("", "Elytra Fly", " [G]", "");
+		if (bound.isEmpty() && preview()) out.parts("", "Recast", " [G]", "");
 	}
 }

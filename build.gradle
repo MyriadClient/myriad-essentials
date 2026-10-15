@@ -45,8 +45,10 @@ dependencies {
 // The protocol the dev client joins servers with, through ViaFabricPlus: 1.20.4 by default (what most 2b2t players
 // use), `-Pvia=native` for the client's own. Singleplayer is never translated.
 def viaProtocol = project.findProperty("via")?.toString() ?: "1.20.4"
+// -PrunDir=run2: another game directory, for a second dev client beside the first (tools/grim-test/clients starts them).
+def runDir = project.findProperty("runDir")?.toString() ?: "run"
 def selectViaProtocol = tasks.register("selectViaProtocol") {
-	def settings = file("run/config/viafabricplus/settings.json")
+	def settings = file("${runDir}/config/viafabricplus/settings.json")
 	inputs.property("via", viaProtocol)
 	outputs.upToDateWhen { false }
 	doLast {
@@ -60,9 +62,23 @@ def selectViaProtocol = tasks.register("selectViaProtocol") {
 }
 tasks.matching { it.name == "runClient" }.configureEach { dependsOn selectViaProtocol }
 
+// -Photswap: the dev client on the JetBrains Runtime (Java 25) with a debug port, so tools/grim-test/reload can swap
+// freshly compiled classes in without a restart (JBR's enhanced redefinition takes added and removed methods and fields
+// too). -PdebugPort=5006 for a second client.
+if (project.hasProperty("hotswap")) {
+	tasks.matching { it.name == "runClient" }.configureEach {
+		javaLauncher = javaToolchains.launcherFor {
+			languageVersion = JavaLanguageVersion.of(25)
+			vendor = JvmVendorSpec.JETBRAINS
+		}
+		jvmArgs("-XX:+AllowEnhancedClassRedefinition", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=localhost:" + (project.findProperty("debugPort") ?: "5005"))
+	}
+}
+
 loom {
 	runs {
 		client {
+			runDir = runDir
 			// The same dev switches as Myriad's own runs.
 			property("myriad.openDesktop", project.hasProperty("openDesktop").toString())
 			if (project.hasProperty("screenshotEvery")) property("myriad.screenshotEvery", project.property("screenshotEvery").toString())

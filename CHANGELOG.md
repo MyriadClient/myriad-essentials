@@ -3,6 +3,18 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/fyzz-dev/myriad) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.2.17 (unreleased)
+
+- Elytra Fly is now two modules, **Recast** and **Altitude**, each with its own No Durability and Preserve; turning one
+  on turns the other off. Recast keeps Elytra Fly's saved settings, keybind and on/off state.
+- Elytra Fly's Manual mode is now **Auto Armor**'s No Durability Elytra (in Chest Swap): while you fly an elytra
+  yourself, it's swapped with a chestplate so the server barely wears it, and a glide dropped in mid-air is opened
+  again. It stands down while Recast or Altitude is on: they swap the way their flight needs.
+- An elytra one hit from breaking is never used to start a glide (the server refuses it, and Grim sets you back): the
+  swaps pick another one, and Recast and Altitude stop rather than try.
+- Rocket Boost flies vanilla's way on a tick after you brushed a wall or the ground, or went through water, cobwebs,
+  soul sand or the like: Grim carries on from what's left of last tick's movement then, which Rocket Boost can't know.
+
 ## 0.2.16
 
 Needs Myriad 0.2.10 (`Breaking.Options.withWaitForServer`, `Inventory.mask`, `Inventory.clickWaiting`).
