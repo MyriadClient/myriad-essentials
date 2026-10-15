@@ -598,6 +598,17 @@ def t_auto_armor_preserve():
     return ok, f"chest {chest or 'empty'}, legs {legs or 'empty'}"
 
 
+def t_auto_armor_keeps_worn_elytra():
+    # An elytra with a little wear on, three fresh ones carried: it stays on (used until Preserve), the spares untouched.
+    # Swapping in the freshest at every point of wear used to wear all of them in turn.
+    reset()
+    cmd(f"item replace entity {P} armor.chest with elytra[damage=10]", *[f"item replace entity {P} inventory.{i} with elytra" for i in (5, 6, 7)])
+    client(".set auto_armor chest elytra", ".set auto_armor await_landing false", ".toggle auto_armor on", "wait 40", ".toggle auto_armor off",
+        ".set auto_armor chest chestplate", ".set auto_armor await_landing true")
+    worn, spares = damage(102), [damage(s) for s in (14, 15, 16)]
+    return worn == 10 and spares == [0, 0, 0], f"worn elytra damage {worn}, spares {spares}"
+
+
 def t_altitude_preserve():
     # Flying with an elytra 12 uses from wearing out and a fresh one carried: swapped in mid-air, still flying.
     client("respawn", ".panic", "wait 20")
@@ -728,6 +739,7 @@ TESTS = [
     ("stack_replenish", t_stack_replenish),
     ("auto_tool preserve", t_auto_tool_preserve),
     ("auto_armor preserve", t_auto_armor_preserve),
+    ("auto_armor keeps worn elytra", t_auto_armor_keeps_worn_elytra),
     ("altitude preserve", t_altitude_preserve),
     ("altitude", t_elytra_altitude),
     ("recast", t_elytra_recast),

@@ -31,7 +31,8 @@ import net.minecraft.world.item.enchantment.Enchantments;
 
 /**
  * Wears the best armour you're carrying, one piece at a time. Best means most armour and toughness, then your
- * preferred protection enchantment; curse of binding is skipped. Pieces worn down to Preserve are put aside to be
+ * preferred protection enchantment; curse of binding is skipped. A piece isn't swapped for a copy that's only less worn:
+ * it's used until it's worn down to Preserve, then the freshest other goes on. Pieces worn down to Preserve are put aside to be
  * mended: swapped for another, or taken off when there's none (an elytra once you've landed), and other modules pass
  * them over too.
  * <p>
@@ -197,14 +198,20 @@ public class AutoArmor extends Module implements NoDurability.Owner {
 		if (ItemInfo.isBound(worn)) return Step.NONE;
 		double current = score(worn, slot);
 		int best = -1;
-		double bestScore = current;
+		double bestScore = current, bestFresh = -1;
 		for (int i = 0; i < 36; i++) {
 			ItemStack s = mc.player.getInventory().getItem(i);
 			if (s.isEmpty() || ItemInfo.armorSlot(s) != slot) continue;
+			// Better than what's worn by more than wear, or it stays on: a piece is used until Preserve takes it off, not
+			// swapped for a fresher copy at every point of wear (which wore all your spares in turn). Among the better
+			// ones, the freshest.
 			double sc = score(s, slot);
-			if (sc > bestScore) {
-				bestScore = sc;
+			if (sc <= current) continue;
+			double fresh = ItemInfo.durabilityFraction(s);
+			if (best < 0 || sc > bestScore || sc == bestScore && fresh > bestFresh) {
 				best = i;
+				bestScore = sc;
+				bestFresh = fresh;
 			}
 		}
 		if (best < 0) return wornDown(worn) ? takeOff(slot, worn) : Step.NONE;
@@ -234,7 +241,7 @@ public class AutoArmor extends Module implements NoDurability.Owner {
 		return Step.EQUIPPED;
 	}
 
-	/** Higher is better; 0 for nothing worth wearing. */
+	/** Higher is better, wear aside; 0 for nothing worth wearing (or put aside to be mended). */
 	private double score(ItemStack s, EquipmentSlot slot) {
 		if (s.isEmpty()) return 0;
 		// Put aside to be mended (a Preserve: here, Auto Tool's, Recast's or Altitude's).
@@ -243,7 +250,7 @@ public class AutoArmor extends Module implements NoDurability.Owner {
 			boolean elytra = ItemInfo.canGlide(s);
 			// The wanted kind always beats the other; the other still beats an empty slot.
 			boolean wanted = elytra == (chest.get() == Chest.ELYTRA);
-			if (elytra) return (wanted ? 1000 : 0.5) + ItemInfo.durabilityFraction(s);
+			if (elytra) return wanted ? 1000 : 0.5;
 			if (!wanted) return 0.5 + armorValue(s, slot) / 1000;
 		}
 		// Pumpkins and heads go in the head slot but aren't armour.
@@ -255,7 +262,7 @@ public class AutoArmor extends Module implements NoDurability.Owner {
 		double armor = ItemInfo.armor(s, slot), toughness = ItemInfo.toughness(s, slot);
 		double protection = ItemInfo.enchantmentLevel(s, Enchantments.PROTECTION);
 		double preferred = ItemInfo.enchantmentLevel(s, preferredKey(slot));
-		return armor * 10 + toughness * 4 + protection * 2 + preferred * 3 + ItemInfo.durabilityFraction(s) * 0.1;
+		return armor * 10 + toughness * 4 + protection * 2 + preferred * 3;
 	}
 
 	private ResourceKey<Enchantment> preferredKey(EquipmentSlot slot) {
