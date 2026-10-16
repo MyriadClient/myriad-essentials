@@ -12,10 +12,10 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
   itself, sprint is let go while gliding, and it stops at the edge of chunks that haven't loaded. For loosely checked
   servers (6b6t's NoCheatPlus): one that simulates the glide, as Grim does on 2b2t, sets it back. Turning it on turns
   off Recast and Altitude, and Auto Armor's No Durability Elytra stands down meanwhile. Its own No Durability (off by
-  default) keeps the elytra from wearing: every 12 ticks a chestplate from your hotbar or off hand goes on just after
-  the tick's movement (a click), you hold still a tick (no movement sent), and the elytra goes back on (used) with the
-  glide restarted before the next movement. The server's 20-tick glide count breaks, and no movement it checks finds
-  the chestplate on. It costs about 7% of your speed.
+  default) keeps the elytra from wearing: every 15 ticks a chestplate from your hotbar or off hand goes on just after
+  the tick's movement (a click), and the elytra goes back on (used) with the glide restarted before the next one. The
+  server's 20-tick glide count breaks, and no movement it checks finds the chestplate on. Now and then (about one restart
+  in 150 on 6b6t) the glide doesn't start again and you're set back once; it picks up again by itself.
 
 ## 0.2.19
 

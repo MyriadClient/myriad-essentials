@@ -14,7 +14,6 @@ import dev.myriad.essentials.util.ChestSwap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
@@ -34,12 +33,12 @@ import net.minecraft.world.phys.Vec3;
  * <b>No Durability</b>: the server wears an elytra by one once it has glided you for 20 ticks without a break, and
  * starts counting again whenever a tick passes without the glide. So every {@link #INTERVAL} ticks a chestplate from
  * your hotbar or off hand goes on just after the tick's movement has gone out (a click: NoCheatPlus takes one while you
- * glide, not while you sprint), and the elytra back on (used, and the glide started again) just before the movement
- * of the tick after next. You hold still for the tick between, so it sends no movement: the server's ticks between the
- * two stop the glide, and every movement it checks still finds the elytra on (NoCheatPlus checks one without it as
- * walking, and sets it back; it refuses a click while you move with the chestplate on). Two ticks apart, the swaps don't
- * reach the server in the same tick (where the restart, coming while it still glides you, would stop the glide). The
- * client keeps gliding through the server's stop meanwhile.
+ * glide, not while you sprint), and the elytra back on (used, and the glide started again) just before the next one's:
+ * the server's tick between them stops the glide, and every movement it checks still finds the elytra on (NoCheatPlus
+ * checks one without it as walking, and sets it back; it refuses a click while you move with the chestplate on). The
+ * client keeps gliding through the server's stop meanwhile. The swaps have to be a tick apart, no more: on 6b6t the
+ * restart failed (the server left you not gliding, and set you back) for 0.6% of breaks this way, and 9.8% with a tick
+ * held still between the two; both in one tick, the server never sees the elytra off.
  * <p>
  * A glide lost in mid-air during a flight (the server set you back, or stopped it) starts again by itself, and sprint is
  * let go while you glide: it does nothing for a glide, and NoCheatPlus refuses No Durability's clicks while you sprint.
@@ -56,8 +55,11 @@ public class ElytraControl extends Module {
 		.description("Keep the elytra from wearing out, by putting a chestplate from your hotbar or off hand on for a moment every so often.")
 		.defaultValue(false).build();
 
-	/** Client ticks the server glides you between two No Durability breaks: well under the 20 that wear the elytra. */
-	private static final int INTERVAL = 12;
+	/**
+	 * Client ticks the server glides you between two No Durability breaks: under the 20 that wear the elytra, with room
+	 * for lag, and few breaks (each is a small chance of a setback).
+	 */
+	private static final int INTERVAL = 15;
 	/**
 	 * A glide lost in mid-air is started again after this many ticks of the server saying it isn't gliding you (one is
 	 * often just a No Durability break's stop arriving before its restart), and only this many ticks after the last
@@ -72,11 +74,8 @@ public class ElytraControl extends Module {
 	/** The horizontal movement asked for last tick, blocks a tick: what this tick builds on. */
 	private Vec3 flown = Vec3.ZERO;
 	private volatile boolean setBack;
-	/**
-	 * No Durability: the chestplate went on after a tick's movement; the next tick holds still and sends none
-	 * ({@link #frozen}), and the elytra goes back before the movement of the one after.
-	 */
-	private boolean chestOn, frozen;
+	/** No Durability: the chestplate went on after this tick's movement (the elytra goes back before the next one's). */
+	private boolean chestOn;
 	/** Ticks the server has glided you since the last break, and whether the client glides on through the breaks. */
 	private int glideTicks;
 	private boolean holdGlide, pairWarned;
@@ -92,7 +91,7 @@ public class ElytraControl extends Module {
 	protected void onEnable() {
 		flown = Vec3.ZERO;
 		setBack = false;
-		chestOn = frozen = holdGlide = pairWarned = false;
+		chestOn = holdGlide = pairWarned = false;
 		glideTicks = 0;
 		sinceGlide = Integer.MAX_VALUE / 2;
 	}
@@ -100,13 +99,7 @@ public class ElytraControl extends Module {
 	@Override
 	protected void onDisable() {
 		if (chestOn && inGame()) ChestSwap.startGlide();
-		chestOn = frozen = holdGlide = false;
-	}
-
-	/** The tick between No Durability's swaps sends no movement (a look changed would send one). */
-	@Subscribe(packets = ServerboundMovePlayerPacket.class)
-	private void onSendMove(PacketEvent.Send e) {
-		if (frozen) e.cancel();
+		chestOn = holdGlide = false;
 	}
 
 	/** Whether the local player counts as gliding through No Durability's breaks. */
@@ -125,12 +118,8 @@ public class ElytraControl extends Module {
 		if (!inGame()) return;
 		var p = mc.player;
 		if (p.onGround() || p.isInWater() || p.isInLava() || !noDurability.get()) holdGlide = false;
-		if (chestOn && !frozen) {
-			frozen = true;
-			return;
-		}
 		if (chestOn) {
-			chestOn = frozen = false;
+			chestOn = false;
 			glideTicks = 0;
 			if (!ChestSwap.startGlide()) holdGlide = false;
 			return;
@@ -225,7 +214,6 @@ public class ElytraControl extends Module {
 			// Along the heading and to its left (vanilla's own key directions), the same speed diagonally.
 			wanted = new Vec3(-sin * ahead + cos * side, 0, cos * ahead + sin * side).normalize().scale(speed.get() / 20);
 		}
-		if (frozen) return Vec3.ZERO;
 		// What the keys ask for, as fast as NoCheatPlus's elytra check allows: the vanilla glide from the last move
 		// (a look up spends speed, then it's steered a tenth of the way to the look), plus its slack.
 		double h = flown.horizontalDistance();
