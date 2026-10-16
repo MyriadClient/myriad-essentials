@@ -13,6 +13,7 @@
 		"CameraMixin",
 		"ClientCommonPacketListenerMixin",
 		"ClientLevelMixin",
+		"ClientPacketListenerMixin",
 		"ClientPlayerEntityMixin",
 		"EntityAccessor",
 		"EntityMixin",

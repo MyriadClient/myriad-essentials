@@ -10,7 +10,9 @@ import dev.myriad.essentials.hud.DirectionPanel;
 import dev.myriad.essentials.hud.EffectsPanel;
 import dev.myriad.essentials.hud.FpsPanel;
 import dev.myriad.essentials.hud.HealthPanel;
+import dev.myriad.essentials.hud.LookingAtPanel;
 import dev.myriad.essentials.hud.ModuleListPanel;
+import dev.myriad.essentials.hud.PingPanel;
 import dev.myriad.essentials.hud.PlayerCountPanel;
 import dev.myriad.essentials.hud.SpeedPanel;
 import dev.myriad.essentials.hud.TotemsPanel;
@@ -50,6 +52,7 @@ import dev.myriad.essentials.modules.world.AirPlace;
 import dev.myriad.essentials.modules.world.Scaffold;
 
 import static dev.myriad.api.ui.PanelType.Anchor.BOTTOM_LEFT;
+import static dev.myriad.api.ui.PanelType.Anchor.TOP;
 import static dev.myriad.api.ui.PanelType.Anchor.TOP_LEFT;
 import static dev.myriad.api.ui.PanelType.Anchor.TOP_RIGHT;
 
@@ -77,6 +80,7 @@ public final class Essentials implements MyriadAddon {
 		// HUD elements. The ones with a position are placed on a fresh install; the rest are added from the HUD workspace.
 		ctx.registerHud("Watermark", "", WatermarkPanel::new, TOP_LEFT, 0, 0);
 		ctx.registerHud("Module List", "", ModuleListPanel::new, TOP_RIGHT, 0, 0);
+		ctx.registerHud("Looking At", "", LookingAtPanel::new, TOP, 0, 6);
 		ctx.registerHud("Coordinates", "", CoordinatesPanel::new, BOTTOM_LEFT, 0, 0);
 		ctx.registerHud("Armor", "", ArmorPanel::new);
 		ctx.registerHud("Binds", "", BindsPanel::new);
@@ -85,6 +89,7 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerHud("Effects", "", EffectsPanel::new);
 		ctx.registerHud("FPS", "", FpsPanel::new);
 		ctx.registerHud("HP", "", HealthPanel::new);
+		ctx.registerHud("Ping", "", PingPanel::new);
 		ctx.registerHud("Player Count", "", PlayerCountPanel::new);
 		ctx.registerHud("Speed", "", SpeedPanel::new);
 		ctx.registerHud("Totems", "", TotemsPanel::new);

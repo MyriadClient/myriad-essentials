@@ -11,6 +11,7 @@ import dev.myriad.api.event.events.PacketEvent;
 import dev.myriad.api.event.events.TickEvent;
 import dev.myriad.api.module.Modules;
 import dev.myriad.api.build.Target;
+import dev.myriad.api.service.AntiCheat;
 import dev.myriad.api.service.Breaking;
 import dev.myriad.api.service.Notifications;
 import dev.myriad.api.service.Placement;
@@ -413,7 +414,10 @@ public class Recast extends ElytraMode {
 		// GlideHold.exposed): start again at once, or it sets you back for gliding on. Without waiting for the last swap
 		// to settle: the stop is the server's answer to it.
 		boolean exposed = GlideHold.exposed(this);
-		if (cleared && !ground && airTicks >= 2 && (exposed || settled && startDue)) {
+		// Where nothing holds the stop back from the anti-cheat (6b6t), only once the server has answered the last start:
+		// a stop older than it would have this start end the glide that one began.
+		boolean answered = AntiCheat.strict() || GlideHold.stoppedSinceStart(this);
+		if (cleared && answered && !ground && airTicks >= 2 && (exposed || settled && startDue)) {
 			// The server stopped the glide (at the landing, or when the chestplate went on) and the client kept it up:
 			// start it again now you're back in the air, the held ping answers first (on the tick jump goes down) so
 			// Grim sees the stop, then the start.

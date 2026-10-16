@@ -12,6 +12,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.common.ClientboundPingPacket;
 import net.minecraft.network.protocol.common.ServerboundPongPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 
 import java.util.ArrayDeque;
 
@@ -36,6 +37,8 @@ public final class GlideHold {
 	private static final long MAX_HOLD_MS = 1000;
 	/** Vanilla's gliding bit in the entity flag byte ({@code Entity.FLAG_FALL_FLYING}). */
 	private static final int GLIDING_BIT = 1 << 7;
+	/** How much sooner than the ping an answer to a start can come, and how much later before it's taken as none. */
+	private static final long ANSWER_EARLY_MS = 30, ANSWER_LATE_MS = 150;
 
 	private volatile Object owner;
 	private boolean subscribed;
@@ -47,6 +50,11 @@ public final class GlideHold {
 	private volatile long clearArrivedMs;
 	/** Network thread: when the server last said it glides you. */
 	private volatile long glideArrivedMs;
+	/** Network thread: what the server last said of your glide (1 gliding, 0 not, -1 nothing yet), and when. */
+	private volatile int ownGlide = -1;
+	private volatile long ownGlideMs;
+	/** When the last glide start went out. */
+	private volatile long startSentMs;
 
 	// Game thread.
 	private boolean holdingAnswers, clearApplied, exposed;
@@ -129,7 +137,12 @@ public final class GlideHold {
 			lastPing = ping.getId();
 			return;
 		}
-		if (e.packet() instanceof ClientboundSetEntityDataPacket data && ownGlideBit(data) == 1) glideArrivedMs = System.currentTimeMillis();
+		int bit = e.packet() instanceof ClientboundSetEntityDataPacket data ? ownGlideBit(data) : -1;
+		if (bit >= 0) {
+			ownGlide = bit;
+			ownGlideMs = System.currentTimeMillis();
+		}
+		if (bit == 1) glideArrivedMs = ownGlideMs;
 		if (e.packet() instanceof ClientboundSetEntityDataPacket data && owner != null && !clearArriving && endsOwnGlide(data)) {
 			holdFrom = lastPing;
 			clearArrivedMs = System.currentTimeMillis();
@@ -153,6 +166,28 @@ public final class GlideHold {
 		return INSTANCE.glideArrivedMs >= ms;
 	}
 
+	@Subscribe(packets = ServerboundPlayerCommandPacket.class)
+	private void onSend(PacketEvent.Send e) {
+		if (((ServerboundPlayerCommandPacket) e.packet()).getAction() == ServerboundPlayerCommandPacket.Action.START_FALL_FLYING)
+			startSentMs = System.currentTimeMillis();
+	}
+
+	/**
+	 * Whether the server has stopped the glide since the last start went out (or never had it going): it last said it
+	 * doesn't glide you, in an answer to that start (it came a round trip after it), or the start has had time to be
+	 * answered and wasn't. A stop that comes sooner is older than the start, and the start is still on its way.
+	 * <p>
+	 * Where a start isn't checked against a held ping (vanilla's server, 6b6t's NoCheatPlus) this keeps two starts from
+	 * crossing: a start while the server glides you stops the glide, so a second one sent on an old stop ends the glide
+	 * the first began, and the two can chase each other through every hop.
+	 */
+	public static boolean stoppedSinceStart(Object owner) {
+		GlideHold h = INSTANCE;
+		if (h.owner != owner || h.ownGlide != 0) return false;
+		long rtt = Myriad.server().ping();
+		return h.ownGlideMs >= h.startSentMs + rtt - ANSWER_EARLY_MS || System.currentTimeMillis() >= h.startSentMs + rtt + ANSWER_LATE_MS;
+	}
+
 	/** Whether {@code data} is the server turning the local player's glide off while the client still glides. */
 	private static boolean endsOwnGlide(ClientboundSetEntityDataPacket data) {
 		LocalPlayer p = Minecraft.getInstance().player;
@@ -171,6 +206,7 @@ public final class GlideHold {
 		held.clear();
 		holdingAnswers = clearApplied = exposed = clearArriving = false;
 		holdFrom = lastPing = NONE;
+		ownGlide = -1;
 	}
 
 	// ---- game thread, from the mixins and events --------------------------------------------------------------------

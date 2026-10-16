@@ -3,7 +3,9 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/fyzz-dev/myriad) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
-## 0.2.20 (unreleased)
+## 0.2.20
+
+Needs Myriad 0.2.11 (0.2.12 for Tracers and other world lines with a shader pack).
 
 - **Elytra Fly** is one module again, with a Type: Recast, Altitude, or the new Control. Recast's settings, keybind and
   on/off state carry over (Altitude's and Elytra Control's settings don't: set them again under Elytra Fly). No
@@ -21,6 +23,18 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
   starts in one of its ticks: about one in five on 6b6t) is made again at once, holding still two ticks, as are the next
   20. Auto Armor's No Durability Elytra does the same. Grim flags this way, so 2b2t keeps the swap.
 - Recast: the view no longer zooms in and out with the sprint the bounce holds and lets go at every touch.
+- Recast on 6b6t: after a take-off or a Baritone hand-over, the hops could open the elytra three times each and fly
+  slowly for a while. A start answering a stop the server sent before the last start had arrived (a round trip at
+  ~125 ms ping) ended the glide that start had begun, and the two kept crossing. Away from Grim, a start now waits for
+  the server's answer to the last one.
+- Elytra Fly: a setback no longer turns the camera to the flight's own rotation (Recast's dive, straight down).
+  6b6t's NoCheatPlus sends the last rotation you sent back with the setback; the camera now stays where you looked.
+- Looking At (new HUD element, top centre on a fresh install): what the crosshair is on, in a card in the theme's
+  colours (window background, border, rounding, blur). Blocks show their icon and name, the tool that harvests them
+  (green if what you hold does, red if it doesn't and the block needs one), how long breaking takes with what you hold,
+  a crop's growth and redstone power. Entities show their name in their ESP group colour, health (coloured by how much
+  is left), armour, a player's ping and a horse's speed. It fades out when you look at nothing.
+- Ping (new HUD element): your ping to the server.
 
 ## 0.2.19
 
