@@ -6,14 +6,16 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 ## 0.2.20 (unreleased)
 
 - Elytra Control (Movement): fly the elytra with the movement keys, like a creative flight. Forward, back and the sides
-  go along your heading at Speed (built up at Acceleration a tick), jump climbs and sneak descends at Vertical Speed, and
-  with neither you hold your height (or drift down at Sink). Stops at the edge of chunks that haven't loaded. For
-  loosely checked servers (6b6t's NoCheatPlus): one that simulates the glide, as Grim does on 2b2t, sets it back.
-  Turning it on turns off Recast and Altitude, and Auto Armor's No Durability Elytra stands down meanwhile. Its own
-  No Durability (off by default) keeps the elytra from wearing: every 12 ticks a chestplate from your hotbar or off hand
-  goes on for one server tick (clicked on just after the tick's movement, the elytra used back on before the next
-  one's), which breaks the server's 20-tick glide count without any movement it checks finding the chestplate on.
-  Not while sprinting (NoCheatPlus refuses the click then).
+  go along your heading at Speed, jump climbs and sneak descends at Vertical Speed, and with neither you hold your
+  height (or drift down at Sink). Turning and stopping are instant; speed builds up as fast as NoCheatPlus's elytra
+  check allows (about 1.8 blocks a second each tick: faster set 6b6t's off). A glide lost in mid-air starts again by
+  itself, sprint is let go while gliding, and it stops at the edge of chunks that haven't loaded. For loosely checked
+  servers (6b6t's NoCheatPlus): one that simulates the glide, as Grim does on 2b2t, sets it back. Turning it on turns
+  off Recast and Altitude, and Auto Armor's No Durability Elytra stands down meanwhile. Its own No Durability (off by
+  default) keeps the elytra from wearing: every 12 ticks a chestplate from your hotbar or off hand goes on just after
+  the tick's movement (a click), you hold still a tick (no movement sent), and the elytra goes back on (used) with the
+  glide restarted before the next movement. The server's 20-tick glide count breaks, and no movement it checks finds
+  the chestplate on. It costs about 7% of your speed.
 
 ## 0.2.19
 
