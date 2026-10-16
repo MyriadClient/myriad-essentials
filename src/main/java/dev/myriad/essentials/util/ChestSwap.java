@@ -15,7 +15,6 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.equipment.Equippable;
 
@@ -130,7 +129,14 @@ public final class ChestSwap {
 	public static boolean swap() {
 		Pair pair = pair();
 		if (pair == null) return false;
-		int index = begin(pair);
+		long now = System.currentTimeMillis();
+		int index = pair.hand() == InteractionHand.OFF_HAND ? Slots.OFF_HAND : pair.slot();
+		// Masked from the elytra's side (a mask shows what each slot held when it began): the elytra shows as worn
+		// throughout, the chestplate where you keep it. Renewed at each swap while it lasts.
+		if (elytraWorn() || now - lastSwapMs < SHOWN_MS) Myriad.inventory().mask(MASK, SHOWN_MS, Slots.CHEST, index);
+		lastSwapMs = now;
+		home = pair;
+		mute(item(pair), mc().player.getItemBySlot(EquipmentSlot.CHEST));
 		// The elytra goes on with a click; the chestplate with a use. Grim takes a click into its copy of your inventory
 		// at once, and with a chestplate there it expects no glide: the client gliding on through the hold is set back.
 		// A use only reaches its copy with the server's answer, which comes with the server's stop the hold holds back.
@@ -152,37 +158,6 @@ public final class ChestSwap {
 		if (pair.hand() == InteractionHand.OFF_HAND) use.run();
 		else Myriad.inventory().silentSwap(pair.slot(), use);
 		return true;
-	}
-
-	/**
-	 * Puts the chestplate on over the elytra with one inventory click now, whatever Myriad's click rules say: for a
-	 * server that takes a click while you glide with the elytra on (NoCheatPlus exempts those) at a moment those rules
-	 * would hold it back, such as just after the tick's movement, where a use would wait for the next tick. False if no
-	 * elytra is worn, nothing is at hand to swap with, or your inventory screen isn't free.
-	 */
-	public static boolean clickChestplateOn() {
-		var p = mc().player;
-		Pair pair = pair();
-		if (pair == null || !elytraWorn() || p.containerMenu != p.inventoryMenu || !p.containerMenu.getCarried().isEmpty()) return false;
-		int index = begin(pair);
-		// The swap key over the chest slot: a number key, or F for the off hand.
-		mc().gameMode.handleContainerInput(p.inventoryMenu.containerId, Slots.playerScreen(Slots.CHEST),
-			index == Slots.OFF_HAND ? 40 : index, ContainerInput.SWAP, p);
-		clickSwaps++;
-		return true;
-	}
-
-	/** A swap with {@code pair} begins: masked, its equip sound muted. The inventory index it goes through. */
-	private static int begin(Pair pair) {
-		long now = System.currentTimeMillis();
-		int index = pair.hand() == InteractionHand.OFF_HAND ? Slots.OFF_HAND : pair.slot();
-		// Masked from the elytra's side (a mask shows what each slot held when it began): the elytra shows as worn
-		// throughout, the chestplate where you keep it. Renewed at each swap while it lasts.
-		if (elytraWorn() || now - lastSwapMs < SHOWN_MS) Myriad.inventory().mask(MASK, SHOWN_MS, Slots.CHEST, index);
-		lastSwapMs = now;
-		home = pair;
-		mute(item(pair), mc().player.getItemBySlot(EquipmentSlot.CHEST));
-		return index;
 	}
 
 	/** Whether the server takes a click now (Grim refuses them while you move or sprint) and your own screen is free for one. */

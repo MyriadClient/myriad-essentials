@@ -1,21 +1,24 @@
 package dev.myriad.essentials.modules.movement;
 
 import dev.myriad.api.event.Subscribe;
-import dev.myriad.api.event.events.InputEvent;
 import dev.myriad.api.event.events.PacketEvent;
 import dev.myriad.api.event.events.TickEvent;
+import dev.myriad.api.Myriad;
 import dev.myriad.api.module.Categories;
 import dev.myriad.api.module.Module;
 import dev.myriad.api.module.Modules;
 import dev.myriad.api.setting.BoolSetting;
 import dev.myriad.api.setting.DoubleSetting;
+import dev.myriad.api.util.ItemInfo;
 import dev.myriad.api.util.Packets;
-import dev.myriad.essentials.util.ChestSwap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -24,24 +27,24 @@ import net.minecraft.world.phys.Vec3;
  * you hold your height, sinking at Sink. Turning and slowing down are instant; speed builds up as fast as NoCheatPlus's
  * elytra check allows (it predicts a vanilla glide from your last move and your look, and takes up to 0.1 blocks a tick
  * more, whatever the direction), about 1.8 blocks a second each tick. The elytra still opens the vanilla way (jump in
- * the air). It doesn't fly into chunks that haven't loaded.
+ * the air). It doesn't fly into chunks that haven't loaded, and a glide lost in mid-air during a flight starts again by
+ * itself.
  * <p>
  * Made for servers that check elytra flight loosely (6b6t's NoCheatPlus, for one). One that simulates the glide, as
  * Grim does on 2b2t, sets this back from the first tick: use {@link Recast} or {@link Altitude} there. Applied by this
  * addon's LivingEntityMixin; a setback starts the speed again from nothing.
  * <p>
  * <b>No Durability</b>: the server wears an elytra by one once it has glided you for 20 ticks without a break, and
- * starts counting again whenever a tick passes without the glide. So every {@link #INTERVAL} ticks a chestplate from
- * your hotbar or off hand goes on just after the tick's movement has gone out (a click: NoCheatPlus takes one while you
- * glide, not while you sprint), and the elytra back on (used, and the glide started again) just before the next one's:
- * the server's tick between them stops the glide, and every movement it checks still finds the elytra on (NoCheatPlus
- * checks one without it as walking, and sets it back; it refuses a click while you move with the chestplate on). The
- * client keeps gliding through the server's stop meanwhile. The swaps have to be a tick apart, no more: on 6b6t the
- * restart failed (the server left you not gliding, and set you back) for 0.6% of breaks this way, and 9.8% with a tick
- * held still between the two; both in one tick, the server never sees the elytra off.
- * <p>
- * A glide lost in mid-air during a flight (the server set you back, or stopped it) starts again by itself, and sprint is
- * let go while you glide: it does nothing for a glide, and NoCheatPlus refuses No Durability's clicks while you sprint.
+ * starts counting again after any of its ticks ends with you not gliding. A glide start sent while it glides you
+ * stops the glide there and then (vanilla's answer to one it can't start). So every {@link #INTERVAL} ticks one goes
+ * out to stop the glide, you hold still for that tick (no movement goes out while the server isn't gliding you: it
+ * would check that as walking), and another starts it again before the next tick's movement. A server tick between
+ * the two resets the count; if none falls between them (they arrive within one), that break is lost, but nothing is
+ * set back: the stop doesn't wait for a tick, so the start always finds the glide stopped. A break the server took
+ * shows: its tick ended with you not gliding, so it says so. One it doesn't say so for within a round trip is taken
+ * as lost, and another follows at once. No chestplate needed.
+ * Swapping a chestplate on for the break instead (as {@link NoDurability} does on 2b2t) failed one break in ten to
+ * fifteen on 6b6t: with both swaps in one server tick, the start comes while it still glides you, and stops the glide.
  */
 public class ElytraControl extends Module {
 	private final DoubleSetting speed = sgGeneral.doubleSetting("Speed")
@@ -52,18 +55,21 @@ public class ElytraControl extends Module {
 		.description("How fast you drift down with neither jump nor sneak held, in blocks a second (0 holds your height).")
 		.defaultValue(0).range(0, 20).decimals(2).build();
 	private final BoolSetting noDurability = sgGeneral.bool("No Durability")
-		.description("Keep the elytra from wearing out, by putting a chestplate from your hotbar or off hand on for a moment every so often.")
+		.description("Keep the elytra from wearing out, by stopping and starting the glide for a moment every so often.")
 		.defaultValue(false).build();
 
 	/**
-	 * Client ticks the server glides you between two No Durability breaks: under the 20 that wear the elytra, with room
-	 * for lag, and few breaks (each is a small chance of a setback).
+	 * Ticks the server glides you between two No Durability breaks: under the 20 that wear the elytra, with room for a
+	 * lost break to be noticed and made again. Each break holds you still a tick.
 	 */
-	private static final int INTERVAL = 15;
+	private static final int INTERVAL = 12;
+	/** Ticks past a round trip to wait for the server to say a break stopped the glide. */
+	private static final int CONFIRM_MARGIN = 2;
+	/** Vanilla's gliding bit in the entity flag byte ({@code Entity.FLAG_FALL_FLYING}). */
+	private static final int GLIDING_BIT = 1 << 7;
 	/**
-	 * A glide lost in mid-air is started again after this many ticks of the server saying it isn't gliding you (one is
-	 * often just a No Durability break's stop arriving before its restart), and only this many ticks after the last
-	 * glide: a jump of your own isn't one.
+	 * A glide lost in mid-air is started again after this many ticks of the server saying it isn't gliding you, and
+	 * only this many ticks after the last glide: a jump of your own isn't one.
 	 */
 	private static final int REENGAGE_AFTER = 2, REENGAGE_WITHIN = 40;
 	/** NoCheatPlus's slack over the vanilla glide it predicts, blocks a tick, less a margin. */
@@ -74,12 +80,15 @@ public class ElytraControl extends Module {
 	/** The horizontal movement asked for last tick, blocks a tick: what this tick builds on. */
 	private Vec3 flown = Vec3.ZERO;
 	private volatile boolean setBack;
-	/** No Durability: the chestplate went on after this tick's movement (the elytra goes back before the next one's). */
-	private boolean chestOn;
+	/** No Durability: the glide was stopped at the start of this tick, which holds still (it starts again next tick). */
+	private boolean stopped;
 	/** Ticks the server has glided you since the last break, and whether the client glides on through the breaks. */
 	private int glideTicks;
-	private boolean holdGlide, pairWarned;
-	/** Ticks since you last glided in the air (large once you've landed), and ticks without the glide since. */
+	private boolean holdGlide;
+	/** Ticks left to hear that the last break stopped the glide (0: not waiting); and whether the server said so. */
+	private int confirmTicks;
+	private volatile boolean stopSeen;
+	/** Ticks since you last glided in the air (large once you've landed). */
 	private int sinceGlide = Integer.MAX_VALUE / 2;
 
 	public ElytraControl() {
@@ -90,16 +99,15 @@ public class ElytraControl extends Module {
 	@Override
 	protected void onEnable() {
 		flown = Vec3.ZERO;
-		setBack = false;
-		chestOn = holdGlide = pairWarned = false;
-		glideTicks = 0;
+		setBack = stopped = holdGlide = stopSeen = false;
+		glideTicks = confirmTicks = 0;
 		sinceGlide = Integer.MAX_VALUE / 2;
 	}
 
 	@Override
 	protected void onDisable() {
-		if (chestOn && inGame()) ChestSwap.startGlide();
-		chestOn = holdGlide = false;
+		if (stopped && inGame()) startGlide();
+		stopped = holdGlide = false;
 	}
 
 	/** Whether the local player counts as gliding through No Durability's breaks. */
@@ -107,24 +115,63 @@ public class ElytraControl extends Module {
 		return holdGlide;
 	}
 
-	/** Whether the chest slot is No Durability's to swap: in the air with it on (Auto Armor leaves it alone). */
+	/** Whether the chest slot is to be left alone: it holds the elytra the breaks need (Auto Armor waits). */
 	boolean holdsChest() {
-		return noDurability.get() && (chestOn || holdGlide);
+		return noDurability.get() && holdGlide;
 	}
 
-	/** Before this tick's movement: the elytra back on after a break, and the glide started again. */
+	/**
+	 * Before this tick's movement: the glide started again after a break, or a break begun (when one is due), or a glide
+	 * lost in mid-air started again.
+	 */
 	@Subscribe
 	private void onTickStart(TickEvent.Pre e) {
 		if (!inGame()) return;
 		var p = mc.player;
 		if (p.onGround() || p.isInWater() || p.isInLava() || !noDurability.get()) holdGlide = false;
-		if (chestOn) {
-			chestOn = false;
+		if (stopped) {
+			stopped = false;
 			glideTicks = 0;
-			if (!ChestSwap.startGlide()) holdGlide = false;
+			startGlide();
+			return;
+		}
+		if (breakDue(p)) {
+			// Gliding, so the server takes this as a stop.
+			stopSeen = false;
+			startGlide();
+			stopped = holdGlide = true;
+			confirmTicks = Myriad.server().ping() / 50 + CONFIRM_MARGIN;
 			return;
 		}
 		reengage(p);
+	}
+
+	/** Whether No Durability's break is due: gliding long enough, in the air, with an elytra that wears. */
+	private boolean breakDue(LocalPlayer p) {
+		var chest = p.getItemBySlot(EquipmentSlot.CHEST);
+		if (!noDurability.get() || !p.isFallFlying() || p.onGround() || p.isInWater() || p.isCreative()
+			|| !ItemInfo.isGlider(chest) || !chest.isDamageableItem()) {
+			glideTicks = 0;
+			return false;
+		}
+		glideTicks++;
+		// The last break unheard of: lost (its starts reached the server within one tick), so another one now.
+		if (confirmTicks > 0 && --confirmTicks == 0 && !stopSeen) return true;
+		return glideTicks >= INTERVAL;
+	}
+
+	/** Network thread: the server says it isn't gliding you, which a break that took shows. */
+	@Subscribe(packets = ClientboundSetEntityDataPacket.class)
+	private void onEntityData(PacketEvent.Receive e) {
+		var p = mc.player;
+		if (p == null || ((ClientboundSetEntityDataPacket) e.packet()).id() != p.getId()) return;
+		for (var value : ((ClientboundSetEntityDataPacket) e.packet()).packedItems()) {
+			if (value.id() == 0 && value.value() instanceof Byte flags && (flags & GLIDING_BIT) == 0) stopSeen = true;
+		}
+	}
+
+	private void startGlide() {
+		Packets.send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
 	}
 
 	/** A glide lost in mid-air during a flight starts again, as vanilla starts one (the client first, then the server). */
@@ -139,40 +186,15 @@ public class ElytraControl extends Module {
 		}
 		if (++sinceGlide < REENGAGE_AFTER || sinceGlide > REENGAGE_WITHIN) return;
 		if (p.tryToStartFallFlying()) {
-			Packets.send(new ServerboundPlayerCommandPacket(p, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
+			startGlide();
 			sinceGlide = 0;
 		}
 	}
 
-	/** Sprint is let go while you glide. */
-	@Subscribe
-	private void onInput(InputEvent e) {
-		var p = mc.player;
-		if (p == null || !p.isFallFlying()) return;
-		e.sprint = false;
-		// Vanilla tells the server with this tick's movement.
-		if (p.isSprinting()) p.setSprinting(false);
-	}
-
-	/** After this tick's movement has gone out: the chestplate on for the server's next tick, when a break is due. */
-	@Subscribe
-	private void onTickEnd(TickEvent.Post e) {
-		if (!inGame() || !noDurability.get()) return;
-		var p = mc.player;
-		// Not while sprinting: NoCheatPlus refuses an inventory click then.
-		if (!p.isFallFlying() || p.onGround() || p.isInWater() || !ChestSwap.elytraWorn() || p.isCreative() || p.isSprinting()) {
-			glideTicks = 0;
-			return;
-		}
-		if (++glideTicks < INTERVAL || !ChestSwap.settled()) return;
-		if (!ChestSwap.ready()) {
-			if (!pairWarned) warn("No Durability needs a chestplate in your hotbar or off hand.");
-			pairWarned = true;
-			return;
-		}
-		pairWarned = false;
-		// A click, sent at once: a use now would be held for the next tick, and arrive with the elytra going back on.
-		if (ChestSwap.clickChestplateOn()) chestOn = holdGlide = true;
+	/** The tick of a break sends no movement (a look changed would send one): the server isn't gliding you. */
+	@Subscribe(packets = ServerboundMovePlayerPacket.class)
+	private void onSendMove(PacketEvent.Send e) {
+		if (stopped) e.cancel();
 	}
 
 	@Override
@@ -204,6 +226,7 @@ public class ElytraControl extends Module {
 			// The server may not be gliding you any more: let the client show what it says.
 			holdGlide = false;
 		}
+		if (stopped) return Vec3.ZERO;
 		var keys = p.input.keyPresses;
 		double ahead = (keys.forward() ? 1 : 0) - (keys.backward() ? 1 : 0);
 		double side = (keys.left() ? 1 : 0) - (keys.right() ? 1 : 0);
