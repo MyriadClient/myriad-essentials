@@ -11,8 +11,11 @@ import dev.myriad.api.event.events.TickEvent;
 import dev.myriad.api.module.Categories;
 import dev.myriad.api.module.Module;
 import dev.myriad.api.module.Modules;
+import dev.myriad.api.service.AntiCheat;
 import dev.myriad.api.setting.BoolSetting;
+import dev.myriad.api.util.ItemInfo;
 import dev.myriad.api.util.MathUtil;
+import dev.myriad.api.util.Packets;
 import dev.myriad.essentials.mixin.FireworkRocketEntityAccessor;
 import dev.myriad.essentials.util.ChestSwap;
 import dev.myriad.essentials.util.GlideHold;
@@ -20,9 +23,13 @@ import dev.myriad.essentials.util.GrimChunks;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.FireworkRocketEntity;
 import net.minecraft.world.item.ItemStack;
@@ -54,6 +61,17 @@ import net.minecraft.world.phys.Vec3;
  * equip sound for each swap is muted. Eating (or anything you hold to use) pauses the swapping: Grim stops what you're
  * using each time the chestplate is used, so the elytra goes back on at the next start, and swapping picks up again
  * once you're done.
+ * <p>
+ * <b>Elsewhere</b> (an anti-cheat that doesn't simulate the glide, such as 6b6t's NoCheatPlus, or none) the swap fails:
+ * a chestplate on mid-glide is checked as walking at once, and the glide hold has no pings to hold. There it breaks the
+ * glide with two glide starts instead: one sent while you glide stops the glide there and then (vanilla's answer to one
+ * it can't start), you hold still for that tick (no movement goes out while the server isn't gliding you), and the
+ * other starts it again before the next tick's movement. A server tick between the two resets its count; if none falls
+ * between them (both in one of its ticks), that break is lost, and nothing is set back: the stop doesn't wait for a
+ * tick, so the start always finds the glide stopped. A break the server took shows (its tick ended with you not
+ * gliding, and it says so); one it doesn't say so for within a round trip is made again at once, and it and the next
+ * {@link #LONG_BREAKS} hold still two ticks, as the timing that lost one changes slowly (6b6t lost about one in five,
+ * often twice running). No chestplate needed. Grim, for its part, flags the two starts and the still tick.
  */
 public final class NoDurability {
 	/** Who runs it: says what it has to say, and whether swapping is on. */
@@ -139,6 +157,9 @@ public final class NoDurability {
 	private int lostStarts;
 
 	public void enable() {
+		endBreaks();
+		breaking = this;
+		Myriad.events().subscribe(this);
 		swapping = startNow = rocketWanted = stopForUse = finishing = equipping = recovering = confirming = setBack = false;
 		descent = 0;
 		armTicks = catching = 0;
@@ -157,6 +178,9 @@ public final class NoDurability {
 		catching = 0;
 		GlideHold.disarm(this);
 		GrimChunks.stop();
+		endBreaks();
+		Myriad.events().unsubscribe(this);
+		if (breaking == this) breaking = null;
 	}
 
 	/** Whether the elytra and chestplate are being swapped (or the elytra put back for good) right now. */
@@ -193,8 +217,15 @@ public final class NoDurability {
 		trackDescent(p);
 		if (!fly.noDurability()) {
 			finish();
+			endBreaks();
 			return;
 		}
+		if (!AntiCheat.strict()) {
+			finish();
+			tickBreaks(p, wasSetBack);
+			return;
+		}
+		endBreaks();
 		if (!swapping) {
 			// Recast's bounce does its own swapping.
 			// Not while you eat (or use anything held): a swap would stop it (see onUse).
@@ -298,6 +329,96 @@ public final class NoDurability {
 			finish();
 			// Swapping again as soon as Grim knows the chunks (the elytra on until then), not after a fresh arming.
 			armTicks = ARM_TICKS;
+		}
+	}
+
+	// ---- breaks, where the glide isn't simulated ---------------------------------------------------------------------
+
+	/** Ticks of gliding between two breaks: under the 20 that wear the elytra, with room for a lost one to be made again. */
+	private static final int BREAK_INTERVAL = 12;
+	/** Ticks past a round trip to wait for the server to say a break stopped the glide. */
+	private static final int BREAK_CONFIRM_MARGIN = 2;
+	/** After a lost break, this many breaks hold still two ticks (their starts surely a server tick apart). */
+	private static final int LONG_BREAKS = 20;
+	/** Vanilla's gliding bit in the entity flag byte ({@code Entity.FLAG_FALL_FLYING}). */
+	private static final int GLIDING_BIT = 1 << 7;
+
+	/** The engine running (one owner flies at a time): what the movement and the gliding check ask about. */
+	private static volatile NoDurability breaking;
+	/** The glide is stopped for a break, and you hold still ({@link #breakStill} more ticks). */
+	private boolean breakStopped;
+	/** The client glides on through the breaks (until you land, or a setback). */
+	private boolean breakHold;
+	private int breakStill, breakGlideTicks, breakConfirm, longBreaks;
+	/** Network thread: the server said it isn't gliding you since the last break. */
+	private volatile boolean stopSeen;
+
+	/** Whether a break holds the local player still this tick: no movement, so none goes out. */
+	static boolean holdsStill() {
+		NoDurability n = breaking;
+		return n != null && n.breakStopped;
+	}
+
+	/** Whether the local player counts as gliding through the breaks. */
+	static boolean holdsGlide() {
+		NoDurability n = breaking;
+		return n != null && n.breakHold;
+	}
+
+	private void tickBreaks(LocalPlayer p, boolean wasSetBack) {
+		// A setback: the server may not be gliding you any more, so the client shows what it says (the catch opens it).
+		if (wasSetBack || p.onGround() || p.isInWater() || p.isInLava()) breakHold = false;
+		if (breakStopped && --breakStill > 0) return;
+		if (breakStopped) {
+			breakStopped = false;
+			breakGlideTicks = 0;
+			sendStart();
+			return;
+		}
+		var chest = p.getItemBySlot(EquipmentSlot.CHEST);
+		if (!p.isFallFlying() || p.onGround() || p.isInWater() || p.isCreative() || !ItemInfo.isGlider(chest) || !chest.isDamageableItem()) {
+			breakGlideTicks = 0;
+			return;
+		}
+		breakGlideTicks++;
+		// The last break unheard of: lost, so another one now, and the next ones hold still two ticks.
+		boolean lost = breakConfirm > 0 && --breakConfirm == 0 && !stopSeen;
+		if (lost) longBreaks = LONG_BREAKS;
+		if (!lost && breakGlideTicks < BREAK_INTERVAL) return;
+		// Gliding, so the server takes this start as a stop.
+		stopSeen = false;
+		sendStart();
+		breakStopped = breakHold = true;
+		breakStill = longBreaks > 0 ? 2 : 1;
+		if (longBreaks > 0) longBreaks--;
+		breakConfirm = Myriad.server().ping() / 50 + BREAK_CONFIRM_MARGIN;
+	}
+
+	/** Ends a break under way (the glide starts again) and the breaks' hold. */
+	private void endBreaks() {
+		if (breakStopped && mc.player != null && mc.getConnection() != null) sendStart();
+		breakStopped = breakHold = false;
+		breakGlideTicks = breakConfirm = longBreaks = 0;
+	}
+
+	private void sendStart() {
+		Packets.send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
+	}
+
+	/** A break's tick sends no movement (a look changed would send one): the server isn't gliding you. */
+	@Subscribe(packets = ServerboundMovePlayerPacket.class)
+	private void onSendMove(PacketEvent.Send e) {
+		if (breakStopped) e.cancel();
+	}
+
+	/** Network thread: the server says it isn't gliding you, which a break that took shows. */
+	@Subscribe(packets = ClientboundSetEntityDataPacket.class)
+	private void onEntityData(PacketEvent.Receive e) {
+		var p = mc.player;
+		var data = (ClientboundSetEntityDataPacket) e.packet();
+		if (p == null || data.id() != p.getId()) return;
+		for (var value : data.packedItems()) {
+			if (value.id() == 0 && value.value() instanceof Byte flags && (flags & GLIDING_BIT) == 0) stopSeen = true;
 		}
 	}
 

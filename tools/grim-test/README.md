@@ -42,7 +42,7 @@ Then a test is: set the scene, mark the log, act, read the flags.
 ```bash
 ./cmd "clear GrimTester" "item replace entity GrimTester armor.chest with elytra" "tp GrimTester 0 220 0 0 0"
 ./flags mark
-./client ".toggle altitude on" "wait 200" status ".toggle altitude off"
+./client ".set elytra_fly type altitude" ".toggle elytra_fly on" "wait 200" status ".toggle elytra_fly off"
 ./flags                    # "no flags", or each flag with Grim's details (exit code 1)
 ```
 

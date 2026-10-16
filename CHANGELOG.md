@@ -5,17 +5,22 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 ## 0.2.20 (unreleased)
 
-- Elytra Control (Movement): fly the elytra with the movement keys, like a creative flight. Forward, back and the sides
-  go along your heading at Speed, jump climbs and sneak descends at Vertical Speed, and with neither you hold your
-  height (or drift down at Sink). Turning and stopping are instant; speed builds up as fast as NoCheatPlus's elytra
-  check allows (about 1.8 blocks a second each tick: faster set 6b6t's off). A glide lost in mid-air starts again by
-  itself, and it stops at the edge of chunks that haven't loaded. For loosely checked
-  servers (6b6t's NoCheatPlus): one that simulates the glide, as Grim does on 2b2t, sets it back. Turning it on turns
-  off Recast and Altitude, and Auto Armor's No Durability Elytra stands down meanwhile. Its own No Durability (off by
-  default, no chestplate needed) keeps the elytra from wearing: every 12 ticks a glide start sent while gliding stops
-  the glide, you hold still that tick (no movement sent), and another start begins it again; the server's 20-tick glide
-  count breaks. A break the server doesn't confirm (both starts in one of its ticks: about one in five on 6b6t) is made
-  again at once, holding still two ticks, and so are the next 20.
+- **Elytra Fly** is one module again, with a Type: Recast, Altitude, or the new Control. Recast's settings, keybind and
+  on/off state carry over (Altitude's and Elytra Control's settings don't: set them again under Elytra Fly). No
+  Durability and Preserve are shared; each type's own settings show only while it's chosen.
+- Control (new): fly the elytra with the movement keys, like a creative flight. Forward, back and the sides go along
+  your heading at Speed, jump climbs and sneak descends at Vertical Speed, and with neither you hold your height (or
+  drift down at Sink). Turning and stopping are instant; speed builds up as fast as NoCheatPlus's elytra check allows
+  (about 1.8 blocks a second each tick). It stops at the edge of chunks that haven't loaded. Only offered where the
+  server's anti-cheat doesn't simulate the glide (6b6t's NoCheatPlus, singleplayer): Grim (2b2t) sets it back, so there
+  Type lists Recast and Altitude only.
+- No Durability works the way the server allows. With Grim (2b2t) it swaps a chestplate on as before. Elsewhere (6b6t)
+  that fails (a chestplate worn mid-glide is checked as walking; Recast couldn't take off), so it breaks the glide
+  with two glide starts instead: one sent while gliding stops the glide, you hold still that tick, and the other starts
+  it again; the server's 20-tick glide count breaks, no chestplate needed. A break the server doesn't confirm (both
+  starts in one of its ticks: about one in five on 6b6t) is made again at once, holding still two ticks, as are the next
+  20. Auto Armor's No Durability Elytra does the same. Grim flags this way, so 2b2t keeps the swap.
+- Recast: the view no longer zooms in and out with the sprint the bounce holds and lets go at every touch.
 
 ## 0.2.19
 

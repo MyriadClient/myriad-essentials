@@ -7,13 +7,12 @@ import dev.myriad.api.event.events.InputEvent;
 import dev.myriad.api.event.events.InteractEvent;
 import dev.myriad.api.event.events.PacketEvent;
 import dev.myriad.api.event.events.TickEvent;
-import dev.myriad.api.module.Category;
-import dev.myriad.api.module.Module;
+import dev.myriad.api.service.AntiCheat;
 import dev.myriad.api.service.Rotations;
-import dev.myriad.api.setting.BoolSetting;
-import dev.myriad.api.setting.DoubleSetting;
+import dev.myriad.api.setting.SettingGroup;
 import dev.myriad.api.util.ItemInfo;
 import dev.myriad.essentials.util.ChestSwap;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.util.Mth;
@@ -22,18 +21,19 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * What the elytra flight modules ({@link Recast}, {@link Altitude}) share: flying with a rotation of their own that only
- * goes to the server and the flight physics (the camera stays yours), opening the elytra the way vanilla does, their own
- * <b>No Durability</b> (see {@link NoDurability}, which also catches a glide dropped in mid-air), and <b>Preserve</b>:
- * elytras worn down to it are put aside, the freshest other one going on (in mid-air too). One flies at a time; while
- * one is on, Auto Armor's No Durability Elytra stands down for its swaps.
+ * What {@link ElytraFly}'s types ({@link Recast}, {@link Altitude}, {@link ElytraControl}) share: flying with a rotation
+ * of their own that only goes to the server and the flight physics (the camera stays yours), opening the elytra the
+ * way vanilla does, <b>No Durability</b> (see {@link NoDurability}, which also catches a glide dropped in mid-air), and
+ * <b>Preserve</b>: elytras worn down to it are put aside, the freshest other one going on (in mid-air too). The type
+ * flying hears events only while it flies ({@link #start}, {@link #stop}); its settings are Elytra Fly's, shown only
+ * while it's the one chosen. While one flies, Auto Armor's No Durability Elytra stands down for its swaps.
  */
-public abstract class ElytraModule extends Module implements NoDurability.Owner {
-	private final BoolSetting noDurability = sgGeneral.bool("No Durability")
-		.description("Keep the elytra from wearing out while you glide, by swapping it with a chestplate from your inventory.")
-		.defaultValue(true).build();
-	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve")
-		.description("Put elytras with less durability than this (%) aside, and fly with another.").defaultValue(5).range(0, 50).decimals(0).build();
+public abstract class ElytraMode implements NoDurability.Owner {
+	protected static final Minecraft mc = Minecraft.getInstance();
+	protected final ElytraFly fly;
+	private final String name;
+	/** Elytra Fly's General group: the type's settings go there, shown while it's chosen (see {@link #chosen}). */
+	protected final SettingGroup sgGeneral;
 
 	/** Flying with {@link #spoof}'s rotation this tick. */
 	boolean spoofing;
@@ -46,11 +46,58 @@ public abstract class ElytraModule extends Module implements NoDurability.Owner 
 	private boolean preserveWarned;
 	final NoDurability noDur = new NoDurability(this);
 
-	protected ElytraModule(Category category, String name, String description) {
-		super(category, name, description);
+	protected ElytraMode(ElytraFly fly, String name) {
+		this.fly = fly;
+		this.name = name;
+		this.sgGeneral = fly.settings.group("General");
+	}
+
+	/** The type's name, as Elytra Fly's Type shows it. */
+	public String name() {
+		return name;
+	}
+
+	/** Whether this is the type chosen in Elytra Fly (its settings show then). */
+	protected boolean chosen() {
+		return fly.typeName().equals(name);
+	}
+
+	/** Starts flying: hears events from now on. */
+	final void start() {
+		onEnable();
+		Myriad.events().subscribe(this);
+	}
+
+	/** Stops flying. */
+	final void stop() {
+		Myriad.events().unsubscribe(this);
+		onDisable();
+	}
+
+	/** What Elytra Fly shows beside its name while this flies. */
+	public String hudInfo() {
+		return null;
+	}
+
+	protected static boolean inGame() {
+		return mc.level != null && mc.player != null;
 	}
 
 	@Override
+	public void info(String message) {
+		fly.info(message);
+	}
+
+	@Override
+	public void warn(String message) {
+		fly.warn(message);
+	}
+
+	/** Turns Elytra Fly off. */
+	protected void disable() {
+		fly.disable();
+	}
+
 	protected void onEnable() {
 		spoofing = holdGlide = flagged = wantOpen = false;
 		resetFlight();
@@ -58,7 +105,6 @@ public abstract class ElytraModule extends Module implements NoDurability.Owner 
 		Myriad.inventory().spare(this, this::wornDown);
 	}
 
-	@Override
 	protected void onDisable() {
 		resetFlight();
 		spoofing = holdGlide = false;
@@ -87,7 +133,16 @@ public abstract class ElytraModule extends Module implements NoDurability.Owner 
 
 	@Override
 	public boolean noDurability() {
-		return noDurability.get();
+		return fly.noDurability();
+	}
+
+	/**
+	 * Whether No Durability swaps a chestplate on for its breaks: on servers whose anti-cheat simulates the glide
+	 * (Grim, 2b2t), the only way that passes there. Elsewhere it stops and starts the glide instead (see
+	 * {@link NoDurability}), and a chestplate worn mid-glide would only be checked as walking.
+	 */
+	protected boolean chestSwaps() {
+		return noDurability() && AntiCheat.strict();
 	}
 
 	// ---- tick -----------------------------------------------------------------------------------------------------
@@ -140,7 +195,7 @@ public abstract class ElytraModule extends Module implements NoDurability.Owner 
 
 	/** An elytra worn down to Preserve: put aside, to be mended. */
 	boolean wornDown(ItemStack s) {
-		return ItemInfo.isGlider(s) && s.isDamageableItem() && ItemInfo.durabilityFraction(s) * 100 < preserve.get();
+		return ItemInfo.isGlider(s) && s.isDamageableItem() && ItemInfo.durabilityFraction(s) * 100 < fly.preserve();
 	}
 
 	/**
@@ -200,10 +255,10 @@ public abstract class ElytraModule extends Module implements NoDurability.Owner 
 		if (blocked) return false;
 		// With No Durability a chestplate may be worn, with the elytra at hand to swap on. Not with an elytra one hit from
 		// breaking: the server refuses a glide start with it.
-		return ItemInfo.canGlide(p.getItemBySlot(EquipmentSlot.CHEST)) || (noDurability() && ChestSwap.canGlide());
+		return ItemInfo.canGlide(p.getItemBySlot(EquipmentSlot.CHEST)) || (chestSwaps() && ChestSwap.canGlide());
 	}
 
-	/** Disconnects (turning off first, so it doesn't carry on when you join again). Not in singleplayer. */
+	/** Disconnects (turning Elytra Fly off first, so it doesn't carry on when you join again). Not in singleplayer. */
 	void leave(String why) {
 		disable();
 		if (mc.isLocalServer() || mc.getConnection() == null) {

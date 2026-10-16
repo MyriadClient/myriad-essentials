@@ -4,32 +4,31 @@ import dev.myriad.api.Myriad;
 import dev.myriad.api.module.Modules;
 import dev.myriad.essentials.modules.combat.AutoArmor;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.phys.Vec3;
 
 /**
- * Who is flying the elytra, for this addon's mixins and the modules that keep out of its way: {@link Recast} or
- * {@link Altitude} (one at a time), or, with neither on, Auto Armor's No Durability Elytra for flying yourself.
+ * Who is flying the elytra, for this addon's mixins and the modules that keep out of its way: {@link ElytraFly}'s type
+ * ({@link Recast}, {@link Altitude}, {@link ElytraControl}), or, with Elytra Fly off, Auto Armor's No Durability
+ * Elytra for flying yourself.
  */
 public final class ElytraFlight {
 	private ElytraFlight() {
 	}
 
-	/** The flight module that's on, or null. */
-	private static ElytraModule flying() {
-		ElytraModule m = Modules.active(Recast.class);
-		return m != null ? m : Modules.active(Altitude.class);
+	/** The type flying, or null. */
+	private static ElytraMode flying() {
+		ElytraFly m = Modules.active(ElytraFly.class);
+		return m != null ? m.flying() : null;
 	}
 
-	/**
-	 * Whether Recast, Altitude or Elytra Control is on: the first two do their own swapping, and Elytra Control's flight
-	 * has no glide to restart, so Auto Armor's No Durability Elytra stands down for all three.
-	 */
+	/** Whether Elytra Fly is on: its types do their own swapping, and Auto Armor's No Durability Elytra stands down. */
 	public static boolean flightModuleOn() {
-		return flying() != null || Modules.active(ElytraControl.class) != null;
+		return Modules.active(ElytraFly.class) != null;
 	}
 
-	/** Whether flight physics should use the flight module's rotation instead of the camera's. */
+	/** Whether flight physics should use the flight's rotation instead of the camera's. */
 	public static boolean spoofing() {
-		ElytraModule m = flying();
+		ElytraMode m = flying();
 		return m != null && m.spoofing;
 	}
 
@@ -50,33 +49,31 @@ public final class ElytraFlight {
 
 	/** Whether Recast is bouncing: it lets the glide drop and opens it again itself, every hop. */
 	public static boolean bouncing() {
-		Recast m = Modules.active(Recast.class);
-		return m != null && m.bouncing();
+		return flying() instanceof Recast r && r.bouncing();
 	}
 
-	/** Whether the local player should count as gliding even though the elytra closed (Recast's landings). */
+	/**
+	 * Whether the local player should count as gliding even though the elytra closed: Recast's landings, and No
+	 * Durability's breaks where the glide is stopped and started (see {@link NoDurability}).
+	 */
 	public static boolean holdsGlide() {
-		ElytraModule m = flying();
-		if (m != null) return m.holdGlide;
-		ElytraControl c = Modules.active(ElytraControl.class);
-		return c != null && c.holdsGlide();
+		ElytraMode m = flying();
+		return m != null && m.holdGlide || NoDurability.holdsGlide();
 	}
 
 	/** Whether to keep sprinting while gliding (see {@link Recast#holdsSprint}). */
 	public static boolean holdsSprint() {
-		Recast m = Modules.active(Recast.class);
-		return m != null && m.holdsSprint();
+		return flying() instanceof Recast r && r.holdsSprint();
 	}
 
 	/** Whether Recast has you on foot for now (walking round or clearing something, waiting): no gliding meanwhile. */
 	public static boolean onFoot() {
-		Recast m = Modules.active(Recast.class);
-		return m != null && m.onFoot();
+		return flying() instanceof Recast r && r.onFoot();
 	}
 
-	/** Whether No Durability is swapping for whoever flies: Recast's or Altitude's own, or Auto Armor's for you. */
+	/** Whether No Durability is swapping for whoever flies: Elytra Fly's, or Auto Armor's for you. */
 	public static boolean noDurability() {
-		ElytraModule m = flying();
+		ElytraMode m = flying();
 		if (m != null) return m.noDurability();
 		AutoArmor armor = Modules.active(AutoArmor.class);
 		return armor != null && armor.noDurabilityElytra();
@@ -84,17 +81,38 @@ public final class ElytraFlight {
 
 	/**
 	 * Whether the chest slot is No Durability's (or the bounce's) to swap: while it swaps, and with No Durability on any
-	 * time you're off the ground, as a chestplate worn then is one of its swaps. Auto Armor leaves the slot alone
-	 * meanwhile: putting the best elytra on over it would wear each of your elytras in turn.
+	 * time you're off the ground, as a chestplate worn then is one of its swaps (or, where it breaks the glide without
+	 * one, the elytra it needs). Auto Armor leaves the slot alone meanwhile: putting the best elytra on over it would
+	 * wear each of your elytras in turn.
 	 */
 	public static boolean holdsChest() {
-		ElytraModule m = flying();
+		ElytraMode m = flying();
 		if (m != null && (m.noDur.swapping() || m.swapsChest())) return true;
-		ElytraControl c = Modules.active(ElytraControl.class);
-		if (c != null && c.holdsChest()) return true;
 		AutoArmor armor = Modules.active(AutoArmor.class);
 		if (m == null && armor != null && armor.elytraSwapping()) return true;
 		var p = Minecraft.getInstance().player;
 		return noDurability() && p != null && !p.onGround() && !p.isInWater();
+	}
+
+	/**
+	 * The movement the local player's glide makes this tick, given vanilla's (Rocket Boost's comes after): none while a
+	 * No Durability break holds you still (the velocity kept for the tick after), Control's while it flies, else null
+	 * for vanilla's.
+	 */
+	public static Vec3 glideMovement(Vec3 vanilla) {
+		if (NoDurability.holdsStill()) return Vec3.ZERO;
+		var p = Minecraft.getInstance().player;
+		if (p != null && flying() instanceof ElytraControl c) return c.glideMovement(p);
+		return null;
+	}
+
+	/** Whether the movement {@link #glideMovement} gave is this tick's velocity too (Control's), not just a pause. */
+	public static boolean glideSetsVelocity() {
+		return !NoDurability.holdsStill() && flying() instanceof ElytraControl;
+	}
+
+	/** Recast is bouncing: the camera leaves out sprint's widening of the view (the bounce holds sprint, and lets go). */
+	public static boolean steadyView() {
+		return bouncing();
 	}
 }

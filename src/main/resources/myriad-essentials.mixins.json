@@ -5,6 +5,7 @@
 	"compatibilityLevel": "JAVA_25",
 	"client": [
 		"AbstractBlockStateMixin",
+		"AbstractClientPlayerMixin",
 		"ArmorFeatureRendererMixin",
 		"AtmosphericFogMixin",
 		"BossBarHudMixin",

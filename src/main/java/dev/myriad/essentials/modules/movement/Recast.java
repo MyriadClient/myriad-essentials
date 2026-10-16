@@ -9,8 +9,6 @@ import dev.myriad.api.event.Subscribe;
 import dev.myriad.api.event.events.InputEvent;
 import dev.myriad.api.event.events.PacketEvent;
 import dev.myriad.api.event.events.TickEvent;
-import dev.myriad.api.module.Categories;
-import dev.myriad.api.module.Module;
 import dev.myriad.api.module.Modules;
 import dev.myriad.api.build.Target;
 import dev.myriad.api.service.Breaking;
@@ -76,7 +74,7 @@ import java.util.List;
  * where you first stand: off the line or below it (a fall off the highway), Baritone walks you back onto it before
  * bouncing on. When the way can't be cleared, If Blocked waits there or disconnects.
  */
-public class Recast extends ElytraModule {
+public class Recast extends ElytraMode {
 	public enum Obstacles {
 		CLEAR, STOP
 	}
@@ -86,9 +84,10 @@ public class Recast extends ElytraModule {
 	}
 
 	private final EnumSetting<Obstacles> obstacles = sgGeneral.enumSetting("Obstacles", Obstacles.CLEAR)
-		.description("Clear: Baritone takes you past (walking round, mining or placing), or without it, mines through blocks and fills holes at floor level. Stop: stop at them.").build();
+		.description("Clear: Baritone takes you past (walking round, mining or placing), or without it, mines through blocks and fills holes at floor level. Stop: stop at them.")
+		.visible(this::chosen).build();
 	private final EnumSetting<IfBlocked> ifBlocked = sgGeneral.enumSetting("If Blocked", IfBlocked.WAIT)
-		.description("When the way can't be cleared (with Stop, anything in the lane): wait there, or disconnect.").build();
+		.description("When the way can't be cleared (with Stop, anything in the lane): wait there, or disconnect.").visible(this::chosen).build();
 
 	private enum State {
 		IDLE, BOUNCING, BRAKING, WALKING, MINING, PATHING, WAITING, BLOCKED, UNDER, FILLING
@@ -204,11 +203,8 @@ public class Recast extends ElytraModule {
 	private int readyWait;
 	private static final int READY_WAIT = 40;
 
-	public Recast() {
-		super(Categories.MOVEMENT, "Recast", "Bounce along highways on an elytra, past whatever's in the way.");
-		conflictsWith(Altitude.class, ElytraControl.class);
-		// It was Elytra Fly's Recast mode: its settings, keybind and on/off state carry over.
-		formerNames("Elytra Fly");
+	Recast(ElytraFly fly) {
+		super(fly, ElytraFly.RECAST);
 	}
 
 	@Override
@@ -282,7 +278,7 @@ public class Recast extends ElytraModule {
 	 */
 	@Override
 	protected boolean swapsChest() {
-		return noDurability() && bouncing();
+		return chestSwaps() && bouncing();
 	}
 
 	// ---- tick -----------------------------------------------------------------------------------------------------
@@ -368,7 +364,7 @@ public class Recast extends ElytraModule {
 	 * way, and not for long.
 	 */
 	private boolean readyToBounce() {
-		if (!noDurability() || !mc.player.onGround() || ChestSwap.ensurePair(true) != ChestSwap.Need.WAITING || ++readyWait > READY_WAIT) {
+		if (!chestSwaps() || !mc.player.onGround() || ChestSwap.ensurePair(true) != ChestSwap.Need.WAITING || ++readyWait > READY_WAIT) {
 			readyWait = 0;
 			return true;
 		}
@@ -404,10 +400,10 @@ public class Recast extends ElytraModule {
 		// on without (a little slower) until you're done. With the elytra on, each would last the whole hop, and eating
 		// can go on for several items. Nothing is swapped meanwhile, so eating can start whenever (Auto Eat, or right
 		// click), the chestplate on or not; between Auto Eat's bites too, or a swap would stop the next one.
-		boolean eating = noDurability() && (mc.player.isUsingItem() || AutoEat.wantsToEat());
-		chestMode = noDurability() && ChestSwap.ready() && !eating;
+		boolean eating = chestSwaps() && (mc.player.isUsingItem() || AutoEat.wantsToEat());
+		chestMode = chestSwaps() && ChestSwap.ready() && !eating;
 		boolean mayGlide = !eating;
-		if (noDurability()) noDur.chestplateAtHand(false);
+		if (chestSwaps()) noDur.chestplateAtHand(false);
 		boolean cleared = GlideHold.cleared(this);
 		// What's worn only counts once the server has answered the last swap (see ChestSwap.settled): with jitter the
 		// client can show a moment that's already past, and swapping on that puts the client and Grim out of step.

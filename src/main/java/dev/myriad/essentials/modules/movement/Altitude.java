@@ -1,7 +1,6 @@
 package dev.myriad.essentials.modules.movement;
 
 import dev.myriad.api.Myriad;
-import dev.myriad.api.module.Categories;
 import dev.myriad.api.setting.BoolSetting;
 import dev.myriad.api.setting.EnumSetting;
 import dev.myriad.api.util.ItemInfo;
@@ -27,7 +26,7 @@ import java.util.ArrayDeque;
  * it can't go on (the last elytra wearing out, the server setting you back over and over), it comes down to land,
  * levelling out near the ground, and After Landing disconnects you there or leaves you standing.
  */
-public class Altitude extends ElytraModule {
+public class Altitude extends ElytraMode {
 	public enum AfterLanding {
 		STAY, DISCONNECT
 	}
@@ -38,9 +37,9 @@ public class Altitude extends ElytraModule {
 
 	private final BoolSetting lockHeading = sgGeneral.bool("Lock Heading")
 		.description("Keep flying the way you faced when the glide started, whatever the camera does (to any angle, not snapped). Until you land or turn it off.")
-		.defaultValue(false).build();
+		.defaultValue(false).visible(this::chosen).build();
 	private final EnumSetting<AfterLanding> afterLanding = sgGeneral.enumSetting("After Landing", AfterLanding.DISCONNECT)
-		.description("When it has to come down (elytra worn out, the server keeps setting you back): disconnect once landed, or stay there.").build();
+		.description("When it has to come down (elytra worn out, the server keeps setting you back): disconnect once landed, or stay there.").visible(this::chosen).build();
 
 	/**
 	 * Worked out on vanilla's glide physics: dive at {@code DIVE_PITCH} until faster than the threshold (blocks a
@@ -101,9 +100,8 @@ public class Altitude extends ElytraModule {
 	private final ArrayDeque<Integer> setbacks = new ArrayDeque<>();
 	private int steadyTicks;
 
-	public Altitude() {
-		super(Categories.MOVEMENT, "Altitude", "Cross open country on an elytra without fireworks, holding your height.");
-		conflictsWith(Recast.class, ElytraControl.class);
+	Altitude(ElytraFly fly) {
+		super(fly, ElytraFly.ALTITUDE);
 	}
 
 	@Override
@@ -198,7 +196,7 @@ public class Altitude extends ElytraModule {
 			return;
 		}
 		double diveUntil = Mth.clamp(DIVE_SPEED + HOLD_GAIN * (p.getY() - cruiseY), MIN_DIVE_SPEED, MAX_DIVE_SPEED);
-		if (noDurability()) {
+		if (chestSwaps()) {
 			diveUntil = Mth.clamp(SLOW_DIVE_SPEED - SLOW_HOLD_GAIN * (p.getY() - cruiseY), SLOW_MIN_DIVE_SPEED, SLOW_MAX_DIVE_SPEED);
 			// While No Durability's swaps wait for chunks, the slowest that still climbs.
 			if (noDur.chunksLate()) diveUntil = Math.min(diveUntil, SLOW_LATE_SPEED);
