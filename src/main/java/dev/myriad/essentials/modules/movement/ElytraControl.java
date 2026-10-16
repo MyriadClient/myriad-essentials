@@ -42,7 +42,9 @@ import net.minecraft.world.phys.Vec3;
  * the two resets the count; if none falls between them (they arrive within one), that break is lost, but nothing is
  * set back: the stop doesn't wait for a tick, so the start always finds the glide stopped. A break the server took
  * shows: its tick ended with you not gliding, so it says so. One it doesn't say so for within a round trip is taken
- * as lost, and another follows at once. No chestplate needed.
+ * as lost, and another follows at once, holding still two ticks: the timing that lost one (where the server's ticks
+ * fall between yours) changes slowly, and 6b6t lost about one break in five, often twice running. The next breaks hold
+ * still two ticks too, for a while. No chestplate needed.
  * Swapping a chestplate on for the break instead (as {@link NoDurability} does on 2b2t) failed one break in ten to
  * fifteen on 6b6t: with both swaps in one server tick, the start comes while it still glides you, and stops the glide.
  */
@@ -65,6 +67,8 @@ public class ElytraControl extends Module {
 	private static final int INTERVAL = 12;
 	/** Ticks past a round trip to wait for the server to say a break stopped the glide. */
 	private static final int CONFIRM_MARGIN = 2;
+	/** After a lost break, this many breaks hold still two ticks (their starts surely a server tick apart). */
+	private static final int LONG_BREAKS = 20;
 	/** Vanilla's gliding bit in the entity flag byte ({@code Entity.FLAG_FALL_FLYING}). */
 	private static final int GLIDING_BIT = 1 << 7;
 	/**
@@ -80,8 +84,9 @@ public class ElytraControl extends Module {
 	/** The horizontal movement asked for last tick, blocks a tick: what this tick builds on. */
 	private Vec3 flown = Vec3.ZERO;
 	private volatile boolean setBack;
-	/** No Durability: the glide was stopped at the start of this tick, which holds still (it starts again next tick). */
+	/** No Durability: the glide was stopped, and you hold still until it starts again ({@link #stillLeft} more ticks). */
 	private boolean stopped;
+	private int stillLeft, longBreaks;
 	/** Ticks the server has glided you since the last break, and whether the client glides on through the breaks. */
 	private int glideTicks;
 	private boolean holdGlide;
@@ -100,7 +105,7 @@ public class ElytraControl extends Module {
 	protected void onEnable() {
 		flown = Vec3.ZERO;
 		setBack = stopped = holdGlide = stopSeen = false;
-		glideTicks = confirmTicks = 0;
+		glideTicks = confirmTicks = stillLeft = longBreaks = 0;
 		sinceGlide = Integer.MAX_VALUE / 2;
 	}
 
@@ -129,6 +134,7 @@ public class ElytraControl extends Module {
 		if (!inGame()) return;
 		var p = mc.player;
 		if (p.onGround() || p.isInWater() || p.isInLava() || !noDurability.get()) holdGlide = false;
+		if (stopped && --stillLeft > 0) return;
 		if (stopped) {
 			stopped = false;
 			glideTicks = 0;
@@ -140,6 +146,8 @@ public class ElytraControl extends Module {
 			stopSeen = false;
 			startGlide();
 			stopped = holdGlide = true;
+			stillLeft = longBreaks > 0 ? 2 : 1;
+			if (longBreaks > 0) longBreaks--;
 			confirmTicks = Myriad.server().ping() / 50 + CONFIRM_MARGIN;
 			return;
 		}
@@ -156,7 +164,10 @@ public class ElytraControl extends Module {
 		}
 		glideTicks++;
 		// The last break unheard of: lost (its starts reached the server within one tick), so another one now.
-		if (confirmTicks > 0 && --confirmTicks == 0 && !stopSeen) return true;
+		if (confirmTicks > 0 && --confirmTicks == 0 && !stopSeen) {
+			longBreaks = LONG_BREAKS;
+			return true;
+		}
 		return glideTicks >= INTERVAL;
 	}
 

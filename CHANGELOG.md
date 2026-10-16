@@ -14,7 +14,8 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
   off Recast and Altitude, and Auto Armor's No Durability Elytra stands down meanwhile. Its own No Durability (off by
   default, no chestplate needed) keeps the elytra from wearing: every 12 ticks a glide start sent while gliding stops
   the glide, you hold still that tick (no movement sent), and another start begins it again; the server's 20-tick glide
-  count breaks. A break the server doesn't confirm (both starts in one of its ticks) is made again at once.
+  count breaks. A break the server doesn't confirm (both starts in one of its ticks: about one in five on 6b6t) is made
+  again at once, holding still two ticks, and so are the next 20.
 
 ## 0.2.19
 
