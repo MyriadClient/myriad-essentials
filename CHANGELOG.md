@@ -3,9 +3,9 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
-## Unreleased (hooks branch)
+## 0.4.0
 
-Needs the Myriad core with hooks (control-panels branch).
+Needs Myriad 0.4.0.
 
 - **Elytra Swap**: No Durability is a module of its own, for any flight: Elytra Fly's types and, with When You Fly,
   flying yourself (it was Elytra Fly's No Durability and Auto Armor's No Durability Elytra). Saved settings move over:
