@@ -5,7 +5,8 @@ addon: it's built on Myriad's public API like any other (the build fails if it t
 released on its own, and Myriad runs without it. Everything here is made for 2b2t and passes Grim by default.
 
 Put `myriad-essentials-<v>.jar` in `mods/` next to `myriad-<v>.jar` (from the
-[latest release](https://github.com/MyriadClient/myriad-essentials/releases/latest)) and press **Right Shift** in game.
+[latest release](https://github.com/MyriadClient/myriad-essentials/releases/latest)) and press **Alt+1** in game to open
+the menu.
 
 ## Modules
 
