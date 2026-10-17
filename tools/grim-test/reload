@@ -51,7 +51,7 @@ class Jdwp:
             return rest[2:]
 
     def loaded(self, name):
-        """The reference type ids the VM has for the class named like "dev/myriad/Foo"."""
+        """The reference type ids the VM has for the class named like "dev/myriadclient/Foo"."""
         sig = f"L{name};".encode()
         out = self.call(1, 2, struct.pack(">i", len(sig)) + sig)
         n, out, ids = struct.unpack(">i", out[:4])[0], out[4:], []

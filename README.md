@@ -1,11 +1,11 @@
 # Myriad Essentials
 
-The stock modules and HUD elements for [Myriad](https://myriadclient.dev/) ([source](https://github.com/fyzz-dev/myriad)). Essentials is an ordinary
+The stock modules and HUD elements for [Myriad](https://myriadclient.dev/) ([source](https://github.com/MyriadClient/myriad-core)). Essentials is an ordinary
 addon: it's built on Myriad's public API like any other (the build fails if it touches internals), it's versioned and
 released on its own, and Myriad runs without it. Everything here is made for 2b2t and passes Grim by default.
 
 Put `myriad-essentials-<v>.jar` in `mods/` next to `myriad-<v>.jar` (from the
-[latest release](https://github.com/fyzz-dev/myriad-essentials/releases/latest)) and press **Right Shift** in game.
+[latest release](https://github.com/MyriadClient/myriad-essentials/releases/latest)) and press **Right Shift** in game.
 
 ## Modules
 
@@ -14,9 +14,9 @@ In the standard categories; each module's settings explain its options.
 | | |
 |---|---|
 | Combat | **Offhand** (totem, crystal, golden apple or shield, falling back to a totem when it matters; sword gap), **Auto Armor** (best armour; a bind flips chestplate and elytra; No Durability Elytra keeps an elytra you fly yourself from wearing out; pieces worn down to Preserve swapped out or taken off, to be mended), **Auto Disconnect** (health, totem pops, totems left, armour, players, beds, anchors, crystals, creepers, chosen entities; turns off or waits for the reason to clear), **Kill Aura** (Grim-safe: faces the target with move fix and hits when this tick's or the last sent rotation lands on its hitbox within reach, so the turn and the hit share a tick; full charge, vanilla packet order; Switch holds the best weapon on the server only, from the hotbar or inventory, charging it before the target is in reach, or attacks only while you hold one) |
-| Movement | **Recast** (highway bouncing on an elytra: walks round obstacles with Baritone, else mines them and fills holes at floor level, gets back onto the lane at its height after a fall, and waits or disconnects when it can't get past; with No Durability the chestplate is worn through each hop and the elytra goes on only for the glide start, on 2b2t too), **Altitude** (pitch 40 style flight without fireworks, about 27 b/s, made to be left alone: spare elytras go on in mid-air, it rides out setbacks, waits for chunks, and lands then disconnects when it can't go on; No Durability takes a short break before the server would wear the elytra). Both keep the elytra from wearing out (No Durability: swapped with a chestplate from your inventory, the swap sounds muted), open a glide dropped in mid-air again, and swap elytras worn down to Preserve for a fresh one; for flying yourself, Auto Armor's No Durability Elytra does the same, **Rocket Boost** (rockets push as hard as Grim allows, full speed at once, about 34 b/s straight and 42 on diagonals, holding height), **Inventory Move** (walk with screens open, arrow keys to look), **Velocity** |
+| Movement | **Recast** (highway bouncing on an elytra: walks round obstacles with Baritone, else mines them and fills holes at floor level, gets back onto the lane at its height after a fall, and waits or disconnects when it can't get past; with No Durability the chestplate is worn through each hop and the elytra goes on only for the glide start, on 2b2t too), **Altitude** (pitch 40 style flight without fireworks, about 27 b/s, made to be left alone: spare elytras go on in mid-air, it rides out setbacks, waits for chunks, and lands then disconnects when it can't go on; No Durability takes a short break before the server would wear the elytra). Both keep the elytra from wearing out (No Durability: swapped with a chestplate from your inventory, the swap sounds muted), open a glide dropped in mid-air again, and swap elytras worn down to Preserve for a fresh one; for flying yourself, Auto Armor's No Durability Elytra does the same, **Rocket Boost** (rockets push as hard as Grim allows, full speed at once, about 34 b/s straight and 42 on diagonals, holding height), **Auto Walk**, **Inventory Move** (walk with screens open, arrow keys to look), **Velocity** |
 | Player | **Auto Eat** (pauses Baritone), **Auto Tool** (silent; borrows tools from your inventory and puts them back; tools worn down to Preserve are left alone, by mining too), **Inventory Tweaks** (right-click a shulker box or ender chest in your inventory to open it on the spot), **Middle Click** (friend, experience, rocket or pearl by what you point at, without the hand swinging on screen), **Packet Mine** (hit once and the block is mined for you with your hand free, timed to Grim's own allowances so it finishes early without flags; the block stays until the server says it's gone, so no ghost blocks; Fast mode finishes every block early with decoy starts, as 2b2t clients do, with double break; hold and drag to queue blocks, auto rebreak, tools borrowed from your inventory and put back), **Reach** (starts at vanilla; Grim flags more), **Stack Replenish** (tops up hotbar stacks and refills used-up slots), **Wall Interact**, **X Carry** |
-| Render | **ESP**, **Blocks** (highlight chosen blocks, like spawners or beds, in their own colours), **Block Highlight** (your own outline for the block you're looking at), **Storage**, **Tracers**, **Nametags** (players, mobs, items, pearl owners), **Tooltips** (shulker, ender chest and map previews, durability, food), **Full Bright** (gamma or night vision), **Free Look**, **Freecam**, **View Model**, **Zoom** |
+| Render | **ESP**, **Blocks** (highlight chosen blocks, like spawners or beds, in their own colours), **Block Highlight** (your own outline for the block you're looking at), **Storage**, **Tracers**, **Nametags** (players, mobs, items, pearl owners), **Tooltips** (shulker, ender chest and map previews, durability, food), **Full Bright** (gamma or night vision), **Time of Day** (lock the time you see), **Free Look**, **Freecam**, **View Model**, **Zoom** |
 | World | **Air Place** (place blocks in mid-air where you look, through the off hand as 2b2t clients do; current Grim builds refuse it), **Scaffold** (blocks under you as you walk, clicking faces you can see; sprints without breaking stride, unaimed as 2b2t clients place, or Rotate to face each block for stricter Grim; bridges corners, towers when you jump) |
 
 HUD elements: Watermark (with the logo), Module List, Coordinates, Armor, Binds, Chest Count, Direction, Effects,
@@ -27,7 +27,7 @@ anti-cheat profile (Auto, Grim, Vanilla) decides, and Essentials stays Grim-safe
 
 ## Building
 
-Requires JDK 25+. Myriad comes from its maven (`https://fyzz-dev.github.io/myriad`); `myriad_version` in
+Requires JDK 25+. Myriad comes from its maven (`https://maven.myriadclient.dev/releases`); `myriad_version` in
 `gradle.properties` picks the release.
 
 ```bash

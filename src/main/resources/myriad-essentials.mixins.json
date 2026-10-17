@@ -1,7 +1,7 @@
 {
 	"required": true,
-	"package": "dev.myriad.essentials.mixin",
-	"plugin": "dev.myriad.api.mixin.CompatMixinPlugin",
+	"package": "dev.myriadclient.essentials.mixin",
+	"plugin": "dev.myriadclient.api.mixin.CompatMixinPlugin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
 		"AbstractBlockStateMixin",
@@ -11,11 +11,9 @@
 		"BossBarHudMixin",
 		"ChatComponentMixin",
 		"CameraMixin",
-		"ClientCommonPacketListenerMixin",
+		"ClientClockManagerMixin",
 		"ClientLevelMixin",
-		"ClientPacketListenerMixin",
 		"ClientPlayerEntityMixin",
-		"EntityAccessor",
 		"EntityMixin",
 		"EntityRenderDispatcherMixin",
 		"ExperienceBarMixin",

@@ -1,8 +1,8 @@
 # Builds a tagged version, attaches the jar (and sources) to a GitHub release, and publishes it to Myriad's maven
-# (the `maven` branch of fyzz-dev/myriad, served at https://fyzz-dev.github.io/myriad) so addons can put Essentials
-# on their dev runtime. Tag with mod_version from gradle.properties: `git tag v0.1.1 && git push origin v0.1.1`.
+# (https://maven.myriadclient.dev/releases) so addons can put Essentials on their dev runtime. Tag with mod_version
+# from gradle.properties: `git tag v0.1.1 && git push origin v0.1.1`.
 #
-# The maven push uses the MAVEN_DEPLOY_KEY secret: the private half of a deploy key with write access on fyzz-dev/myriad.
+# Publishing uses the MAVEN_USERNAME and MAVEN_PASSWORD secrets: a maven token allowed to write dev/myriadclient.
 
 name: release
 on:
@@ -45,16 +45,6 @@ jobs:
           files: build/libs/*.jar
       - name: publish to Myriad's maven
         env:
-          MAVEN_DEPLOY_KEY: ${{ secrets.MAVEN_DEPLOY_KEY }}
-        run: |
-          ./gradlew publishAllPublicationsToSiteRepository
-          mkdir -p ~/.ssh
-          printf '%s\n' "$MAVEN_DEPLOY_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-          git clone --depth 1 -b maven git@github.com:fyzz-dev/myriad.git maven-branch
-          cp -r build/maven/. maven-branch/
-          cd maven-branch
-          git add -A
-          git -c user.name=github-actions -c user.email=github-actions@github.com commit -m "Publish myriad-essentials ${GITHUB_REF_NAME#v}"
-          git push
+          ORG_GRADLE_PROJECT_myriadUsername: ${{ secrets.MAVEN_USERNAME }}
+          ORG_GRADLE_PROJECT_myriadPassword: ${{ secrets.MAVEN_PASSWORD }}
+        run: ./gradlew publishAllPublicationsToMyriadRepository

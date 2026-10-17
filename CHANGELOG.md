@@ -1,7 +1,26 @@
 # Changelog
 
-Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/fyzz-dev/myriad) core. Each
+Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
+
+## 0.3.0
+
+Needs Myriad 0.3.0.
+
+- Moved to `dev.myriadclient` with core: the packages, and `dev.myriadclient:myriad-essentials` on
+  `https://maven.myriadclient.dev/releases`.
+- Elytra Fly and Auto Armor fly with core's elytra engine (`Myriad.elytra()`): No Durability, chest swaps and the glide
+  hold moved there unchanged, and five of this addon's mixins went with them. The Grim suite passes as before.
+- **Elytra Fly**: Control gets **Lock Heading** (fly the way you faced when the glide opened, the camera free; now one
+  setting shared with Altitude) and **Auto Walk** (fly forward without holding the key).
+- **Tracers** draws every tracer line, so Range, Line Width and Fade With Distance apply to all of them: Storage and
+  Blocks lose their own Tracers switch, and Tracers gets a Blocks option beside Storage.
+- **No Render**: turning it on (or changing its blocks) no longer leaves the terrain undrawn until you move far away;
+  chunks are rebuilt the way 26.2 expects, on vanilla and Sodium.
+- **Auto Walk** (new, Movement): holds forward for you, also with chat or your inventory open. Holding back stops you.
+- **Time of Day** (new, Render): locks the time of day you see (sky, sun, moon, stars, daylight) to Time, in ticks
+  (0 sunrise, 6000 noon, 12000 sunset, 18000 midnight). Only your view changes; the server's time doesn't. The moon
+  keeps its phases.
 
 ## 0.2.20
 

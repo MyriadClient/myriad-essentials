@@ -12,9 +12,12 @@ base {
 
 repositories {
 	// Myriad's releases.
-	maven {
-		name = "Myriad"
-		url = "https://fyzz-dev.github.io/myriad"
+	exclusiveContent {
+		forRepositories(maven {
+			name = "Myriad"
+			url = "https://maven.myriadclient.dev/releases"
+		})
+		filter { includeGroup "dev.myriadclient" }
 	}
 	// ViaFabricPlus for the dev client only.
 	maven {
@@ -35,7 +38,7 @@ dependencies {
 	if (project.hasProperty("coreDir")) {
 		implementation fileTree(dir: "${project.coreDir}/core/build/libs", include: "myriad-*.jar", exclude: ["*-sources.jar", "*-javadoc.jar"])
 	} else {
-		implementation "dev.myriad:myriad:${project.myriad_version}"
+		implementation "dev.myriadclient:myriad:${project.myriad_version}"
 	}
 
 	// Most 2b2t players join through ViaFabricPlus as an older version, so the dev client does too (see `via` below).
@@ -123,29 +126,29 @@ jar {
 	}
 }
 
-// Essentials is an ordinary addon and may only use Myriad's public API. dev.myriad.impl is internal and changes
+// Essentials is an ordinary addon and may only use Myriad's public API. dev.myriadclient.impl is internal and changes
 // without notice, so a reference to it fails the build here rather than players' games later.
 def checkApiOnly = tasks.register("checkApiOnly") {
 	group = "verification"
-	description = "Fails if Essentials references Myriad internals (dev.myriad.impl)."
+	description = "Fails if Essentials references Myriad internals (dev.myriadclient.impl)."
 	def sources = fileTree("src/main/java") { include "**/*.java" }
 	inputs.files(sources)
 	doLast {
 		def bad = []
 		sources.each { f ->
 			f.eachLine { line, n ->
-				if (line.contains("dev.myriad.impl")) bad << "${projectDir.toPath().relativize(f.toPath())}:${n}: ${line.trim()}"
+				if (line.contains("dev.myriadclient.impl")) bad << "${projectDir.toPath().relativize(f.toPath())}:${n}: ${line.trim()}"
 			}
 		}
 		if (!bad.isEmpty()) {
-			throw new GradleException("Addons may only use Myriad's API (dev.myriad.api.*), but these lines reference internals:\n  " + bad.join("\n  "))
+			throw new GradleException("Addons may only use Myriad's API (dev.myriadclient.api.*), but these lines reference internals:\n  " + bad.join("\n  "))
 		}
 	}
 }
 tasks.named("compileJava") { dependsOn checkApiOnly }
 
 // `publishToMavenLocal` for an addon that wants Essentials on its dev runtime before a release; the release workflow
-// uses `publishAllPublicationsToSiteRepository` and pushes build/maven to Myriad's maven branch.
+// uses `publishAllPublicationsToMyriadRepository` (Myriad's maven, with the myriadUsername and myriadPassword properties).
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
@@ -155,8 +158,9 @@ publishing {
 	}
 	repositories {
 		maven {
-			name = "site"
-			url = layout.buildDirectory.dir("maven")
+			name = "myriad"
+			url = "https://maven.myriadclient.dev/releases"
+			credentials(PasswordCredentials)
 		}
 	}
 }
