@@ -4,6 +4,8 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.CameraEvent;
 import dev.myriadclient.api.event.events.MouseLookEvent;
 import dev.myriadclient.api.event.events.MouseScrollEvent;
+import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.event.events.WorldEvent;
 import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
@@ -32,6 +34,8 @@ public class FreeLook extends Module {
 
 	private float yaw, pitch;
 	private CameraType previous;
+	/** Whether yaw, pitch and the camera are taken from the player of this world (not yet when turned on outside one). */
+	private boolean anchored;
 	/** Where scrolling has put the camera, and where it is now, easing towards it. */
 	private float targetDistance = START_DISTANCE, distance = START_DISTANCE;
 	private long lastFrameNanos;
@@ -44,21 +48,46 @@ public class FreeLook extends Module {
 	protected void onEnable() {
 		targetDistance = distance = START_DISTANCE;
 		lastFrameNanos = System.nanoTime();
-		if (!inGame()) return;
+		anchored = false;
+		anchor();
+	}
+
+	/** Starts from where the player looks, in third person. Waits for a world when turned on outside one. */
+	private void anchor() {
+		if (anchored || !inGame()) return;
+		anchored = true;
 		yaw = mc.player.getYRot();
 		pitch = mc.player.getXRot();
 		previous = mc.options.getCameraType();
 		mc.options.setCameraType(view.get() == View.FRONT ? CameraType.THIRD_PERSON_FRONT : CameraType.THIRD_PERSON_BACK);
 	}
 
+	/** Gives the camera back; on the next world it starts again from that player. */
+	private void release() {
+		if (anchored && snapBack.get() && previous != null) mc.options.setCameraType(previous);
+		previous = null;
+		anchored = false;
+	}
+
 	@Override
 	protected void onDisable() {
-		if (snapBack.get() && previous != null) mc.options.setCameraType(previous);
-		previous = null;
+		release();
+	}
+
+	@Subscribe
+	private void onTick(TickEvent.Pre e) {
+		anchor();
+	}
+
+	/** Leaving a world (disconnecting) gives the camera back, so the next world doesn't start from this one's look. */
+	@Subscribe
+	private void onLeave(WorldEvent.Leave e) {
+		release();
 	}
 
 	@Subscribe
 	private void onMouse(MouseLookEvent e) {
+		if (!anchored) return;
 		e.cancel();
 		yaw += (float) (e.deltaX() * 0.15);
 		pitch = Mth.clamp(pitch + (float) (e.deltaY() * 0.15), -90, 90);
@@ -74,6 +103,7 @@ public class FreeLook extends Module {
 
 	@Subscribe
 	private void onCamera(CameraEvent.Rotation e) {
+		if (!anchored) return;
 		// Front view looks back at the player, so flip the orbit.
 		e.yaw = view.get() == View.FRONT ? yaw + 180 : yaw;
 		e.pitch = view.get() == View.FRONT ? -pitch : pitch;
