@@ -3,7 +3,7 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
-## 0.3.2 (unreleased)
+## 0.3.2
 
 - **Free Look**: turned on outside a world, it waits for one to start from your look; leaving a world gives the camera
   back, so the next one doesn't start from the last one's look or third person. With core 0.3.4, a hold bind let go
