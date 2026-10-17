@@ -3,6 +3,23 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## Unreleased (hooks branch)
+
+Needs the Myriad core with hooks (control-panels branch).
+
+- **Elytra Swap**: No Durability is a module of its own, for any flight: Elytra Fly's types and, with When You Fly,
+  flying yourself (it was Elytra Fly's No Durability and Auto Armor's No Durability Elytra). Saved settings move over:
+  with No Durability on (the default) Elytra Swap comes on, When You Fly from Auto Armor's setting. Elytra Fly says
+  once when it flies on Grim with Elytra Swap off.
+- **Lock Rotation**: Elytra Fly's Lock Heading as a module (Altitude and Control follow it), locking at takeoff or,
+  with Lock At: Turned On, when you turn it on. Turned on where Lock Heading was.
+- **Auto Walk** flies Control forward too; Control's own Auto Walk setting is gone.
+- **Control panels**: Highway (Recast, Elytra Swap, Auto Eat) and Cruise (Altitude, Elytra Swap, Lock Rotation, Auto
+  Eat).
+- **Hooks** for other addons: `ElytraSwap.BEHAVIOUR`, `LockRotation.HEADING`, `KillAura.TARGET`,
+  `Offhand.FORCE_TOTEM`. Elytra Fly's types have ids (`myriad-essentials:recast`, ...) to match on.
+- Code: imports tidied, notifications through `toast(...)`, a leftover of Recast removed.
+
 ## 0.3.2
 
 - **Free Look**: turned on outside a world, it waits for one to start from your look; leaving a world gives the camera

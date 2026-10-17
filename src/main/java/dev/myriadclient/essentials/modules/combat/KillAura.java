@@ -6,6 +6,7 @@ import dev.myriadclient.api.combat.Targets;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.Render3DEvent;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.hook.Hook;
 import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.render.Renderer3D;
@@ -30,6 +31,9 @@ import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * Attacks the best target in reach, the way Grim (2b2t) checks hits: it turns to face the target (walking along that
@@ -44,6 +48,13 @@ import net.minecraft.world.phys.Vec3;
  * <p>
  * It pauses while you use an item (eating, blocking, drawing a bow), fly with an elytra (turning would steer you) or
  * have a container open, as vanilla can't attack then either.
+ * <p>
+ * For addon developers: which entity it attacks is {@link #TARGET}'s to decide (a team's priorities, a focus target),
+ * from the ones its Targets settings allow in reach, best first:
+ *
+ * <pre>{@code
+ * ctx.hook(KillAura.TARGET).named("Focus").handle(call -> focus != null && call.input().inReach().contains(focus) ? focus : call.proceed());
+ * }</pre>
  */
 public class KillAura extends Module {
 	public enum Weapon {
@@ -54,6 +65,17 @@ public class KillAura extends Module {
 		/** Hit with whatever is in your hand. */
 		ANYTHING
 	}
+
+	/** The entities a target can be chosen from: those its Targets settings allow within {@code reach}, best first. */
+	public record Candidates(List<Entity> inReach, double reach) {
+		public @Nullable Entity best() {
+			return inReach.isEmpty() ? null : inReach.getFirst();
+		}
+	}
+
+	/** Which entity Kill Aura attacks (null: none this tick). The default is the best candidate. */
+	public static final Hook<Candidates, Entity> TARGET = Hook.of("myriad-essentials:kill_aura_target", "Kill Aura target",
+		"Which entity in reach Kill Aura attacks.");
 
 	private final EnumSetting<Weapon> weapon = sgGeneral.enumSetting("Weapon", Weapon.HOLDING)
 		.description("Holding: only attack while you hold a weapon. Switch: attack with your best weapon, from the hotbar or inventory, without changing what you hold. Anything: hit with whatever you hold.").build();
@@ -94,7 +116,7 @@ public class KillAura extends Module {
 		if (!inGame()) return;
 		double range = Reach.entityRange();
 		Entity near = paused() ? null : targets.best(range + (weapon.get() == Weapon.SWITCH ? PRE_CHARGE : 0));
-		Entity t = near == null ? null : targets.best(range);
+		Entity t = near == null ? null : choose(range);
 		if (!armed(near != null, t != null) || t == null) return;
 		target = t;
 
@@ -108,6 +130,14 @@ public class KillAura extends Module {
 		if (lands(t, range, Myriad.rotations().serverYaw(), Myriad.rotations().serverPitch()) || landsThisTick(t, range, r)) {
 			Interactions.attack(t, true);
 		}
+	}
+
+	/** The target within {@code range}: the best one its settings allow, unless a {@link #TARGET} hook picks another. */
+	private @Nullable Entity choose(double range) {
+		if (!TARGET.hooked()) return targets.best(range);
+		Candidates candidates = new Candidates(targets.query().range(range).list(), range);
+		Entity t = TARGET.call(this, candidates, Candidates::best);
+		return t != null && t.isAlive() ? t : null;
 	}
 
 	/**

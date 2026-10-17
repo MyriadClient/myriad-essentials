@@ -12,6 +12,8 @@ import dev.myriadclient.api.util.Slots;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.Arrays;
+
 /**
  * Keeps hotbar stacks topped up from the rest of your inventory: a stack running low is refilled with the same item,
  * and a slot you've just used up gets the same item back. Every slot that needs it at once (as far as the packet budget
@@ -45,7 +47,7 @@ public class StackReplenish extends Module {
 
 	@Override
 	protected void onEnable() {
-		java.util.Arrays.fill(last, ItemStack.EMPTY);
+		Arrays.fill(last, ItemStack.EMPTY);
 	}
 
 	@Subscribe

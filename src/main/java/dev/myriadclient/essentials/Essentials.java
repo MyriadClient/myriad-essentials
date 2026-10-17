@@ -2,6 +2,7 @@ package dev.myriadclient.essentials;
 
 import dev.myriadclient.api.addon.AddonContext;
 import dev.myriadclient.api.addon.MyriadAddon;
+import dev.myriadclient.api.control.ControlPreset;
 import dev.myriadclient.essentials.hud.ArmorPanel;
 import dev.myriadclient.essentials.hud.BindsPanel;
 import dev.myriadclient.essentials.hud.ChestCountPanel;
@@ -24,7 +25,9 @@ import dev.myriadclient.essentials.modules.combat.KillAura;
 import dev.myriadclient.essentials.modules.combat.Offhand;
 import dev.myriadclient.essentials.modules.movement.AutoWalk;
 import dev.myriadclient.essentials.modules.movement.ElytraFly;
+import dev.myriadclient.essentials.modules.movement.ElytraSwap;
 import dev.myriadclient.essentials.modules.movement.InventoryMove;
+import dev.myriadclient.essentials.modules.movement.LockRotation;
 import dev.myriadclient.essentials.modules.movement.RocketBoost;
 import dev.myriadclient.essentials.modules.movement.Velocity;
 import dev.myriadclient.essentials.modules.player.AutoEat;
@@ -65,19 +68,41 @@ import static dev.myriadclient.api.ui.PanelType.Anchor.TOP_RIGHT;
 public final class Essentials implements MyriadAddon {
 	@Override
 	public void initialize(AddonContext ctx) {
+		// Modules the ready-made control panels below combine.
+		ElytraSwap elytraSwap = new ElytraSwap();
+		LockRotation lockRotation = new LockRotation();
+		ElytraFly elytraFly = new ElytraFly();
+		AutoEat autoEat = new AutoEat();
+
 		ctx.registerModules(
+			// Building blocks other modules use (and control panels combine with them). First: they load before the
+			// modules whose former settings they take over (Elytra Fly, Auto Armor).
+			elytraSwap, lockRotation,
 			// Combat
 			new Offhand(), new AutoArmor(), new AutoDisconnect(), new KillAura(),
 			// Movement
-			new ElytraFly(), new RocketBoost(), new AutoWalk(), new InventoryMove(), new Velocity(),
+			elytraFly, new RocketBoost(), new AutoWalk(), new InventoryMove(), new Velocity(),
 			// Player
-			new AutoEat(), new AutoTool(), new InventoryTweaks(), new MiddleClick(), new PacketMine(), new Reach(), new StackReplenish(), new WallInteract(), new XCarry(),
+			autoEat, new AutoTool(), new InventoryTweaks(), new MiddleClick(), new PacketMine(), new Reach(), new StackReplenish(), new WallInteract(), new XCarry(),
 			// Render
 			new ESP(), new BlockESP(), new BlockHighlight(), new Storage(), new Tracers(), new Nametags(), new NoRender(), new Tooltips(), new FullBright(), new FreeLook(), new Freecam(),
 			new TimeOfDay(), new ViewModel(), new Zoom(),
 			// World
 			new AirPlace(), new Scaffold()
 		);
+
+		// Ready-made control panels: one bind turns the set on, Elytra Fly flying the type given while it's on.
+		ctx.registerControlPanel(ControlPreset.builder("Highway")
+			.module(elytraFly, m -> m.set(elytraFly.type, ElytraFly.RECAST))
+			.module(elytraSwap)
+			.module(autoEat)
+			.build());
+		ctx.registerControlPanel(ControlPreset.builder("Cruise")
+			.module(elytraFly, m -> m.set(elytraFly.type, ElytraFly.ALTITUDE))
+			.module(elytraSwap)
+			.module(lockRotation)
+			.module(autoEat)
+			.build());
 
 		// HUD elements. The ones with a position are placed on a fresh install; the rest are added from the HUD workspace.
 		ctx.registerHud("Watermark", "", WatermarkPanel::new, TOP_LEFT, 0, 0);

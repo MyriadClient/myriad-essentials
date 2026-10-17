@@ -1,7 +1,6 @@
 package dev.myriadclient.essentials.modules.movement;
 
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.util.ItemInfo;
 import net.minecraft.client.player.LocalPlayer;
@@ -88,8 +87,6 @@ public class Altitude extends ElytraMode {
 	private Phase phase = Phase.DIVE;
 	private float climbPitch;
 	private double cruiseY = Double.NaN;
-	/** With Lock Heading, the yaw it flies at: where you faced when the glide started (NaN until then). */
-	private float lockedYaw = Float.NaN;
 	/** Coming down to land (the elytra nearly worn out, or it can't go on), and why. */
 	private boolean landing;
 	private String landReason = "";
@@ -105,7 +102,6 @@ public class Altitude extends ElytraMode {
 	protected void resetFlight() {
 		phase = Phase.DIVE;
 		cruiseY = Double.NaN;
-		lockedYaw = Float.NaN;
 		landing = false;
 		landReason = "";
 		setbacks.clear();
@@ -117,8 +113,9 @@ public class Altitude extends ElytraMode {
 		return landing ? "Landing" : steadyTicks > 0 ? "Steadying" : Double.isNaN(cruiseY) ? null : String.format("Y%.0f", cruiseY);
 	}
 
+	/** Long fast glides: each start waits for the server to have the elytra back on (see ElytraSwap.Behaviour). */
 	@Override
-	public boolean equipBeforeStart() {
+	protected boolean waitsForElytra() {
 		return true;
 	}
 
@@ -138,8 +135,6 @@ public class Altitude extends ElytraMode {
 			countSetback(p);
 		}
 		if (landing && (p.onGround() || p.isInWater())) landed();
-		// The lock lasts the flight: a glide No Durability restarts in the air keeps it, a landing ends it.
-		if (!fly.lockHeading() || p.onGround() || p.isInWater()) lockedYaw = Float.NaN;
 		if (!canGlide()) {
 			spoofing = false;
 			return;
@@ -153,8 +148,7 @@ public class Altitude extends ElytraMode {
 			return;
 		}
 		if (Double.isNaN(cruiseY)) cruiseY = p.getY();
-		if (fly.lockHeading() && Float.isNaN(lockedYaw)) lockedYaw = p.getYRot();
-		float yaw = Float.isNaN(lockedYaw) ? p.getYRot() : lockedYaw;
+		float yaw = LockRotation.headingFor(this, p.getYRot());
 		if (!landing && elytraWearingOut()) {
 			int spare = spareElytra();
 			if (spare < 0) cannotGoOn("last elytra nearly worn out");

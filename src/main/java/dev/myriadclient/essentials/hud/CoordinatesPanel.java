@@ -3,9 +3,10 @@ package dev.myriadclient.essentials.hud;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.ui.hud.HudStyle;
 import dev.myriadclient.api.ui.hud.TextHudPanel;
+import net.minecraft.world.level.Level;
+
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.world.level.Level;
 
 /** Where you are, and the matching Nether or Overworld coordinates. */
 public final class CoordinatesPanel extends TextHudPanel {

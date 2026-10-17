@@ -1,50 +1,38 @@
 package dev.myriadclient.essentials.modules.movement;
 
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.setting.DoubleSetting;
-import dev.myriadclient.api.setting.BoolSetting;
-import dev.myriadclient.api.event.events.InteractEvent;
-import dev.myriadclient.api.event.Priority;
-import dev.myriadclient.api.event.Subscribe;
-import dev.myriadclient.api.event.events.InputEvent;
-import dev.myriadclient.api.event.events.PacketEvent;
-import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.build.Target;
+import dev.myriadclient.api.elytra.ChestSwap;
+import dev.myriadclient.api.event.events.InputEvent;
 import dev.myriadclient.api.service.AntiCheat;
 import dev.myriadclient.api.service.Breaking;
 import dev.myriadclient.api.service.Notifications;
 import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.service.Rotations;
 import dev.myriadclient.api.setting.EnumSetting;
-import dev.myriadclient.api.util.ItemInfo;
 import dev.myriadclient.api.util.Baritone;
 import dev.myriadclient.api.util.Interactions;
 import dev.myriadclient.api.util.Packets;
 import dev.myriadclient.essentials.modules.player.AutoEat;
-import dev.myriadclient.api.elytra.ChestSwap;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
-import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * Bounces along a highway along the ground, on an elytra. It jumps each time you touch down and keeps you on the nearest
@@ -195,7 +183,7 @@ public class Recast extends ElytraMode {
 	private final double[] progress = new double[STUCK_TICKS];
 	private int progressCount;
 	/** Game times of recent setbacks. */
-	private final java.util.ArrayDeque<Long> setbacks = new java.util.ArrayDeque<>();
+	private final ArrayDeque<Long> setbacks = new ArrayDeque<>();
 	/** Stuck, or set back too often: the lane counts as blocked until it's passed. */
 	private boolean forcedBlock;
 	private boolean warned;
@@ -570,7 +558,11 @@ public class Recast extends ElytraMode {
 	 * each replacing the last (the same one again is counted on it), not a stack of them on a broken stretch.
 	 */
 	private void status(String message, boolean warning) {
-		Myriad.notifications().send(name(), message, warning ? Notifications.Level.WARNING : Notifications.Level.INFO, warning ? 4000 : 3000, "essentials:recast");
+		Myriad.notifications().toast(name(), message)
+			.level(warning ? Notifications.Level.WARNING : Notifications.Level.INFO)
+			.lasting(warning ? 4000 : 3000)
+			.replacing("essentials:recast")
+			.show();
 	}
 
 	/**
@@ -634,22 +626,13 @@ public class Recast extends ElytraMode {
 	/** A hotbar slot with ordinary building blocks: -1 if there are none at all, -2 while some are brought in. */
 	private int fillerSlot() {
 		var inv = Myriad.inventory();
-		java.util.function.Predicate<ItemStack> filler = Recast::isFiller;
+		Predicate<ItemStack> filler = Recast::isFiller;
 		int slot = inv.findInHotbar(filler);
 		if (slot >= 0) return slot;
 		int from = inv.findInInventory(filler);
 		if (from < 0) return -1;
 		inv.pullToHotbar(from, s -> false);
 		return -2;
-	}
-
-	private void giveUp(String why) {
-		if (ifBlocked.get() == IfBlocked.DISCONNECT) {
-			leave(why);
-			return;
-		}
-		warn(why + ": turning off");
-		disable();
 	}
 
 	/**

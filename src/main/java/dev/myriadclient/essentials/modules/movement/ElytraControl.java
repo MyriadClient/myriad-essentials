@@ -2,7 +2,6 @@ package dev.myriadclient.essentials.modules.movement;
 
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.GlideEvent;
-import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
@@ -10,9 +9,10 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Elytra Fly's Control: flies the elytra like a creative flight. While you glide, the keys move you and nothing else
- * does: forward, back and the sides go along the camera's heading at Speed (or, with Lock Heading, the heading you
- * faced when the glide started, sent to the server while the camera looks where you like; Auto Walk holds forward),
- * jump climbs and sneak descends at Vertical Speed, and with neither you hold your height, sinking at Sink. Turning and slowing down are instant; speed builds up
+ * does: forward, back and the sides go along the camera's heading at Speed (or, while {@link LockRotation} holds one,
+ * the locked heading, sent to the server while the camera looks where you like; {@link AutoWalk} holds forward for
+ * you), jump climbs and sneak descends at Vertical Speed, and with neither you hold your height, sinking at Sink.
+ * Turning and slowing down are instant; speed builds up
  * as fast as NoCheatPlus's elytra check allows (it predicts a vanilla glide from your last move and your look, and
  * takes up to 0.1 blocks a tick more, whatever the direction), about 1.8 blocks a second each tick. The elytra still
  * opens the vanilla way (jump in the air). It doesn't fly into chunks that haven't loaded.
@@ -29,8 +29,6 @@ public class ElytraControl extends ElytraMode {
 	private final DoubleSetting sink = sgGeneral.doubleSetting("Sink")
 		.description("How fast you drift down with neither jump nor sneak held, in blocks a second (0 holds your height).")
 		.defaultValue(0).range(0, 20).decimals(2).visible(this::chosen).build();
-	private final BoolSetting autoWalk = sgGeneral.bool("Auto Walk")
-		.description("Fly forward without holding the key (back still stops you).").defaultValue(false).visible(this::chosen).build();
 
 	/** NoCheatPlus's slack over the vanilla glide it predicts, blocks a tick, less a margin. */
 	private static final double SPEED_SLACK = 0.09;
@@ -39,8 +37,6 @@ public class ElytraControl extends ElytraMode {
 
 	/** The horizontal movement asked for last tick, blocks a tick: what this tick builds on. */
 	private Vec3 flown = Vec3.ZERO;
-	/** With Lock Heading, the yaw it flies along: where you faced when the glide started (NaN until then). */
-	private float lockedYaw = Float.NaN;
 
 	ElytraControl(ElytraFly fly) {
 		super(fly, ElytraFly.CONTROL);
@@ -49,7 +45,6 @@ public class ElytraControl extends ElytraMode {
 	@Override
 	protected void resetFlight() {
 		flown = Vec3.ZERO;
-		lockedYaw = Float.NaN;
 	}
 
 	@Override
@@ -60,17 +55,15 @@ public class ElytraControl extends ElytraMode {
 			flown = Vec3.ZERO;
 		}
 		var p = mc.player;
-		// The lock lasts the flight: a glide No Durability restarts in the air keeps it, a landing ends it.
-		if (!fly.lockHeading() || p.onGround() || p.isInWater()) lockedYaw = Float.NaN;
-		if (fly.lockHeading() && p.isFallFlying() && Float.isNaN(lockedYaw)) lockedYaw = p.getYRot();
-		// The server sees the heading flown (NoCheatPlus predicts the glide from your look); the camera stays yours.
-		if (!Float.isNaN(lockedYaw)) spoof(lockedYaw, p.getXRot());
+		// With Lock Rotation holding a heading, the server sees the heading flown (NoCheatPlus predicts the glide from
+		// your look); the camera stays yours.
+		if (LockRotation.holding()) spoof(heading(p), p.getXRot());
 		else spoofing = false;
 	}
 
-	/** The yaw the keys move you relative to: the locked heading, or the camera's. */
+	/** The yaw the keys move you relative to: Lock Rotation's heading, or the camera's. */
 	private float heading(LocalPlayer p) {
-		return Float.isNaN(lockedYaw) ? p.getYRot() : lockedYaw;
+		return LockRotation.headingFor(this, p.getYRot());
 	}
 
 	@Override
@@ -91,7 +84,7 @@ public class ElytraControl extends ElytraMode {
 			return null;
 		}
 		var keys = p.input.keyPresses;
-		double ahead = (keys.forward() || autoWalk.get() ? 1 : 0) - (keys.backward() ? 1 : 0);
+		double ahead = (keys.forward() ? 1 : 0) - (keys.backward() ? 1 : 0);
 		double side = (keys.left() ? 1 : 0) - (keys.right() ? 1 : 0);
 		Vec3 wanted = Vec3.ZERO;
 		if (ahead != 0 || side != 0) {

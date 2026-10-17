@@ -10,13 +10,14 @@ import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SettingGroup;
-import java.util.Set;
-import java.util.function.Function;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+
+import java.util.Set;
+import java.util.function.Function;
 
 /** Hides distracting overlays, HUD parts, entities and blocks. Read by this addon's render mixins. */
 public class NoRender extends Module {

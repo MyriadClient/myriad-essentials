@@ -127,9 +127,14 @@ def settle(x, y, z, timeout=5.0):
     client("wait 5", timeout=10)
 
 
+# Respawned with every module off (.panic), then Elytra Swap back on for Elytra Fly's flights (No Durability, its
+# setting before it became a module, was on by default) but not for flying yourself.
+FRESH = ("respawn", ".panic", ".set elytra_swap when_you_fly false", ".toggle elytra_swap on")
+
+
 def reset(x=1000.5, y=100, z=0.5, yaw=-90, pitch=0, arena=True):
     global _arena_loaded
-    client("respawn", ".panic", "wait 5")
+    client(*FRESH, "wait 5")
     # The server only changes loaded chunks: the arena's stay loaded, so it's built before the tester gets there.
     if not _arena_loaded:
         forceload_area(976, -32, 1047, 31)
@@ -328,7 +333,7 @@ def t_stack_replenish():
 
 
 def t_elytra_altitude():
-    client("respawn", ".panic", "wait 20")
+    client(*FRESH, "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"tp {P} 2000.5 230 0.5 -90 0")
     time.sleep(1.5)
     mark()
@@ -340,17 +345,16 @@ def t_elytra_altitude():
 
 
 def t_elytra_no_durability():
-    client("respawn", ".panic", "wait 20")
+    client(*FRESH, "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate",
         f"tp {P} 3000.5 300 0.5 -90 0")
     time.sleep(1.5)
     mark()
-    # Auto Armor's No Durability Elytra: the swapping for flying yourself (Altitude has breaks instead). The elytra opened
-    # as a player does, jump pressed while falling, then gliding on its own, looking a little down. What it wore before
-    # No Durability was on doesn't count.
-    client(".set auto_armor no_durability_elytra true", "look -90 10", "hold jump 2", "wait 5", timeout=30)
+    # Elytra Swap when you fly yourself (Altitude has breaks instead). The elytra opened as a player does, jump pressed
+    # while falling, then gliding on its own, looking a little down. What it wore before Elytra Swap was on doesn't count.
+    client(".toggle elytra_swap off", ".set elytra_swap when_you_fly true", "look -90 10", "hold jump 2", "wait 5", timeout=30)
     before = elytra_damage()
-    client(".toggle auto_armor on", "wait 200", ".toggle auto_armor off", ".set auto_armor no_durability_elytra false", "wait 20", timeout=90)
+    client(".toggle auto_armor on", ".toggle elytra_swap on", "wait 200", ".toggle auto_armor off", ".toggle elytra_swap off", "wait 20", timeout=90)
     damage = elytra_damage() - before
     hp, x = health(), position()[0]
     return 0 <= damage <= 2 and hp > 0 and x > 3060, f"elytra damage {damage} after 10 s of flight, {x - 3000:.0f} blocks, health {hp:.0f}"
@@ -362,19 +366,19 @@ def health():
 
 
 def t_elytra_no_durability_landing():
-    # No Durability keeps the server from gliding you, so it counts every block you come down as a fall; gliding down
+    # Elytra Swap keeps the server from gliding you, so it counts every block you come down as a fall; gliding down
     # to the ground afterwards must not cost any of it.
-    client("respawn", ".panic", "wait 20")
+    client(*FRESH, "wait 20")
     # Force-loaded chunks take the fill without anyone there; then stand on the floor while setting up.
     forceload_area(4990, -24, 5400, 24)
     time.sleep(1)
     cmd("fill 4990 150 -20 5400 150 20 stone", f"tp {P} 5000.5 151 10.5 -90 0", f"clear {P}", f"gamemode survival {P}", f"effect clear {P}",
         f"effect give {P} instant_health 1 5 true", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate")
-    client(".set elytra_fly no_durability true", ".set auto_armor no_durability_elytra true", "look -90 0", timeout=30)
+    client(".toggle elytra_swap on", ".set elytra_swap when_you_fly true", "look -90 0", timeout=30)
     cmd(f"tp {P} 5000.5 230 10.5 -90 0")
-    # Altitude flies a while, then you glide down yourself, Auto Armor's No Durability Elytra taking over the swapping.
+    # Altitude flies a while, then you glide down yourself, Elytra Swap's own swapping (When You Fly) taking over.
     client(".toggle auto_armor on", ".set elytra_fly type altitude", ".toggle elytra_fly on", "wait 120", ".toggle elytra_fly off", "look -90 25", "wait 200", ".toggle auto_armor off",
-        ".set auto_armor no_durability_elytra false", "wait 10", timeout=90)
+        ".toggle elytra_swap off", "wait 10", timeout=90)
     x, y, _ = position()
     hp = health()
     # Dying puts you back at spawn, at full health: only a landing out here counts.
@@ -383,7 +387,7 @@ def t_elytra_no_durability_landing():
 
 def recast_highway(*setup, end=4400):
     """A 3-wide obsidian highway at y=200 from x=4000 to `end`, the tester on it facing east, then `setup` commands."""
-    client("respawn", ".panic", "wait 20")
+    client(*FRESH, "wait 20")
     forceload_area(3990, -8, end, 8)
     cmd(f"tp {P} 4000.5 201 0.5 -90 0")
     time.sleep(1.5)
@@ -428,9 +432,9 @@ def elytra_damage():
 
 
 def t_elytra_recast_no_durability():
-    # 30 s of bouncing with No Durability: the server's glides must never last the 20 ticks that wear the elytra.
+    # 30 s of bouncing with Elytra Swap: the server's glides must never last the 20 ticks that wear the elytra.
     recast_highway(f"item replace entity {P} hotbar.1 with diamond_chestplate", end=4980)
-    client(".set elytra_fly no_durability true", ".set elytra_fly obstacles stop", "wait 10",
+    client(".toggle elytra_swap on", ".set elytra_fly obstacles stop", "wait 10",
         ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 600", ".toggle elytra_fly off", "wait 20", timeout=120)
     x = position()[0]
     damage = elytra_damage()
@@ -438,10 +442,10 @@ def t_elytra_recast_no_durability():
 
 
 def t_elytra_recast_diagonal():
-    # 2b2t's diagonals: a 3-wide band along x=z. The server misses more landings here, so No Durability's cut matters
+    # 2b2t's diagonals: a 3-wide band along x=z. The server misses more landings here, so Elytra Swap's cut matters
     # most; 15 s of bouncing with the chestplate in the main inventory mustn't wear the elytra.
     x0, length = 7000, 500
-    client("respawn", ".panic", "wait 20")
+    client(*FRESH, "wait 20")
     cmd("forceload remove all")
     chunks = {((x0 + i + dx) >> 4, (i + dz) >> 4) for i in range(-8, length + 8) for dx in (-6, 6) for dz in (-6, 6)}
     forceload(*chunks)
@@ -455,7 +459,7 @@ def t_elytra_recast_diagonal():
         f"item replace entity {P} inventory.5 with diamond_chestplate", f"tp {P} {x0}.5 201 0.5 -45 0")
     time.sleep(1)
     mark()
-    client(".set elytra_fly no_durability true", ".set elytra_fly obstacles stop", "wait 10",
+    client(".toggle elytra_swap on", ".set elytra_fly obstacles stop", "wait 10",
         ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 300", ".toggle elytra_fly off", "wait 20", timeout=90)
     x, y, z = position()
     worn = elytra_damage()
@@ -488,7 +492,7 @@ def t_elytra_recast_spare_elytras():
     # the same elytra keeps being used, spares stay where they are and don't wear, and nothing warns.
     recast_highway(f"item replace entity {P} inventory.5 with diamond_chestplate", f"item replace entity {P} inventory.10 with elytra",
         f"item replace entity {P} inventory.11 with elytra", f"item replace entity {P} inventory.12 with elytra", end=4980)
-    client(".set auto_armor chest elytra", ".set auto_armor await_landing false", ".toggle auto_armor on", ".set elytra_fly no_durability true",
+    client(".set auto_armor chest elytra", ".set auto_armor await_landing false", ".toggle auto_armor on", ".toggle elytra_swap on",
         ".set elytra_fly obstacles stop", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 400",
         ".toggle elytra_fly off", "wait 40", ".toggle auto_armor off", ".set auto_armor chest chestplate",
         ".set auto_armor await_landing true", timeout=90)
@@ -500,11 +504,11 @@ def t_elytra_recast_spare_elytras():
 
 
 def t_elytra_recast_full_hotbar():
-    # No hotbar slot for the chestplate: No Durability says so once and the bounce carries on (it used to release your
+    # No hotbar slot for the chestplate: Elytra Swap says so once and the bounce carries on (it used to release your
     # keys every tick trying).
     recast_highway(f"item replace entity {P} inventory.5 with diamond_chestplate",
         *[f"item replace entity {P} hotbar.{i} with {item} 64" for i, item in enumerate(["dirt", "cobblestone", "stone", "oak_planks", "glass", "sand", "gravel", "netherrack", "andesite"])])
-    client(".set elytra_fly no_durability true", ".set elytra_fly obstacles stop", "wait 10",
+    client(".toggle elytra_swap on", ".set elytra_fly obstacles stop", "wait 10",
         ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 200", ".toggle elytra_fly off", "wait 20", timeout=90)
     x = position()[0]
     # (The warning is a toast, not in the log.) Nothing was clicked: the chestplate is where it was, the hotbar unchanged.
@@ -611,13 +615,13 @@ def t_auto_armor_keeps_worn_elytra():
 
 def t_altitude_preserve():
     # Flying with an elytra 12 uses from wearing out and a fresh one carried: swapped in mid-air, still flying.
-    client("respawn", ".panic", "wait 20")
+    client(*FRESH, "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra[damage=420]", f"item replace entity {P} inventory.5 with elytra",
         f"tp {P} 6000.5 300 0.5 -90 0")
     time.sleep(1.5)
     mark()
-    client(".set elytra_fly no_durability false", ".set elytra_fly type altitude", ".toggle elytra_fly on", "wait 60", "status", ".toggle elytra_fly off",
-        ".set elytra_fly no_durability true", timeout=60)
+    client(".toggle elytra_swap off", ".set elytra_fly type altitude", ".toggle elytra_fly on", "wait 60", "status", ".toggle elytra_fly off",
+        ".toggle elytra_swap on", timeout=60)
     y = position()[1]
     worn, spare = damage(102), damage(14)
     # The fresh one wears a point a second for the rest of the flight.
@@ -625,9 +629,9 @@ def t_altitude_preserve():
 
 
 def t_elytra_wearing_out():
-    # Altitude with an elytra that won't last the flight (102 uses left, 225 blocks up, no No Durability): it has to come
+    # Altitude with an elytra that won't last the flight (102 uses left, 225 blocks up, no chestplate for Elytra Swap): it has to come
     # down and land before it breaks, not fall when it does.
-    client("respawn", ".panic", "wait 20")
+    client(*FRESH, "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"effect clear {P}", f"effect give {P} instant_health 1 5 true",
         f"item replace entity {P} armor.chest with elytra[damage=330]")
     client(".set elytra_fly after_landing stay", "look -90 0", timeout=30)
@@ -640,13 +644,13 @@ def t_elytra_wearing_out():
 
 
 def t_elytra_altitude_no_durability():
-    # Altitude with No Durability: the server glides a tick at a time, each start once it has the elytra on. 30 s.
-    client("respawn", ".panic", "wait 20")
+    # Altitude with Elytra Swap: the server glides a tick at a time, each start once it has the elytra on. 30 s.
+    client(*FRESH, "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate",
         f"tp {P} 13000.5 300 0.5 -90 0")
     time.sleep(1.5)
     mark()
-    client(".set elytra_fly no_durability true", ".set elytra_fly after_landing stay", "look -90 0", timeout=30)
+    client(".toggle elytra_swap on", ".set elytra_fly after_landing stay", "look -90 0", timeout=30)
     # A teleport keeps a glide going: what it wore before Altitude was on doesn't count.
     before = elytra_damage()
     client(".set elytra_fly type altitude", ".toggle elytra_fly on", "wait 600", timeout=60)
@@ -657,34 +661,34 @@ def t_elytra_altitude_no_durability():
 
 
 def t_altitude_lock_heading():
-    # Lock Heading with No Durability: the camera turns 90° (and back and forth) mid-flight, the flight keeps going
-    # east, through No Durability's glide restarts too.
-    client("respawn", ".panic", "wait 20")
+    # Lock Rotation with Elytra Swap: the camera turns 90° (and back and forth) mid-flight, the flight keeps going
+    # east, through Elytra Swap's glide restarts too.
+    client(*FRESH, "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"item replace entity {P} hotbar.1 with diamond_chestplate",
         f"tp {P} 15000.5 300 0.5 -90 0")
     time.sleep(1.5)
     mark()
-    client(".set elytra_fly no_durability true", ".set elytra_fly after_landing stay", ".set elytra_fly lock_heading true", "look -90 0", timeout=30)
+    client(".toggle elytra_swap on", ".set elytra_fly after_landing stay", ".toggle lock_rotation on", "look -90 0", timeout=30)
     client(".set elytra_fly type altitude", ".toggle elytra_fly on", "wait 40", "look 0 0", "wait 120", "look 60 30", "wait 120", "look 0 -20", "wait 120", timeout=60)
     x, y, z = position()
-    client(".toggle elytra_fly off", ".set elytra_fly lock_heading false", timeout=30)
+    client(".toggle elytra_fly off", ".toggle lock_rotation off", timeout=30)
     return x - 15000 > 150 and abs(z) < 5 and y > 180, f"{x - 15000:.0f} blocks east, {z:.1f} sideways, y={y:.0f}"
 
 
 def t_elytra_altitude_spare():
-    # Altitude with No Durability: the worn elytra (52 uses left, less than landing from 300 takes) is
+    # Altitude with Elytra Swap: the worn elytra (52 uses left, less than landing from 300 takes) is
     # swapped in mid-air for the spare in the inventory, and the flight goes on.
-    client("respawn", ".panic", "wait 20")
+    client(*FRESH, "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"effect clear {P}", f"effect give {P} instant_health 1 5 true",
         f"item replace entity {P} armor.chest with elytra[damage=380]", f"item replace entity {P} inventory.5 with elytra",
         f"item replace entity {P} hotbar.1 with diamond_chestplate")
-    client(".set elytra_fly no_durability true", ".set elytra_fly after_landing stay", "look -90 0", timeout=30)
+    client(".toggle elytra_swap on", ".set elytra_fly after_landing stay", "look -90 0", timeout=30)
     cmd(f"tp {P} 11000.5 300 0.5 -90 0")
     time.sleep(1.5)
     mark()
     client(".set elytra_fly type altitude", ".toggle elytra_fly on", "wait 300", timeout=60)
     x, y, _ = position()
-    # The elytra in use: worn, or in the hotbar during No Durability's break.
+    # The elytra in use: worn, or in the hotbar during Elytra Swap's break.
     damage = elytra_damage()
     client(".toggle elytra_fly off", timeout=30)
     return damage < 100 and y > 150, f"worn elytra damage {damage} after {x - 11000:.0f} blocks, y={y:.0f}"

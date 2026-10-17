@@ -1,14 +1,16 @@
 package dev.myriadclient.essentials.modules.movement;
 
+import com.google.gson.JsonElement;
 import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.service.AntiCheat;
-import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ChoiceSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
+import dev.myriadclient.api.setting.SavedSettings;
 
 import java.util.List;
 
@@ -17,23 +19,19 @@ import java.util.List;
  * holding its height without fireworks, and {@link ElytraControl} flies with the movement keys like a creative flight.
  * Control is only offered where the server's anti-cheat doesn't simulate the glide (6b6t's NoCheatPlus, singleplayer):
  * Grim (2b2t) sets it back from the first tick, so there Type lists only Recast and Altitude, and Control chosen
- * elsewhere waits. No Durability and Preserve are shared (see {@link ElytraMode}); No Durability works the way the
- * server allows (see {@link NoDurability}). Only the chosen type's own settings show.
+ * elsewhere waits. Preserve is shared by the types (see {@link ElytraMode}). Two modules of their own go with it,
+ * often in one control panel: {@link ElytraSwap} keeps the elytra from wearing out, the way the server allows, and
+ * {@link LockRotation} holds the heading for Altitude and Control. Only the chosen type's own settings show.
  */
 public class ElytraFly extends Module {
-	static final String RECAST = "Recast", ALTITUDE = "Altitude", CONTROL = "Control";
+	/** The types, as Type takes them. */
+	public static final String RECAST = "Recast", ALTITUDE = "Altitude", CONTROL = "Control";
 
-	private final ChoiceSetting type = sgGeneral.choice("Type", ElytraFly::types)
+	public final ChoiceSetting type = sgGeneral.choice("Type", ElytraFly::types)
 		.description("Recast: bounce along highways. Altitude: cross open country, holding your height. Control: fly with the movement keys (only where the server checks elytras loosely, such as 6b6t).")
 		.defaultValue(RECAST).onChanged(t -> switchType()).build();
-	private final BoolSetting noDurability = sgGeneral.bool("No Durability")
-		.description("Keep the elytra from wearing out while you glide: with a chestplate from your inventory on 2b2t and servers like it, by stopping and starting the glide elsewhere.")
-		.defaultValue(true).build();
 	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve")
 		.description("Put elytras with less durability than this (%) aside, and fly with another.").defaultValue(5).range(0, 50).decimals(0).build();
-	private final BoolSetting lockHeading = sgGeneral.bool("Lock Heading")
-		.description("Keep flying the way you faced when the glide started, whatever the camera does (to any angle, not snapped). Until you land or turn it off.")
-		.defaultValue(false).visible(() -> type.get().equals(ALTITUDE) || type.get().equals(CONTROL)).build();
 
 	final Recast recast = new Recast(this);
 	final Altitude altitude = new Altitude(this);
@@ -46,6 +44,33 @@ public class ElytraFly extends Module {
 		super(Categories.MOVEMENT, "Elytra Fly", "Fly an elytra: bounce along highways, cross open country, or fly with the movement keys.");
 		// The modules it was before (Recast's settings, keybind and on/off state carry over; it was Elytra Fly before that).
 		formerNames("Recast", "Altitude", "Elytra Control");
+	}
+
+	/**
+	 * 2: No Durability became the Elytra Swap module and Lock Heading the Lock Rotation module, so they can go in
+	 * control panels with any flight (those modules load first, and take over the settings here); Control's Auto Walk
+	 * went, the Auto Walk module doing the same.
+	 */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) {
+			// Only a change from the default is saved: No Durability was on unless saved off.
+			boolean noDurability = saved.get("General", "No Durability").map(JsonElement::getAsBoolean).orElse(true);
+			ElytraSwap.adoptFormerSetting(noDurability, null);
+			if (saved.get("General", "Lock Heading").map(JsonElement::getAsBoolean).orElse(false)) {
+				LockRotation lock = Modules.get(LockRotation.class);
+				if (lock != null) lock.setEnabledSilently(true);
+			}
+			saved.remove("General", "No Durability");
+			saved.remove("General", "Lock Heading");
+			// Control's Auto Walk: the Auto Walk module flies it forward now.
+			saved.remove("General", "Auto Walk");
+		}
 	}
 
 	/** The types offered on this server. */
@@ -63,17 +88,8 @@ public class ElytraFly extends Module {
 		return flying;
 	}
 
-	boolean noDurability() {
-		return noDurability.get();
-	}
-
 	double preserve() {
 		return preserve.get();
-	}
-
-	/** Altitude and Control: fly the heading faced when the glide started. */
-	boolean lockHeading() {
-		return lockHeading.get();
 	}
 
 	/** The type that should fly now: the chosen one, unless it's Control on a server that sets it back. */

@@ -9,6 +9,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.EnderChestBlockEntity;
@@ -42,7 +43,7 @@ public class WallInteract extends Module {
 			Vec3 to = from.add(dir.scale(range));
 			AABB box = camera.getBoundingBox().expandTowards(dir.scale(range)).inflate(1);
 			EntityHitResult hit = ProjectileUtil.getEntityHitResult(camera, from, to, box,
-				e -> EntitySelector.CAN_BE_PICKED.test(e) && (!m.players.get() || e instanceof net.minecraft.world.entity.player.Player), range * range);
+				e -> EntitySelector.CAN_BE_PICKED.test(e) && (!m.players.get() || e instanceof Player), range * range);
 			if (hit != null) return hit;
 		}
 		if (m.containers.get()) {

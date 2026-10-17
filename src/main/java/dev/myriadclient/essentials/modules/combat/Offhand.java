@@ -1,9 +1,11 @@
 package dev.myriadclient.essentials.modules.combat;
 
 import dev.myriadclient.api.Myriad;
+import dev.myriadclient.api.combat.Threats;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.EntityEvent;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.hook.Hook;
 import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -11,7 +13,6 @@ import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SettingGroup;
-import dev.myriadclient.api.combat.Threats;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.item.ItemStack;
@@ -28,6 +29,13 @@ import java.util.function.Predicate;
  * <p>
  * Sword Gap puts a golden apple in your off hand while you hold right click with a sword, so you can eat without
  * switching. A hotbar slot can also keep a spare totem that's selected when your health gets low.
+ * <p>
+ * For addon developers: whether it forces a totem is {@link #FORCE_TOTEM}'s to decide, from the reasons it found
+ * (a crystal PvP addon that knows a bigger hit is coming, a server where a totem is wasted):
+ *
+ * <pre>{@code
+ * ctx.hook(Offhand.FORCE_TOTEM).named("Totem before my crystal").handle(call -> aboutToDetonate() || call.proceed());
+ * }</pre>
  */
 public class Offhand extends Module {
 	public enum Item {
@@ -37,6 +45,20 @@ public class Offhand extends Module {
 	public enum Gapple {
 		ENCHANTED, NORMAL, BOTH
 	}
+
+	/**
+	 * Why a totem might be forced now: health at or below Health, gliding with Elytra on, or (with Lethal) something
+	 * nearby that could kill you, and the health those were judged on.
+	 */
+	public record Danger(float health, boolean lowHealth, boolean gliding, boolean lethal) {
+		public boolean any() {
+			return lowHealth || gliding || lethal;
+		}
+	}
+
+	/** Whether to force a totem into the off hand now. The default: any of the reasons. */
+	public static final Hook<Danger, Boolean> FORCE_TOTEM = Hook.of("myriad-essentials:force_totem", "Force totem",
+		"Whether Offhand forces a totem into your off hand now.");
 
 	private static final Predicate<ItemStack> TOTEM = s -> s.is(Items.TOTEM_OF_UNDYING);
 
@@ -114,12 +136,16 @@ public class Offhand extends Module {
 		wait = delay.get();
 	}
 
-	/** Whether to force a totem: low health, elytra flight, or a hit that could kill you. */
+	/** Whether to force a totem: low health, elytra flight, or a hit that could kill you (or what a hook says). */
 	private boolean inDanger() {
 		float hp = Threats.health();
-		if (item.get() != Item.TOTEM && hp <= health.get()) return true;
-		if (item.get() != Item.TOTEM && elytra.get() && mc.player.isFallFlying()) return true;
-		return lethal.get() && Threats.isLethal(buffer.getFloat());
+		boolean low = item.get() != Item.TOTEM && hp <= health.get();
+		boolean gliding = item.get() != Item.TOTEM && elytra.get() && mc.player.isFallFlying();
+		// The lethal check is the costly one: skipped when another reason already forces a totem and nothing hooks it.
+		if (!FORCE_TOTEM.hooked()) return low || gliding || lethal.get() && Threats.isLethal(buffer.getFloat());
+		Danger danger = new Danger(hp, low, gliding, lethal.get() && Threats.isLethal(buffer.getFloat()));
+		Boolean force = FORCE_TOTEM.call(this, danger, Danger::any);
+		return force != null ? force : danger.any();
 	}
 
 	/** The off hand item when you're safe. */

@@ -4,8 +4,8 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.render.BoxStyle;
 import dev.myriadclient.api.render.HighlightSettings;
-import dev.myriadclient.api.render.HighlightStyle;
 import dev.myriadclient.api.render.MergedBoxes;
 import dev.myriadclient.api.render.MeshBuilder;
 import dev.myriadclient.api.render.Renderer3D;
@@ -17,8 +17,7 @@ import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.world.BlockScan;
 import dev.myriadclient.api.world.ChunkCache;
-import java.util.function.BiConsumer;
-import dev.myriadclient.api.render.BoxStyle;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -31,6 +30,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * Highlights the blocks you pick (spawners, beds, portals, an ore...) through walls, in each block's own colour or one
@@ -62,7 +62,7 @@ public class BlockESP extends Module {
 	 * Outline mode's colours: each chunk mesh's faces pick theirs from here by index, so one list serves every chunk.
 	 * Rebuilt with the meshes; with Block Colors off it's just the one colour, read fresh each frame.
 	 */
-	private final it.unimi.dsi.fastutil.ints.IntArrayList palette = new it.unimi.dsi.fastutil.ints.IntArrayList();
+	private final IntArrayList palette = new IntArrayList();
 
 	private final ChunkCache<List<BlockPos>> found = ChunkCache.of(this, this::scan)
 		.range(range::get)

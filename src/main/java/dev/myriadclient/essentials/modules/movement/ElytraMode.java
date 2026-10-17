@@ -8,10 +8,12 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.InputEvent;
 import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.registry.Identified;
 import dev.myriadclient.api.service.AntiCheat;
 import dev.myriadclient.api.service.Rotations;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.ItemInfo;
+import dev.myriadclient.api.util.MyriadId;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
@@ -23,12 +25,12 @@ import net.minecraft.world.item.ItemStack;
 /**
  * What {@link ElytraFly}'s types ({@link Recast}, {@link Altitude}, {@link ElytraControl}) share: flying with a rotation
  * of their own that only goes to the server and the flight physics (the camera stays yours), opening the elytra the
- * way vanilla does, <b>No Durability</b> (core's {@link NoDurability}, which also catches a glide dropped in mid-air), and
- * <b>Preserve</b>: elytras worn down to it are put aside, the freshest other one going on (in mid-air too). The type
+ * way vanilla does, {@link ElytraSwap} (core's {@link NoDurability}, which also catches a glide dropped in mid-air)
+ * while that module is on, and <b>Preserve</b>: elytras worn down to it are put aside, the freshest other one going on (in mid-air too). The type
  * flying hears events only while it flies ({@link #start}, {@link #stop}); its settings are Elytra Fly's, shown only
- * while it's the one chosen. While one flies, Auto Armor's No Durability Elytra stands down for its swaps.
+ * while it's the one chosen. While one flies, Elytra Swap's own swapping (for when you fly yourself) stands down.
  */
-public abstract class ElytraMode implements NoDurability.Owner, Elytra.Pilot {
+public abstract class ElytraMode implements NoDurability.Owner, Elytra.Pilot, Identified {
 	protected static final Minecraft mc = Minecraft.getInstance();
 	protected final ElytraFly fly;
 	private final String name;
@@ -55,6 +57,15 @@ public abstract class ElytraMode implements NoDurability.Owner, Elytra.Pilot {
 	/** The type's name, as Elytra Fly's Type shows it. */
 	public String name() {
 		return name;
+	}
+
+	/**
+	 * Its id, in Essentials' namespace ({@code myriad-essentials:recast}): what hooks it calls match on
+	 * ({@code Match.caller("myriad-essentials:recast")}), as they would a module's.
+	 */
+	@Override
+	public MyriadId id() {
+		return MyriadId.of(fly.id().namespace(), MyriadId.toPath(name));
 	}
 
 	/** Whether this is the type chosen in Elytra Fly (its settings show then). */
@@ -99,6 +110,8 @@ public abstract class ElytraMode implements NoDurability.Owner, Elytra.Pilot {
 	}
 
 	protected void onEnable() {
+		// Where the server simulates the glide, an elytra worn through a flight goes fast: say how to keep it.
+		if (AntiCheat.strict() && !noDurability()) info("Elytra Swap is off: your elytra wears as you fly.");
 		spoofing = holdGlide = flagged = wantOpen = false;
 		resetFlight();
 		Myriad.elytra().addPilot(this);
@@ -133,9 +146,24 @@ public abstract class ElytraMode implements NoDurability.Owner, Elytra.Pilot {
 	protected void inputDone(InputEvent e) {
 	}
 
+	/** Elytra Swap's behaviour for this flight (see {@link ElytraSwap#BEHAVIOUR}). */
+	private ElytraSwap.Behaviour swap() {
+		return ElytraSwap.behaviourFor(this, waitsForElytra());
+	}
+
+	/** Whether each glide start should wait for the server to have the elytra back on (Altitude's long, fast glides). */
+	protected boolean waitsForElytra() {
+		return false;
+	}
+
 	@Override
 	public boolean noDurability() {
-		return fly.noDurability();
+		return swap().swaps();
+	}
+
+	@Override
+	public boolean equipBeforeStart() {
+		return swap().equipBeforeStart();
 	}
 
 	/** Flying with {@link #spoof}'s rotation: the glide, walking and jumps follow it (see Elytra.Pilot). */

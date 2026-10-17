@@ -1,6 +1,5 @@
 package dev.myriadclient.essentials.hud;
 
-import dev.myriadclient.api.util.Slots;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.render.Canvas;
 import dev.myriadclient.api.render.FontFamily;
@@ -10,11 +9,13 @@ import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.ui.Rect;
 import dev.myriadclient.api.ui.hud.HudPanel;
 import dev.myriadclient.api.ui.hud.ItemHud;
-import java.util.ArrayList;
-import java.util.List;
+import dev.myriadclient.api.util.Slots;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /** Your armour, helmet first, with durability as a bar and/or percentage. */
 public final class ArmorPanel extends HudPanel {
