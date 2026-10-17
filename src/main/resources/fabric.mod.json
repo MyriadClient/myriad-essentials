@@ -5,6 +5,7 @@
 	"name": "Myriad Essentials",
 	"description": "The stock module set for Myriad. Built purely on the public Myriad addon API; remove it and Myriad runs with no modules.",
 	"authors": ["Myriad"],
+	"icon": "assets/myriad-essentials/icon.png",
 	"license": "CC0-1.0",
 	"contact": {
 		"sources": "https://github.com/MyriadClient/myriad-essentials",
