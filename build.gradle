@@ -43,6 +43,11 @@ dependencies {
 
 	// Most 2b2t players join through ViaFabricPlus as an older version, so the dev client does too (see `via` below).
 	localRuntime "maven.modrinth:viafabricplus:${project.viafabricplus_version}"
+	// Xaero's maps in the dev client, for the features that take waypoints (core reads them); -PnoMaps leaves them out.
+	if (!project.hasProperty("noMaps")) {
+		localRuntime "maven.modrinth:xaeros-minimap:${project.xaero_minimap_version}"
+		localRuntime "maven.modrinth:xaeros-world-map:${project.xaero_worldmap_version}"
+	}
 }
 
 // The protocol the dev client joins servers with, through ViaFabricPlus: 1.20.4 by default (what most 2b2t players

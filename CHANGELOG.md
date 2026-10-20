@@ -3,6 +3,26 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.5.0 (unreleased)
+
+Needs Myriad 0.5.0.
+
+- **Baritone** (World, only with Baritone installed): Baritone's settings in Myriad's menu, made from Baritone's own
+  list and sorted into groups (Breaking & Placing, Movement, Mining, Building, Elytra, Rendering...). While it's on,
+  every setting changed from Baritone's default is set in Baritone, for now (its settings file isn't touched), and off
+  puts Baritone's own back unless something changed them since. Saved per profile, so control panels and shared
+  configs can carry a Baritone setup.
+- **Baritone Render** (Render, only with Baritone installed): Baritone's path, work and goal drawn Myriad's way, in place
+  of Baritone's own (turned off while it's on). The path is a smooth line with rounded corners and a gradient flowing
+  along it; the blocks it will mine and the gaps it will fill on the path ahead are highlighted; and the goal is a ghost
+  of you standing there, facing the way you'd arrive, your skin, armour, cape or elytra and what you hold faded, traced
+  by the highlight shader (through walls by default), or a highlighted box. Highlights take the usual style options.
+  Tested with Baritone mining through a wall and bridging a gap, and through the Grim suite's Recast obstacle tests.
+- **Auto Disconnect**: Coords is now Destination, with a Target: Coords (X, Z) or Waypoint, one of your Xaero
+  Minimap waypoints, found from whichever dimension you're in. Saved settings move over. X, Z, Within, Floor Y and
+  Ceiling Y are typed in a box instead of a slider.
+- The dev client runs with Xaero's Minimap and World Map (`-PnoMaps` leaves them out).
+
 ## 0.4.1
 
 Needs Myriad 0.4.0.

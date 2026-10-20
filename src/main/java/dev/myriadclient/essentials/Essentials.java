@@ -3,6 +3,7 @@ package dev.myriadclient.essentials;
 import dev.myriadclient.api.addon.AddonContext;
 import dev.myriadclient.api.addon.MyriadAddon;
 import dev.myriadclient.api.control.ControlPreset;
+import dev.myriadclient.api.util.Baritone;
 import dev.myriadclient.essentials.hud.ArmorPanel;
 import dev.myriadclient.essentials.hud.BindsPanel;
 import dev.myriadclient.essentials.hud.ChestCountPanel;
@@ -39,6 +40,7 @@ import dev.myriadclient.essentials.modules.player.Reach;
 import dev.myriadclient.essentials.modules.player.StackReplenish;
 import dev.myriadclient.essentials.modules.player.WallInteract;
 import dev.myriadclient.essentials.modules.player.XCarry;
+import dev.myriadclient.essentials.modules.render.BaritoneRender;
 import dev.myriadclient.essentials.modules.render.BlockESP;
 import dev.myriadclient.essentials.modules.render.BlockHighlight;
 import dev.myriadclient.essentials.modules.render.ESP;
@@ -54,7 +56,10 @@ import dev.myriadclient.essentials.modules.render.Tracers;
 import dev.myriadclient.essentials.modules.render.ViewModel;
 import dev.myriadclient.essentials.modules.render.Zoom;
 import dev.myriadclient.essentials.modules.world.AirPlace;
+import dev.myriadclient.essentials.modules.world.BaritoneSettings;
 import dev.myriadclient.essentials.modules.world.Scaffold;
+
+import java.util.List;
 
 import static dev.myriadclient.api.ui.PanelType.Anchor.BOTTOM_LEFT;
 import static dev.myriadclient.api.ui.PanelType.Anchor.TOP;
@@ -90,6 +95,9 @@ public final class Essentials implements MyriadAddon {
 			// World
 			new AirPlace(), new Scaffold()
 		);
+		// Baritone's settings, made from Baritone's own list, and its path and goal drawn: only when it's installed.
+		List<Baritone.SettingInfo> baritone = Baritone.settings();
+		if (!baritone.isEmpty()) ctx.registerModules(new BaritoneSettings(baritone), new BaritoneRender());
 
 		// Ready-made control panels: one bind turns the set on, Elytra Fly flying the type given while it's on.
 		ctx.registerControlPanel(ControlPreset.builder("Highway")
