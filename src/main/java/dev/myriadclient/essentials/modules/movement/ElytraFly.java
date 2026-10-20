@@ -10,6 +10,7 @@ import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.service.AntiCheat;
 import dev.myriadclient.api.setting.ChoiceSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
+import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.SavedSettings;
 
 import java.util.List;
@@ -21,17 +22,69 @@ import java.util.List;
  * Grim (2b2t) sets it back from the first tick, so there Type lists only Recast and Altitude, and Control chosen
  * elsewhere waits. Preserve is shared by the types (see {@link ElytraMode}). Two modules of their own go with it,
  * often in one control panel: {@link ElytraSwap} keeps the elytra from wearing out, the way the server allows, and
- * {@link LockRotation} holds the heading for Altitude and Control. Only the chosen type's own settings show.
+ * {@link LockRotation} holds the heading for Altitude and Control. Snap rounds the way each type flies (Recast's lane,
+ * a locked heading) to 45° or 90°, kept for each type. Only the chosen type's own settings show.
  */
 public class ElytraFly extends Module {
 	/** The types, as Type takes them. */
 	public static final String RECAST = "Recast", ALTITUDE = "Altitude", CONTROL = "Control";
 
+	/** What a locked heading is rounded to. */
+	public enum Snap {
+		OFF("Off", 0), DEGREES_45("45°", 45), DEGREES_90("90°", 90);
+
+		private final String label;
+		private final int degrees;
+
+		Snap(String label, int degrees) {
+			this.label = label;
+			this.degrees = degrees;
+		}
+
+		@Override
+		public String toString() {
+			return label;
+		}
+	}
+
 	public final ChoiceSetting type = sgGeneral.choice("Type", ElytraFly::types)
 		.description("Recast: bounce along highways. Altitude: cross open country, holding your height. Control: fly with the movement keys (only where the server checks elytras loosely, such as 6b6t).")
-		.defaultValue(RECAST).onChanged(t -> switchType()).build();
+		.defaultValue(RECAST).onChanged(t -> {
+			showSnap();
+			switchType();
+		}).build();
 	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve")
 		.description("Put elytras with less durability than this (%) aside, and fly with another.").defaultValue(5).range(0, 50).decimals(0).build();
+	/** Snap's value for each type, saved but not shown: {@link #snap} shows and edits the chosen type's. */
+	private final EnumSetting<Snap> recastSnap = snapFor(RECAST, Snap.DEGREES_45), altitudeSnap = snapFor(ALTITUDE, Snap.OFF),
+		controlSnap = snapFor(CONTROL, Snap.OFF);
+	/** The chosen type's Snap; not saved itself (the type's own setting is). */
+	private final EnumSetting<Snap> snap = sgGeneral.add(new EnumSetting<>("Snap",
+		"Round the way you fly to the nearest multiple of this: 45° for highways and their diagonals, 90° for the axes, Off for "
+			+ "exactly the way you faced. Recast: its lane, fixed when you turn it on. Altitude and Control: the heading "
+			+ "Lock Rotation holds. Kept for each type.", Snap.DEGREES_45, () -> true) {
+		@Override
+		public boolean isSerializable() {
+			return false;
+		}
+
+		/** Edits go to the chosen type's own setting: the player's value, so a control panel's override isn't kept. */
+		@Override
+		public void changed() {
+			super.changed();
+			chosenSnap().set(playerValue());
+		}
+
+		@Override
+		public void reset() {
+			set(chosenSnap().defaultValue());
+		}
+
+		@Override
+		public boolean isDefault() {
+			return playerValue() == chosenSnap().defaultValue();
+		}
+	});
 
 	final Recast recast = new Recast(this);
 	final Altitude altitude = new Altitude(this);
@@ -90,6 +143,33 @@ public class ElytraFly extends Module {
 
 	double preserve() {
 		return preserve.get();
+	}
+
+	private EnumSetting<Snap> snapFor(String type, Snap defaultValue) {
+		return sgGeneral.enumSetting(type + " Snap", defaultValue).description("Snap for " + type + ".").visible(() -> false)
+			.onChanged(v -> {
+				if (this.type.get().equals(type)) showSnap();
+			}).build();
+	}
+
+	/** The chosen type's own Snap setting. */
+	private EnumSetting<Snap> chosenSnap() {
+		return switch (type.get()) {
+			case ALTITUDE -> altitudeSnap;
+			case CONTROL -> controlSnap;
+			default -> recastSnap;
+		};
+	}
+
+	/** Shows the chosen type's value in Snap (on a type change, and when its own setting loads). */
+	private void showSnap() {
+		if (snap != null) snap.set(chosenSnap().playerValue());
+	}
+
+	/** {@code yaw} rounded as Snap says; it stays near {@code yaw} (not wrapped), so turning to it stays continuous. */
+	float snap(float yaw) {
+		int step = snap.get().degrees;
+		return step == 0 ? yaw : Math.round(yaw / step) * (float) step;
 	}
 
 	/** The type that should fly now: the chosen one, unless it's Control on a server that sets it back. */

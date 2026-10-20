@@ -7,6 +7,7 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.setting.ActionSetting;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
@@ -23,6 +24,7 @@ import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashSet;
@@ -35,10 +37,12 @@ import java.util.function.Supplier;
 /**
  * Leaves the server before you die: at low health, after too many totem pops or with too few totems left, when your
  * armour is about to break, when a player you haven't friended or an entity you picked comes close, or when a bed,
- * respawn anchor, end crystal or creeper nearby could kill you. The disconnect screen says why. Singleplayer is left
- * alone.
+ * respawn anchor, end crystal or creeper nearby could kill you; or where you are: below or above a height (Hard Deck), or
+ * near a spot (Coords), for leaving a flight or a walk running to somewhere. The disconnect screen says why.
+ * Singleplayer is left alone.
  * <p>
- * Falls aren't among the reasons: the server keeps you where you were, falling, and you'd land as you rejoined.
+ * Falls aren't among the reasons: the server keeps you where you were, falling, and you'd land as you rejoined. The
+ * same goes for leaving in the air by Hard Deck or Coords: you're in the air when you rejoin.
  * <p>
  * Afterwards it either turns itself off, or stays on and waits for the reason it left to clear before that reason can
  * trigger again, so you can rejoin (say with no totems left) without leaving again straight away.
@@ -69,9 +73,36 @@ public class AutoDisconnect extends Module {
 	private final RegistryListSetting<EntityType<?>> entities = sgDanger.entityTypes("Entities").description("Leave when one of these comes close (TNT minecarts, withers...).").build();
 	private final DoubleSetting entityRange = sgDanger.doubleSetting("Entity Range").defaultValue(10).range(1, 64).decimals(0).visible(() -> !entities.get().isEmpty()).build();
 
+	private final SettingGroup sgPosition = settings.group("Position");
+	private final BoolSetting hardDeck = sgPosition.bool("Hard Deck")
+		.description("Leave below Floor Y or above Ceiling Y. Each counts once you've been on its safe side in this dimension, so being "
+			+ "outside one when you turn this on or arrive doesn't make you leave. Left in the air, you're in the air when you rejoin.").build();
+	private final IntSetting floorY = sgPosition.intSetting("Floor Y").description("Leave below this height.")
+		.defaultValue(64).range(-64, 2000).sliderRange(-64, 320).visible(hardDeck::get).build();
+	private final IntSetting ceilingY = sgPosition.intSetting("Ceiling Y").description("Leave above this height.")
+		.defaultValue(500).range(-64, 2000).sliderRange(0, 1000).visible(hardDeck::get).build();
+	private final BoolSetting coords = sgPosition.bool("Coords")
+		.description("Leave once you're within Within blocks of X, Z (sideways, at any height, in any dimension): where a flight or a "
+			+ "walk you left running should end. Pick a spot on its way (on the highway, for Recast).").build();
+	private final IntSetting x = sgPosition.intSetting("X").defaultValue(0).range(-30_000_000, 30_000_000).sliderRange(-100_000, 100_000)
+		.visible(coords::get).build();
+	private final IntSetting z = sgPosition.intSetting("Z").defaultValue(0).range(-30_000_000, 30_000_000).sliderRange(-100_000, 100_000)
+		.visible(coords::get).build();
+	private final IntSetting within = sgPosition.intSetting("Within").description("How close to X, Z, in blocks.")
+		.defaultValue(16).range(1, 10_000).sliderRange(1, 500).visible(coords::get).build();
+	private final ActionSetting useHere = sgPosition.action("Use Here", () -> {
+		if (!inGame()) return;
+		x.set(mc.player.getBlockX());
+		z.set(mc.player.getBlockZ());
+	}).description("Set X and Z to where you are.").visible(coords::get).build();
+
 	private final EnumSetting<AfterLeaving> afterLeaving = sgGeneral.enumSetting("After Leaving", AfterLeaving.TURN_OFF)
 		.description("Turn off, or stay on and wait for the reason you left to clear before it can make you leave again.").build();
 	private final BoolSetting copyCoords = sgGeneral.bool("Copy Coords").description("Copy where you were to the clipboard.").build();
+
+	/** Hard Deck: you've been above Floor Y, and below Ceiling Y, in {@link #deckLevel} (each counts from then). */
+	private boolean aboveFloor, belowCeiling;
+	private @Nullable Level deckLevel;
 
 	/** Reasons that made you leave and haven't cleared since (Wait For Clear). */
 	private final Set<String> waiting = new HashSet<>();
@@ -103,6 +134,12 @@ public class AutoDisconnect extends Module {
 			return near.isEmpty() ? null : "a creeper " + Math.round(mc.player.distanceTo(near.getFirst())) + " blocks away";
 		});
 		trigger("entities", () -> !entities.get().isEmpty(), this::nearbyEntity);
+		trigger("hard_deck", hardDeck::get, this::outsideDeck);
+		trigger("coords", coords::get, () -> {
+			double dx = mc.player.getX() - (x.get() + 0.5), dz = mc.player.getZ() - (z.get() + 0.5);
+			double d = Math.sqrt(dx * dx + dz * dz);
+			return d <= within.get() ? String.format("%d blocks from %d, %d", Math.round(d), x.get(), z.get()) : null;
+		});
 	}
 
 	private void trigger(String key, BooleanSupplier enabled, Supplier<@Nullable String> check) {
@@ -138,6 +175,7 @@ public class AutoDisconnect extends Module {
 	@Override
 	protected void onEnable() {
 		waiting.clear();
+		deckLevel = null;
 	}
 
 	@Subscribe
@@ -170,6 +208,20 @@ public class AutoDisconnect extends Module {
 			if (p == mc.player || !p.isAlive() || p.isSpectator() || Myriad.friends().isFriend(p)) continue;
 			if (mc.player.distanceTo(p) <= playerRange.get()) return p.getGameProfile().name() + " " + Math.round(mc.player.distanceTo(p)) + " blocks away";
 		}
+		return null;
+	}
+
+	/** Past a Hard Deck limit you've been inside of in this dimension (a new world or dimension starts over). */
+	private @Nullable String outsideDeck() {
+		if (mc.level != deckLevel) {
+			deckLevel = mc.level;
+			aboveFloor = belowCeiling = false;
+		}
+		double y = mc.player.getY();
+		if (y >= floorY.get()) aboveFloor = true;
+		else if (aboveFloor) return String.format("below the hard deck (Y %.0f, Floor Y %d)", y, floorY.get());
+		if (y <= ceilingY.get()) belowCeiling = true;
+		else if (belowCeiling) return String.format("above the hard deck (Y %.0f, Ceiling Y %d)", y, ceilingY.get());
 		return null;
 	}
 

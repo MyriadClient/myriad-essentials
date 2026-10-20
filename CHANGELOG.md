@@ -3,6 +3,23 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.4.1 (unreleased)
+
+Needs Myriad 0.4.0.
+
+- **Elytra Fly**: Snap (Off, 45°, 90°), kept for each type, rounds the way it flies: Recast's lane (45° by default,
+  as it always snapped; Off now runs the lane exactly the way you face) and, for Altitude and Control (Off by default),
+  the heading Lock Rotation holds, so a takeoff a few degrees off still flies the highway or diagonal exactly.
+- **Altitude** no longer comes down to land when the server keeps setting you back: it flies on (a dropped glide
+  starts again), steadying through a run of setbacks as before, now counting each setback once (Grim resends one every
+  couple of ticks until it's taken, so a lag spike counted as several). Live recordings showed it landing after as few
+  as 6 real setbacks in 30 s. Use Auto Disconnect's Hard Deck to catch a flight that goes wrong. It still lands when
+  the last elytra is wearing out.
+- **Auto Disconnect**: a Position group, off by default, for leaving a flight or walk running to somewhere. Hard Deck
+  leaves below Floor Y or above Ceiling Y (each once you've been on its safe side in that dimension, so starting outside
+  one doesn't), and Coords leaves within Within blocks of X, Z (Use Here fills them in). Left in the air, you're in the
+  air when you rejoin; with Myriad 0.4.2, Elytra Swap's chestplate isn't: the elytra goes back on as you leave.
+
 ## 0.4.0
 
 Needs Myriad 0.4.0.

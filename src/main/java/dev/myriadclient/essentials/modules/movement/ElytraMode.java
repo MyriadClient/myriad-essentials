@@ -85,6 +85,12 @@ public abstract class ElytraMode implements NoDurability.Owner, Elytra.Pilot, Id
 		onDisable();
 	}
 
+	/** The yaw to fly: {@link LockRotation}'s heading while it holds one (rounded as Elytra Fly's Snap says), else {@code camera}. */
+	protected float heading(float camera) {
+		float yaw = LockRotation.headingFor(this, camera);
+		return LockRotation.holding() ? fly.snap(yaw) : yaw;
+	}
+
 	/** What Elytra Fly shows beside its name while this flies. */
 	public String hudInfo() {
 		return null;

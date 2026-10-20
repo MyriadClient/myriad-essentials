@@ -50,8 +50,8 @@ import java.util.function.Predicate;
  * server glides you, however short each glide: with No Durability the chestplate stays on through each hop and the
  * elytra only goes on for the moment of the start, so the server barely glides at all (paused while you eat).
  * <p>
- * The highway is fixed when you turn it on (the nearest 45° to where you face, through the middle of the block you stand
- * on), so looking around never steers; drifting off that line turns the flight a little back onto it. Far enough ahead
+ * The highway is fixed when you turn it on (where you face, rounded as Elytra Fly's Snap says: the nearest 45° by
+ * default; through the middle of the block you stand on), so looking around never steers; drifting off that line turns the flight a little back onto it. Far enough ahead
  * to stop in time (it grows with your speed) it watches for anything in the way: a block (an ender chest, a portal, a
  * wall), a hole you could fall into, or chunks that haven't loaded. It then stops jumping and lands, as you would, and
  * Obstacles decides what happens next. Clear hands over to Baritone, with a goal at the first clear spot past it, which
@@ -163,7 +163,7 @@ public class Recast extends ElytraMode {
 	private static final int LONG_GLIDE = 10;
 	/** A long glide is only cut this close to the ground, so dropping out of it can't cost a fall. */
 	private static final double CUT_HEIGHT = 2.5;
-	/** The lane's direction (one of the eight highway directions, NaN until fixed) and a point on its line. */
+	/** The lane's direction (where you faced, snapped; NaN until fixed) and a point on its line. */
 	private float lane = Float.NaN;
 	private Vec3 lineOrigin;
 	private BlockPos mining;
@@ -852,12 +852,12 @@ public class Recast extends ElytraMode {
 	}
 
 	/**
-	 * Fixes the lane: the nearest highway direction to where you face, through the middle of the block you're on (on a
-	 * highway, diagonal or not, that's a line through the middle of its blocks).
+	 * Fixes the lane: where you face, rounded as Snap says (the nearest highway direction by default), through the middle
+	 * of the block you're on (on a highway, diagonal or not, that's a line through the middle of its blocks).
 	 */
 	private void fixLine() {
 		var p = mc.player;
-		lane = snap(p.getYRot());
+		lane = Mth.wrapDegrees(fly.snap(p.getYRot()));
 		lineOrigin = new Vec3(p.getBlockX() + 0.5, p.getY(), p.getBlockZ() + 0.5);
 	}
 
@@ -903,10 +903,6 @@ public class Recast extends ElytraMode {
 		return LOOK_AHEAD + Math.sqrt(v.x * v.x + v.z * v.z) * LOOK_AHEAD_TICKS;
 	}
 
-	/** The nearest of the eight highway directions. */
-	private static float snap(float yaw) {
-		return Mth.wrapDegrees(45f * Math.round(yaw / 45f));
-	}
 	// ---- mining ---------------------------------------------------------------------------------------------------
 
 	private void mine(BlockPos pos) {

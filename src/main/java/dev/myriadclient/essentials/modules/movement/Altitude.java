@@ -16,14 +16,15 @@ import java.util.ArrayDeque;
  * Crosses open country without fireworks, "pitch 40" style. It dives until you're fast, pulls up hard, then eases back to
  * level: pulling up gives back more height than the speed it costs, so the cycle holds the altitude you started gliding
  * at (it dives harder when you're above it and climbs more when you're below). Start high, since the first dive from a
- * slow glide drops you 50 or so blocks. Steer with the camera, or turn on Lock Heading to keep flying the way you faced
- * when the glide started; the flight's pitch (and a locked heading) only goes to the server and the flight physics, so
- * you can look around freely. With No Durability each glide start waits for the server to have the elytra
- * on (see {@link NoDurability}); without it the elytra wears, and once it's down to what landing from here takes, a spare
- * from your inventory goes on in mid-air. Made to be left alone: when the server sets you back a few times in a row it
- * glides gently until the server agrees again, and it slows down (climbing) while the chunks ahead haven't loaded. When
- * it can't go on (the last elytra wearing out, the server setting you back over and over), it comes down to land,
- * levelling out near the ground, and After Landing disconnects you there or leaves you standing.
+ * slow glide drops you 50 or so blocks. Steer with the camera, or turn on Lock Rotation to keep flying the way you faced
+ * when the glide started (Snap rounds it to 45° or 90°); the flight's pitch (and a locked heading) only goes to the
+ * server and the flight physics, so you can look around freely. With No Durability each glide start waits for the
+ * server to have the elytra on (see {@link NoDurability}); without it the elytra wears, and once it's down to what
+ * landing from here takes, a spare from your inventory goes on in mid-air. Made to be left alone: when the server sets
+ * you back a few times in a row it glides gently until the server agrees again, and it slows down (climbing) while the
+ * chunks ahead haven't loaded; however often the server sets you back, it flies on (a dropped glide starts again), so
+ * leave Auto Disconnect's Hard Deck on to catch a flight that goes wrong. When the last elytra is wearing out it comes
+ * down to land, levelling out near the ground, and After Landing disconnects you there or leaves you standing.
  */
 public class Altitude extends ElytraMode {
 	public enum AfterLanding {
@@ -35,7 +36,7 @@ public class Altitude extends ElytraMode {
 	}
 
 	private final EnumSetting<AfterLanding> afterLanding = sgGeneral.enumSetting("After Landing", AfterLanding.DISCONNECT)
-		.description("When it has to come down (elytra worn out, the server keeps setting you back): disconnect once landed, or stay there.").visible(this::chosen).build();
+		.description("When it has to come down (the last elytra wearing out): disconnect once landed, or stay there.").visible(this::chosen).build();
 
 	/**
 	 * Worked out on vanilla's glide physics: dive at {@code DIVE_PITCH} until faster than the threshold (blocks a
@@ -54,10 +55,10 @@ public class Altitude extends ElytraMode {
 	private static final double SLOW_DIVE_SPEED = 34.5, SLOW_HOLD_GAIN = 0.1, SLOW_MIN_DIVE_SPEED = 33, SLOW_MAX_DIVE_SPEED = 40, SLOW_LATE_SPEED = 36;
 	/**
 	 * Steadying: this many setbacks within {@code STEADY_WINDOW} ticks, and it glides at {@code STEADY_PITCH}
-	 * (a gentle descent) for {@code STEADY_TICKS} rather than dive and climb; {@code GIVE_UP} within {@code GIVE_UP_WINDOW},
-	 * and it lands.
+	 * (a gentle descent) for {@code STEADY_TICKS} rather than dive and climb. Grim sends a setback again every couple of
+	 * ticks until the client takes it: teleports within {@code SAME_SETBACK} ticks of the last one counted are that one.
 	 */
-	private static final int STEADY_SETBACKS = 3, STEADY_WINDOW = 60, STEADY_TICKS = 60, GIVE_UP = 25, GIVE_UP_WINDOW = 600;
+	private static final int STEADY_SETBACKS = 3, STEADY_WINDOW = 60, STEADY_TICKS = 60, SAME_SETBACK = 10;
 	private static final float STEADY_PITCH = 8;
 	/**
 	 * Chunks this many seconds of flight ahead that haven't loaded slow you down (climbing at
@@ -148,7 +149,7 @@ public class Altitude extends ElytraMode {
 			return;
 		}
 		if (Double.isNaN(cruiseY)) cruiseY = p.getY();
-		float yaw = LockRotation.headingFor(this, p.getYRot());
+		float yaw = heading(p.getYRot());
 		if (!landing && elytraWearingOut()) {
 			int spare = spareElytra();
 			if (spare < 0) cannotGoOn("last elytra nearly worn out");
@@ -230,14 +231,13 @@ public class Altitude extends ElytraMode {
 		else warn(why.substring(0, 1).toUpperCase() + why.substring(1));
 	}
 
-	/** A run of setbacks steadies the flight for a while; far too many and it lands. */
+	/** A run of setbacks steadies the flight for a while. */
 	private void countSetback(LocalPlayer p) {
 		int now = p.tickCount;
+		if (!setbacks.isEmpty() && now - setbacks.peekLast() < SAME_SETBACK) return;
 		setbacks.addLast(now);
-		while (!setbacks.isEmpty() && now - setbacks.peekFirst() > GIVE_UP_WINDOW) setbacks.removeFirst();
-		long recent = setbacks.stream().filter(t -> now - t <= STEADY_WINDOW).count();
-		if (recent >= STEADY_SETBACKS) steadyTicks = STEADY_TICKS;
-		if (setbacks.size() >= GIVE_UP) cannotGoOn("the server keeps setting you back");
+		while (!setbacks.isEmpty() && now - setbacks.peekFirst() > STEADY_WINDOW) setbacks.removeFirst();
+		if (setbacks.size() >= STEADY_SETBACKS) steadyTicks = STEADY_TICKS;
 	}
 
 	/** Whether every chunk within {@code distance} blocks along {@code heading} has loaded. */

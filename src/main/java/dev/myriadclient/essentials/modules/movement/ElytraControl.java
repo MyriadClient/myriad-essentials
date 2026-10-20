@@ -61,9 +61,9 @@ public class ElytraControl extends ElytraMode {
 		else spoofing = false;
 	}
 
-	/** The yaw the keys move you relative to: Lock Rotation's heading, or the camera's. */
+	/** The yaw the keys move you relative to: Lock Rotation's heading (snapped), or the camera's. */
 	private float heading(LocalPlayer p) {
-		return LockRotation.headingFor(this, p.getYRot());
+		return heading(p.getYRot());
 	}
 
 	@Override
