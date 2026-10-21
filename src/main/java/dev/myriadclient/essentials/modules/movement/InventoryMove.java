@@ -6,8 +6,8 @@ import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.InputEvent;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.components.EditBox;
@@ -32,7 +32,7 @@ public class InventoryMove extends Module {
 	private static final float LOOK_SPEED = 6;
 
 	public InventoryMove() {
-		super(Categories.MOVEMENT, "Inventory Move", "Walk, jump and sprint with your inventory or a container open.");
+		super(Tags.MOVEMENT, "Inventory Move", "Walk, jump and sprint with your inventory or a container open.");
 	}
 
 	private boolean active() {

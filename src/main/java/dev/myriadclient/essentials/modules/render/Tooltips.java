@@ -6,8 +6,8 @@ import dev.myriadclient.api.event.events.ContainerScreenEvent;
 import dev.myriadclient.api.event.events.ItemTooltipEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.event.events.WorldEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Canvas;
 import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -81,7 +81,7 @@ public class Tooltips extends Module {
 	private int lockedX, lockedY;
 
 	public Tooltips() {
-		super(Categories.RENDER, "Tooltips", "Container and map previews, durability and food values in tooltips.");
+		super(Tags.RENDER, "Tooltips", "Container and map previews, durability and food values in tooltips.");
 	}
 
 	@Override

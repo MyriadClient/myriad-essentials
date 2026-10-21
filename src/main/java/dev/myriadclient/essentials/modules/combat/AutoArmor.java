@@ -6,8 +6,8 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.KeyEvent;
 import dev.myriadclient.api.event.events.MouseButtonEvent;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
@@ -66,7 +66,7 @@ public class AutoArmor extends Module {
 	private boolean warnedFull;
 
 	public AutoArmor() {
-		super(Categories.COMBAT, "Auto Armor", "Wears your best armour, and swaps between chestplate and elytra on a bind.");
+		super(Tags.COMBAT, "Auto Armor", "Wears your best armour, and swaps between chestplate and elytra on a bind.");
 	}
 
 	@Override

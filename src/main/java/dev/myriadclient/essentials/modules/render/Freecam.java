@@ -8,8 +8,8 @@ import dev.myriadclient.api.event.events.MovementPacketsEvent;
 import dev.myriadclient.api.event.events.PlayerViewEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.event.events.WorldEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import net.minecraft.client.Options;
@@ -34,7 +34,7 @@ public class Freecam extends Module {
 	private boolean savedCulling;
 
 	public Freecam() {
-		super(Categories.RENDER, "Freecam", "Detach the camera and fly it around.");
+		super(Tags.RENDER, "Freecam", "Detach the camera and fly it around.");
 	}
 
 	@Override

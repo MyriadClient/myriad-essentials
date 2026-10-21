@@ -6,9 +6,9 @@ import dev.myriadclient.api.event.events.MouseLookEvent;
 import dev.myriadclient.api.event.events.MouseScrollEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.event.events.WorldEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import net.minecraft.client.CameraType;
@@ -41,7 +41,7 @@ public class FreeLook extends Module {
 	private long lastFrameNanos;
 
 	public FreeLook() {
-		super(Categories.RENDER, "Free Look", "Orbit the camera without turning your player; scroll to move it nearer or further.");
+		super(Tags.RENDER, "Free Look", "Orbit the camera without turning your player; scroll to move it nearer or further.");
 	}
 
 	@Override

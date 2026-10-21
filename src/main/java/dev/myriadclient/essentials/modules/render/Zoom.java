@@ -5,9 +5,9 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.MouseLookEvent;
 import dev.myriadclient.api.event.events.MouseScrollEvent;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Easing;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
@@ -40,7 +40,7 @@ public class Zoom extends Module {
 	private Boolean cinematicBefore;
 
 	public Zoom() {
-		super(Categories.RENDER, "Zoom", "Zooms the camera in.");
+		super(Tags.RENDER, "Zoom", "Zooms the camera in.");
 	}
 
 	@Override

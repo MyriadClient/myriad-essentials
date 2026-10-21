@@ -2,8 +2,8 @@ package dev.myriadclient.essentials.modules.render;
 
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.HighlightEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.BoxStyle;
 import dev.myriadclient.api.render.HighlightSettings;
 import dev.myriadclient.api.render.MergedBoxes;
@@ -71,7 +71,7 @@ public class BlockESP extends Module {
 		.build();
 
 	public BlockESP() {
-		super(Categories.RENDER, "Blocks", "Highlights the blocks you pick, like spawners or beds, through walls.");
+		super(Tags.RENDER, "Blocks", "Highlights the blocks you pick, like spawners or beds, through walls.");
 		// A different list needs a new search; anything else only re-meshes.
 		settings.onAnyChanged(s -> {
 			palette.clear();

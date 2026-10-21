@@ -7,8 +7,8 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.Render3DEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.hook.Hook;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Renderer3D;
 import dev.myriadclient.api.service.Rotations;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -95,7 +95,7 @@ public class KillAura extends Module {
 	private Entity target;
 
 	public KillAura() {
-		super(Categories.COMBAT, "Kill Aura", "Attacks targets in reach, facing them first.");
+		super(Tags.COMBAT, "Kill Aura", "Attacks targets in reach, facing them first.");
 	}
 
 	@Override

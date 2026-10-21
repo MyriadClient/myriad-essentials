@@ -4,9 +4,9 @@ import com.google.gson.JsonElement;
 import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.service.AntiCheat;
 import dev.myriadclient.api.setting.ChoiceSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
@@ -94,7 +94,7 @@ public class ElytraFly extends Module {
 	private boolean unavailableWarned;
 
 	public ElytraFly() {
-		super(Categories.MOVEMENT, "Elytra Fly", "Fly an elytra: bounce along highways, cross open country, or fly with the movement keys.");
+		super(Tags.MOVEMENT, "Elytra Fly", "Fly an elytra: bounce along highways, cross open country, or fly with the movement keys.");
 		// The modules it was before (Recast's settings, keybind and on/off state carry over; it was Elytra Fly before that).
 		formerNames("Recast", "Altitude", "Elytra Control");
 	}

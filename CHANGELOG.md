@@ -3,6 +3,20 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.7.0
+
+Needs Myriad 0.7.0.
+
+- **Five windows instead of six categories**, by what the modules are for: **Combat** (Kill Aura, Offhand, Auto Armor,
+  Auto Eat, Velocity, Auto Disconnect), **Travel** (Elytra Fly, Elytra Swap, Lock Rotation, Rocket Boost, Auto Walk,
+  Inventory Move), **Building & Mining** (Scaffold, Air Place, Packet Mine, Auto Tool, Reach, Wall Interact,
+  Baritone), **Inventory** (Inventory Tweaks, Stack Replenish, X Carry, Middle Click) and **Visuals** (ESP, Tracers,
+  Nametags, Storage, Blocks, Block Highlight, Full Bright, No Render, Time of Day, View Model, Zoom, Free Look,
+  Freecam, Tooltips, Baritone Render). Your layout carries over: each old category window becomes the group that
+  took its place, and the new Inventory window opens beside them.
+- Modules keep their tags for the launcher (`#combat`, `#render`...); **Reach** is tagged Combat and World as well
+  as Player.
+
 ## 0.6.0
 
 Needs Myriad 0.6.0.

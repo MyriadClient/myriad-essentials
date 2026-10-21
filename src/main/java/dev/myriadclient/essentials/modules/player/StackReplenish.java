@@ -3,8 +3,8 @@ package dev.myriadclient.essentials.modules.player;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SavedSettings;
@@ -32,7 +32,7 @@ public class StackReplenish extends Module {
 	private final ItemStack[] last = new ItemStack[10];
 
 	public StackReplenish() {
-		super(Categories.PLAYER, "Stack Replenish", "Refills hotbar stacks from your inventory.");
+		super(Tags.PLAYER, "Stack Replenish", "Refills hotbar stacks from your inventory.");
 	}
 
 	@Override

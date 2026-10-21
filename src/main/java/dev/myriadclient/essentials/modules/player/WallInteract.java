@@ -1,8 +1,8 @@
 package dev.myriadclient.essentials.modules.player;
 
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -30,7 +30,7 @@ public class WallInteract extends Module {
 	private final BoolSetting containers = sgGeneral.bool("Containers").description("Open chests and other containers through blocks.").build();
 
 	public WallInteract() {
-		super(Categories.PLAYER, "Wall Interact", "Hit entities and open containers through walls.");
+		super(Tags.PLAYER, "Wall Interact", "Hit entities and open containers through walls.");
 	}
 
 	/** The crosshair target to use instead of vanilla's {@code original}. */

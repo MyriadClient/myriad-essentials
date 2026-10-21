@@ -5,8 +5,8 @@ import dev.myriadclient.api.build.Target;
 import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
@@ -44,7 +44,7 @@ public class Scaffold extends Module {
 	private static final double AHEAD_TICKS = 2.5;
 
 	public Scaffold() {
-		super(Categories.WORLD, "Scaffold", "Places blocks under you as you walk.");
+		super(Tags.WORLD, "Scaffold", "Places blocks under you as you walk.");
 	}
 
 	/** Clicks only faces you can see; with Rotate, faces each block first (walking along that yaw meanwhile). */

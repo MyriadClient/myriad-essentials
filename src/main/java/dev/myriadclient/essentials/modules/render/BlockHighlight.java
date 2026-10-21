@@ -3,9 +3,9 @@ package dev.myriadclient.essentials.modules.render;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.BoxStyle;
 import dev.myriadclient.api.render.HighlightSettings;
 import dev.myriadclient.api.setting.ColorSetting;
@@ -34,7 +34,7 @@ public class BlockHighlight extends Module {
 	private final BoxStyle box = new BoxStyle(settings.group("Box"), () -> mode.get() == Mode.BOX, false);
 
 	public BlockHighlight() {
-		super(Categories.RENDER, "Block Highlight", "Your own look for the block you're looking at, in place of vanilla's outline.");
+		super(Tags.RENDER, "Block Highlight", "Your own look for the block you're looking at, in place of vanilla's outline.");
 		// Vanilla's outline only while this is off.
 		LevelRenderEvents.BEFORE_BLOCK_OUTLINE.register((context, state) -> !isEnabled());
 	}

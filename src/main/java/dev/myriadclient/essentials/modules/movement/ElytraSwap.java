@@ -6,9 +6,9 @@ import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.hook.Hook;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import org.jetbrains.annotations.Nullable;
 
@@ -63,7 +63,7 @@ public class ElytraSwap extends Module implements NoDurability.Owner {
 	private boolean running;
 
 	public ElytraSwap() {
-		super(Categories.MOVEMENT, "Elytra Swap", "Keep your elytra from wearing out while you glide.");
+		super(Tags.MOVEMENT, "Elytra Swap", "Keep your elytra from wearing out while you glide.");
 	}
 
 	/**

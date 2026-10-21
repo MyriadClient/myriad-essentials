@@ -1,8 +1,8 @@
 package dev.myriadclient.essentials.modules.player;
 
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.DoubleSetting;
 
 /**
@@ -21,7 +21,8 @@ public class Reach extends Module {
 		.defaultValue(3).range(1, 10).decimals(2).build();
 
 	public Reach() {
-		super(Categories.PLAYER, "Reach", "Place blocks and hit entities from further away.");
+		super(Tags.PLAYER, "Reach", "Place blocks and hit entities from further away.");
+		alsoTagged(Tags.COMBAT, Tags.WORLD);
 	}
 
 	@Override

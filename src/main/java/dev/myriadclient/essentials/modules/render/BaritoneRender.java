@@ -3,8 +3,8 @@ package dev.myriadclient.essentials.modules.render;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Ghosts;
 import dev.myriadclient.api.render.HighlightSettings;
 import dev.myriadclient.api.render.Renderer3D;
@@ -94,7 +94,7 @@ public class BaritoneRender extends Module {
 	private Object renderPathBefore, renderGoalBefore, renderBoxesBefore;
 
 	public BaritoneRender() {
-		super(Categories.RENDER, "Baritone Render", "Draw Baritone's path, its work and its goal your way: a flowing line, marked blocks and a ghost of you.");
+		super(Tags.RENDER, "Baritone Render", "Draw Baritone's path, its work and its goal your way: a flowing line, marked blocks and a ghost of you.");
 	}
 
 	@Override

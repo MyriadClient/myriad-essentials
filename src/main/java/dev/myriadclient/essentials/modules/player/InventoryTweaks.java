@@ -3,8 +3,8 @@ package dev.myriadclient.essentials.modules.player;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.ContainerScreenEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.service.Breaking;
 import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -41,7 +41,7 @@ public class InventoryTweaks extends Module {
 	private boolean busy;
 
 	public InventoryTweaks() {
-		super(Categories.PLAYER, "Inventory Tweaks", "Open shulker boxes and ender chests straight from your inventory.");
+		super(Tags.PLAYER, "Inventory Tweaks", "Open shulker boxes and ender chests straight from your inventory.");
 	}
 
 	@Override

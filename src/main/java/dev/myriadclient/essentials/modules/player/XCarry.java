@@ -2,8 +2,8 @@ package dev.myriadclient.essentials.modules.player;
 
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.PacketEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 
 /**
@@ -13,7 +13,7 @@ import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
  */
 public class XCarry extends Module {
 	public XCarry() {
-		super(Categories.PLAYER, "X Carry", "Use the crafting grid as four extra inventory slots.");
+		super(Tags.PLAYER, "X Carry", "Use the crafting grid as four extra inventory slots.");
 	}
 
 	@Subscribe(packets = ServerboundContainerClosePacket.class)

@@ -2,9 +2,9 @@ package dev.myriadclient.essentials.modules.render;
 
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.Render3DEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.EntityGroups.Group;
 import dev.myriadclient.api.render.EntityGroups;
 import dev.myriadclient.api.render.Renderer3D;
@@ -38,7 +38,7 @@ public class Tracers extends Module {
 	private final EntityGroups targets = new EntityGroups(settings, Set.of(Group.PLAYERS, Group.FRIENDS));
 
 	public Tracers() {
-		super(Categories.RENDER, "Tracers", "Draws lines to entities, storage and blocks.");
+		super(Tags.RENDER, "Tracers", "Draws lines to entities, storage and blocks.");
 	}
 
 	@Subscribe(inGame = true)

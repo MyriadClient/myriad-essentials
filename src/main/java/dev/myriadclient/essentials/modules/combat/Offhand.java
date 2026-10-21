@@ -6,8 +6,8 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.EntityEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.hook.Hook;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
@@ -87,7 +87,7 @@ public class Offhand extends Module {
 	private boolean popped;
 
 	public Offhand() {
-		super(Categories.COMBAT, "Offhand", "Keeps a totem, crystal, golden apple or shield in your off hand.");
+		super(Tags.COMBAT, "Offhand", "Keeps a totem, crystal, golden apple or shield in your off hand.");
 	}
 
 	@Override

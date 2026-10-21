@@ -4,9 +4,9 @@ import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.hook.Hook;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.EnumSetting;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
@@ -50,7 +50,7 @@ public class LockRotation extends Module {
 	private float locked = Float.NaN;
 
 	public LockRotation() {
-		super(Categories.MOVEMENT, "Lock Rotation", "Keep flying the way you faced, whatever the camera does.");
+		super(Tags.MOVEMENT, "Lock Rotation", "Keep flying the way you faced, whatever the camera does.");
 	}
 
 	/**

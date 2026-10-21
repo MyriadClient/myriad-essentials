@@ -5,9 +5,9 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.InteractEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Renderer3D;
 import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.setting.DoubleSetting;
@@ -38,7 +38,7 @@ public class AirPlace extends Module {
 	private BlockPos target;
 
 	public AirPlace() {
-		super(Categories.WORLD, "Air Place", "Place blocks in mid-air where you look.");
+		super(Tags.WORLD, "Air Place", "Place blocks in mid-air where you look.");
 	}
 
 	private Placement.Options options() {

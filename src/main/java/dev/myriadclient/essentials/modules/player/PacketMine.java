@@ -6,8 +6,8 @@ import dev.myriadclient.api.event.events.BlockBreakEvent;
 import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.HighlightStyle;
 import dev.myriadclient.api.service.Breaking;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -61,7 +61,7 @@ public class PacketMine extends Module {
 	private int swungTick = -1;
 
 	public PacketMine() {
-		super(Categories.PLAYER, "Packet Mine", "Mines the blocks you hit for you, with your hand free.");
+		super(Tags.PLAYER, "Packet Mine", "Mines the blocks you hit for you, with your hand free.");
 	}
 
 	@Override

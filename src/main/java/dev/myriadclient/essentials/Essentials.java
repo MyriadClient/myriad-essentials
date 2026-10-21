@@ -3,6 +3,8 @@ package dev.myriadclient.essentials;
 import dev.myriadclient.api.addon.AddonContext;
 import dev.myriadclient.api.addon.MyriadAddon;
 import dev.myriadclient.api.control.ControlPreset;
+import dev.myriadclient.api.module.ModuleGroup;
+import dev.myriadclient.api.ui.Icons;
 import dev.myriadclient.api.util.Baritone;
 import dev.myriadclient.essentials.hud.ArmorPanel;
 import dev.myriadclient.essentials.hud.BindsPanel;
@@ -79,25 +81,28 @@ public final class Essentials implements MyriadAddon {
 		ElytraFly elytraFly = new ElytraFly();
 		AutoEat autoEat = new AutoEat();
 
-		ctx.registerModules(
-			// Building blocks other modules use (and control panels combine with them). First: they load before the
-			// modules whose former settings they take over (Elytra Fly, Auto Armor).
-			elytraSwap, lockRotation,
-			// Combat
-			new Offhand(), new AutoArmor(), new AutoDisconnect(), new KillAura(),
-			// Movement
-			elytraFly, new RocketBoost(), new AutoWalk(), new InventoryMove(), new Velocity(),
-			// Player
-			autoEat, new AutoTool(), new InventoryTweaks(), new MiddleClick(), new PacketMine(), new Reach(), new StackReplenish(), new WallInteract(), new XCarry(),
-			// Render
-			new ESP(), new BlockESP(), new BlockHighlight(), new Storage(), new Tracers(), new Nametags(), new NoRender(), new Tooltips(), new FullBright(), new FreeLook(), new Freecam(),
-			new TimeOfDay(), new ViewModel(), new Zoom(),
-			// World
-			new AirPlace(), new Scaffold()
-		);
+		// The menu's windows, by what the modules are for.
+		ModuleGroup combat = ctx.registerGroup("Combat", Icons.CROSSHAIRS);
+		ModuleGroup travel = ctx.registerGroup("Travel", Icons.PLANE);
+		ModuleGroup building = ctx.registerGroup("Building & Mining", Icons.CUBES);
+		ModuleGroup inventory = ctx.registerGroup("Inventory", Icons.ARCHIVE);
+		ModuleGroup visuals = ctx.registerGroup("Visuals", Icons.EYE);
+
+		// Building blocks other modules use (and control panels combine with them). First: they load before the modules
+		// whose former settings they take over (Elytra Fly, Auto Armor).
+		ctx.registerModules(travel, elytraSwap, lockRotation);
+		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), autoEat, new Velocity(), new AutoDisconnect());
+		ctx.registerModules(travel, elytraFly, new RocketBoost(), new AutoWalk(), new InventoryMove());
+		ctx.registerModules(building, new Scaffold(), new AirPlace(), new PacketMine(), new AutoTool(), new Reach(), new WallInteract());
+		ctx.registerModules(inventory, new InventoryTweaks(), new StackReplenish(), new XCarry(), new MiddleClick());
+		ctx.registerModules(visuals, new ESP(), new Tracers(), new Nametags(), new Storage(), new BlockESP(), new BlockHighlight(), new FullBright(),
+			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips());
 		// Baritone's settings, made from Baritone's own list, and its path and goal drawn: only when it's installed.
 		List<Baritone.SettingInfo> baritone = Baritone.settings();
-		if (!baritone.isEmpty()) ctx.registerModules(new BaritoneSettings(baritone), new BaritoneRender());
+		if (!baritone.isEmpty()) {
+			ctx.registerModule(building, new BaritoneSettings(baritone));
+			ctx.registerModule(visuals, new BaritoneRender());
+		}
 
 		// Ready-made control panels: one bind turns the set on, Elytra Fly flying the type given while it's on.
 		ctx.registerControlPanel(ControlPreset.builder("Highway")

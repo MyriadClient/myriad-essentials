@@ -1,7 +1,7 @@
 package dev.myriadclient.essentials.modules.world;
 
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.Setting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
@@ -59,7 +59,7 @@ public class BaritoneSettings extends Module {
 	private final Map<String, Object> before = new HashMap<>(), set = new HashMap<>();
 
 	public BaritoneSettings(List<Baritone.SettingInfo> baritone) {
-		super(Categories.WORLD, "Baritone", "Baritone's settings: while on, what you change here from Baritone's defaults is set in Baritone.");
+		super(Tags.WORLD, "Baritone", "Baritone's settings: while on, what you change here from Baritone's defaults is set in Baritone.");
 		Map<String, SettingGroup> groups = new LinkedHashMap<>();
 		for (String g : GROUPS.keySet()) groups.put(g, settings.group(g));
 		SettingGroup pathing = settings.group("Pathing");

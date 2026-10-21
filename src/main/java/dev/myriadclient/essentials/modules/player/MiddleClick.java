@@ -4,8 +4,8 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.MouseButtonEvent;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
@@ -47,7 +47,7 @@ public class MiddleClick extends Module {
 	private static final int PENDING_TICKS = 5;
 
 	public MiddleClick() {
-		super(Categories.PLAYER, "Middle Click", "Friends, experience, rockets or pearls on the middle mouse button.");
+		super(Tags.PLAYER, "Middle Click", "Friends, experience, rockets or pearls on the middle mouse button.");
 	}
 
 	@Override

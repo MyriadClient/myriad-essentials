@@ -6,9 +6,9 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.GlideEvent;
 import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.util.MathUtil;
 import dev.myriadclient.essentials.mixin.FireworkRocketEntityAccessor;
 import net.minecraft.client.Minecraft;
@@ -54,7 +54,7 @@ public class RocketBoost extends Module {
 	private int settleTicks;
 
 	public RocketBoost() {
-		super(Categories.MOVEMENT, "Rocket Boost", "While a rocket pushes you, fly as fast along your look as Grim allows: full speed at once, faster on diagonals.");
+		super(Tags.MOVEMENT, "Rocket Boost", "While a rocket pushes you, fly as fast along your look as Grim allows: full speed at once, faster on diagonals.");
 	}
 
 	@Override

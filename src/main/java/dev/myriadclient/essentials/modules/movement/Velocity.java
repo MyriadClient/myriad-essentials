@@ -4,9 +4,9 @@ import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.SettingGroup;
@@ -65,7 +65,7 @@ public class Velocity extends Module {
 	private int owedFor;
 
 	public Velocity() {
-		super(Categories.MOVEMENT, "Velocity", "Reduces knockback and pushing.");
+		super(Tags.MOVEMENT, "Velocity", "Reduces knockback and pushing.");
 	}
 
 	@Override

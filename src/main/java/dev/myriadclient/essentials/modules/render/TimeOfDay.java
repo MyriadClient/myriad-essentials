@@ -1,7 +1,7 @@
 package dev.myriadclient.essentials.modules.render;
 
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.IntSetting;
 
 /**
@@ -17,7 +17,7 @@ public class TimeOfDay extends Module {
 		.description("Ticks into the day: 0 sunrise, 6000 noon, 12000 sunset, 18000 midnight.").defaultValue(6000).range(0, DAY - 1).build();
 
 	public TimeOfDay() {
-		super(Categories.RENDER, "Time of Day", "Set the time of day you see.");
+		super(Tags.RENDER, "Time of Day", "Set the time of day you see.");
 	}
 
 	/** {@code ticks} (the overworld clock's) moved to the chosen time on the same day. */

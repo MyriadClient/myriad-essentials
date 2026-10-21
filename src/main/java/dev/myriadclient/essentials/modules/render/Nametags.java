@@ -4,8 +4,8 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.EntityRenderEvent;
 import dev.myriadclient.api.event.events.Render2DEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Canvas;
 import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.render.PlayerHeads;
@@ -96,7 +96,7 @@ public class Nametags extends Module {
 	}
 
 	public Nametags() {
-		super(Categories.RENDER, "Nametags", "Readable name tags for players, mobs, items and pearls.");
+		super(Tags.RENDER, "Nametags", "Readable name tags for players, mobs, items and pearls.");
 	}
 
 	/** Whether this draws {@code entity}'s label, so vanilla's should be hidden. */

@@ -4,9 +4,9 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.BlockRenderEvent;
 import dev.myriadclient.api.event.events.EntityRenderEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SettingGroup;
@@ -71,7 +71,7 @@ public class NoRender extends Module {
 		.onChanged(v -> reload()).build();
 
 	public NoRender() {
-		super(Categories.RENDER, "No Render", "Hides distracting effects, overlays and things.");
+		super(Tags.RENDER, "No Render", "Hides distracting effects, overlays and things.");
 	}
 
 	/**

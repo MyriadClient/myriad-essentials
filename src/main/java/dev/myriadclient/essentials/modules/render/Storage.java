@@ -6,8 +6,8 @@ import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.event.events.WorldEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.BoxStyle;
 import dev.myriadclient.api.render.HighlightSettings;
 import dev.myriadclient.api.render.MergedBoxes;
@@ -145,7 +145,7 @@ public class Storage extends Module {
 	}
 
 	public Storage() {
-		super(Categories.RENDER, "Storage", "Highlights chests, shulker boxes and other storage through walls.");
+		super(Tags.RENDER, "Storage", "Highlights chests, shulker boxes and other storage through walls.");
 		settings.onAnyChanged(s -> found.remeshAll());
 	}
 

@@ -1,8 +1,8 @@
 package dev.myriadclient.essentials.modules.render;
 
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.IntSetting;
@@ -41,7 +41,7 @@ public class ViewModel extends Module {
 	public final DoubleSetting offhandScale = sgScale.doubleSetting("Offhand Scale").defaultValue(1).range(0.1, 3).build();
 
 	public ViewModel() {
-		super(Categories.RENDER, "View Model", "Move, rotate, scale or hide your first-person hands.");
+		super(Tags.RENDER, "View Model", "Move, rotate, scale or hide your first-person hands.");
 	}
 
 	/** How many ticks a swing lasts with Swing Speed applied, from vanilla's {@code ticks}. */

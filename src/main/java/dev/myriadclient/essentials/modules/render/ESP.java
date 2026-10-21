@@ -6,8 +6,8 @@ import dev.myriadclient.api.event.events.EntityRenderEvent;
 import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.event.events.Render2DEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.BoxStyle;
 import dev.myriadclient.api.render.Canvas;
 import dev.myriadclient.api.render.EntityGroups.Group;
@@ -68,7 +68,7 @@ public class ESP extends Module {
 	private final IntOpenHashSet seen = new IntOpenHashSet();
 
 	public ESP() {
-		super(Categories.RENDER, "ESP", "Highlights players, mobs, crystals and more through walls.");
+		super(Tags.RENDER, "ESP", "Highlights players, mobs, crystals and more through walls.");
 	}
 
 	@Override

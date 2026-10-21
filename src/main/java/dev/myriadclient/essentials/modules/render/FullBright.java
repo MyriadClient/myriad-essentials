@@ -2,8 +2,8 @@ package dev.myriadclient.essentials.modules.render;
 
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.EnumSetting;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -28,7 +28,7 @@ public class FullBright extends Module {
 	private MobEffectInstance added;
 
 	public FullBright() {
-		super(Categories.RENDER, "Full Bright", "See in the dark.");
+		super(Tags.RENDER, "Full Bright", "See in the dark.");
 	}
 
 	/** Read by this addon's lightmap mixin. */

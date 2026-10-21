@@ -3,9 +3,9 @@ package dev.myriadclient.essentials.modules.player;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
@@ -62,7 +62,7 @@ public class AutoEat extends Module {
 	private static final int REFUSED_TICKS = 40;
 
 	public AutoEat() {
-		super(Categories.PLAYER, "Auto Eat", "Eats when your health or hunger gets low.");
+		super(Tags.PLAYER, "Auto Eat", "Eats when your health or hunger gets low.");
 	}
 
 	@Override

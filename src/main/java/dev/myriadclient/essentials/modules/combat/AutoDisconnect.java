@@ -6,8 +6,8 @@ import dev.myriadclient.api.combat.Threats;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.map.Waypoint;
-import dev.myriadclient.api.module.Categories;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.ActionSetting;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ChoiceSetting;
@@ -129,7 +129,7 @@ public class AutoDisconnect extends Module {
 	private final Map<String, Trigger> triggers = new LinkedHashMap<>();
 
 	public AutoDisconnect() {
-		super(Categories.COMBAT, "Auto Disconnect", "Leaves the server when you're about to die.");
+		super(Tags.COMBAT, "Auto Disconnect", "Leaves the server when you're about to die.");
 		trigger("health", health::get, () -> Threats.health() <= healthThreshold.get() ? String.format("health %.1f", Threats.health()) : null);
 		trigger("pops", pops::get, () -> {
 			int n = Myriad.server().totemPops(mc.player);
