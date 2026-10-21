@@ -3,6 +3,20 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.6.0
+
+Needs Myriad 0.6.0.
+
+- **Scaffold**, **Recast** (filling holes) and **Inventory Tweaks** (placing a shulker box to open it) place against
+  chests, crafting tables, doors and other blocks that would open or toggle, as if sneaking, without you crouching
+  (core's sneak clicks, only for such blocks).
+- **Inventory Tweaks** opens the box as itself, so other addons' modules that act on containers you open (sorting)
+  leave it alone.
+- **Baritone Render** follows the theme by default: the path's gradient runs from the accent to the secondary colour,
+  blocks to break are the theme's red and gaps to fill its blue, and the goal's highlight is the accent (they were
+  fixed colours). Colours you set yourself stay as they are.
+- **Packet Mine**: Fast's description says where its decoy starts go now (above the build limit, core 0.6.0).
+
 ## 0.5.0
 
 Needs Myriad 0.5.0.

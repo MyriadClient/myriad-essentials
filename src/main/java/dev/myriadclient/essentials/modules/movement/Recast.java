@@ -581,7 +581,8 @@ public class Recast extends ElytraMode {
 			stand();
 			return true;
 		}
-		Placement.Options options = Placement.Options.STRICT.withRotate(true);
+		// As if sneaking against a chest or other block that would open instead.
+		Placement.Options options = Placement.Options.STRICT.withRotate(true).withSneak(true);
 		Vec3 eye = mc.player.getEyePosition();
 		for (BlockPos gap : holeGaps(hole.distance())) {
 			if (Myriad.placement().isPending(gap)) {

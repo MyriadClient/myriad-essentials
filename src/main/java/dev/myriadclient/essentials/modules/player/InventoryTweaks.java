@@ -93,8 +93,8 @@ public class InventoryTweaks extends Module {
 			})
 			.require(() -> hotbar[0] >= 0, "Couldn't move it to the hotbar")
 			.run(() -> mc.player.closeContainer())
-			.await(() -> succeeded(Myriad.placement().place(this, floorClick(spot), hotbar[0], Placement.Options.STRICT).result(), "The server didn't let it be placed"), 40)
-			.await(() -> Myriad.containers().open(spot, 20), 40)
+			.await(() -> succeeded(Myriad.placement().place(this, floorClick(spot), hotbar[0], Placement.Options.STRICT.withSneak(true)).result(), "The server didn't let it be placed"), 40)
+			.await(() -> Myriad.containers().open(this, spot, 20), 40)
 			.waitUntil(() -> Myriad.containers().current().isEmpty(), BROWSE_TICKS)
 			.run(() -> {
 				if (silk < 0) return;

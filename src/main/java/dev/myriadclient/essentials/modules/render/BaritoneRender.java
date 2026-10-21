@@ -53,9 +53,9 @@ public class BaritoneRender extends Module {
 	private final SettingGroup sgPath = settings.group("Path");
 	private final BoolSetting path = sgPath.bool("Path").description("Draw the path Baritone walks.").defaultValue(true).build();
 	private final ColorSetting pathStart = sgPath.color("Start").description("One end of the gradient.")
-		.defaultValue(SettingColor.of(0xFF5CF2C8)).visible(path::get).build();
+		.defaultValue(SettingColor.accent()).visible(path::get).build();
 	private final ColorSetting pathEnd = sgPath.color("End").description("The other end of the gradient.")
-		.defaultValue(SettingColor.of(0xFF7A6CFF)).visible(path::get).build();
+		.defaultValue(SettingColor.role(SettingColor.Mode.SECONDARY)).visible(path::get).build();
 	private final DoubleSetting flow = sgPath.doubleSetting("Flow").description("How fast the gradient flows along the path, in blocks a second (0 holds it still).")
 		.defaultValue(6).range(0, 40).decimals(1).visible(path::get).build();
 	private final DoubleSetting width = sgPath.doubleSetting("Width").description("Line width, in pixels.")
@@ -69,9 +69,9 @@ public class BaritoneRender extends Module {
 	private final BoolSetting blocks = sgBlocks.bool("Blocks").description("Mark the blocks Baritone will break and place along the path ahead.")
 		.defaultValue(true).build();
 	private final ColorSetting breakColor = sgBlocks.color("Break").description("Blocks in the way it will mine.")
-		.defaultValue(SettingColor.of(0xFFFF5C7A)).visible(blocks::get).build();
+		.defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(blocks::get).build();
 	private final ColorSetting placeColor = sgBlocks.color("Place").description("Gaps it will fill to walk over (bridging, pillaring).")
-		.defaultValue(SettingColor.of(0xFF5C9DFF)).visible(blocks::get).build();
+		.defaultValue(SettingColor.role(SettingColor.Mode.BLUE)).visible(blocks::get).build();
 	private final HighlightSettings blockStyle = new HighlightSettings(sgBlocks, blocks::get, false);
 
 	private final SettingGroup sgGoal = settings.group("Goal");
@@ -80,7 +80,7 @@ public class BaritoneRender extends Module {
 	private final DoubleSetting opacity = sgGoal.doubleSetting("Opacity").description("How solid the ghost is.")
 		.defaultValue(0.35).range(0.05, 1).decimals(2).visible(() -> goal.get() == GoalLook.GHOST).build();
 	private final ColorSetting goalColor = sgGoal.color("Highlight").description("The ghost's (or the box's) highlight.")
-		.defaultValue(SettingColor.of(0xFF5CF2C8)).visible(() -> goal.get() != GoalLook.NONE).build();
+		.defaultValue(SettingColor.accent()).visible(() -> goal.get() != GoalLook.NONE).build();
 	private final BoolSetting bob = sgGoal.bool("Float").description("The ghost hovers a little, bobbing, and its highlight pulses.").defaultValue(true)
 		.visible(() -> goal.get() == GoalLook.GHOST).build();
 	private final HighlightSettings goalStyle = new HighlightSettings(sgGoal, () -> goal.get() != GoalLook.NONE, true);
