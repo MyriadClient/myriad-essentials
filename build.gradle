@@ -88,6 +88,8 @@ loom {
 		client {
 			runDir = runDir
 			// The same dev switches as Myriad's own runs.
+			// Dev checks: core's services log a call from a thread other than the render thread (Threads.assertRender).
+			property("myriad.dev", "true")
 			property("myriad.openDesktop", project.hasProperty("openDesktop").toString())
 			if (project.hasProperty("screenshotEvery")) property("myriad.screenshotEvery", project.property("screenshotEvery").toString())
 			property("myriad.auditMixins", project.hasProperty("auditMixins").toString())

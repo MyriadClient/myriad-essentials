@@ -64,7 +64,7 @@ def start(k, hotswap):
         shutil.copy2(os.path.join(first, via), os.path.join(run, via))
     java = jbr() if hotswap else shutil.which("java")
     args = [java, f"-Dfabric.dli.config={LAUNCH_CFG}", "-Dfabric.dli.env=client", "-Dfabric.dli.main=net.fabricmc.loader.impl.launch.knot.KnotClient",
-            "-Dmyriad.devConsole=myriad-dev-inbox", "-Dmyriad.openDesktop=false", "-Dmyriad.auditMixins=false",
+            "-Dmyriad.devConsole=myriad-dev-inbox", "-Dmyriad.openDesktop=false", "-Dmyriad.auditMixins=false", "-Dmyriad.dev=true",
             "-Dmyriad.noInputRuleHosts=" + ("" if "--strict" in sys.argv else "localhost,127.0.0.1"), f"@{ARGFILE}",
             "-XX:StackShadowPages=32", "--sun-misc-unsafe-memory-access=allow", "--enable-native-access=ALL-UNNAMED", "-Dfile.encoding=UTF-8"]
     if hotswap:
