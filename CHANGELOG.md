@@ -3,6 +3,24 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.8.0
+
+Needs Myriad 0.8.0.
+
+- **Altitude and Control fly on Myriad's own flights** (`Myriad.elytra().altitude` and `control`), the same code other
+  addons fly. Altitude flies as before (on the Grim test server 605 blocks in 30 s with Elytra Swap, 1722 blocks on a
+  wearing elytra before landing). Control now shows the server the way you fly, level, and comes down to land when
+  your last elytra is wearing out, as Altitude does.
+- **Kill Aura's Turn Speed and Packet Mine's mode are Myriad's standard settings.** Packet Mine's Fast switch is now
+  Mode: Fast (a saved Fast carries over), with Double Break beside it. Scaffold follows the server's placement rules
+  as the rest do; its Rotate switch is unchanged.
+- **Flight follows what the server checks:** Control is offered, and No Durability swaps a chestplate, by whether the
+  server simulates the glide, so 6b6t's NoCheatPlus and any addon's own anti-cheat profile get the right flight.
+- **Module List** keeps a module another module is holding off listed, faded, as "suspended": it's still on as far
+  as you're concerned and comes back by itself.
+- **Inventory Tweaks** opens shulker boxes and ender chests from your inventory through Myriad's own
+  (`Containers.openItem`), so the box always goes back where it was.
+
 ## 0.7.0
 
 Needs Myriad 0.7.0.
