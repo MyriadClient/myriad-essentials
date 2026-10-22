@@ -28,6 +28,10 @@ Needs Myriad 0.9.0.
     against the server's copy of the inventory; not yet on the Grim test server.
 - **No Render: Your Effect Particles** (on by default) hides the potion swirls your own effects give off, which drift
   right in front of the camera in first person. Other players' and mobs' swirls still show.
+- **Recast's Baritone hand-off is a job** of Elytra Fly's, so Myriad's Jobs window shows it ("Lane blocked: Baritone ·
+  12 blocks to go") and you can pause it there (Baritone pauses) or cancel it (you wait at the block; If Blocked's
+  disconnect is left out, since you stopped it). What it does is unchanged: one goal past each obstacle, Baritone
+  mining and placing with your blocks, blocked if it can't get there.
 
 ## 0.8.0
 

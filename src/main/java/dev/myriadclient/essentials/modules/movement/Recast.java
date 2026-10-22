@@ -4,6 +4,11 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.build.Target;
 import dev.myriadclient.api.elytra.ChestSwap;
 import dev.myriadclient.api.event.events.InputEvent;
+import dev.myriadclient.api.job.Job;
+import dev.myriadclient.api.job.JobContext;
+import dev.myriadclient.api.job.Progress;
+import dev.myriadclient.api.job.Step;
+import dev.myriadclient.api.job.Why;
 import dev.myriadclient.api.service.AntiCheat;
 import dev.myriadclient.api.service.Breaking;
 import dev.myriadclient.api.service.Notifications;
@@ -27,6 +32,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -168,15 +174,11 @@ public class Recast extends GlideMode {
 	private Vec3 lineOrigin;
 	private BlockPos mining;
 	private int portalWait;
-	/** With Baritone: where it's walking you, and how long it's been idle on the way. */
-	private Vec3 pathTarget;
-	private int pathWait;
+	/** With Baritone: the job taking you past an obstacle (Elytra Fly's, shown in the Jobs window), while it runs. */
+	private @Nullable Job<Void> handoff;
 	/** With Baritone: your pitch when it took over (to look that way again after), and its settings before. */
 	private float handoffPitch;
 	private Object breakBefore, placeBefore, throwawayBefore;
-	/** With Baritone: the closest it has got to where it's walking you, and ticks since it got closer. */
-	private double pathBest = Double.MAX_VALUE;
-	private int pathStall;
 	/** With Baritone: ticks without getting closer, and without Baritone going, that mean it can't get there. */
 	private static final int PATH_STALL = 300, PATH_START = 40;
 	/** How far along the lane you were each of the last {@link #STUCK_TICKS} ticks spent trying to move. */
@@ -197,19 +199,18 @@ public class Recast extends GlideMode {
 
 	@Override
 	protected void resetFlight() {
-		if (state == State.PATHING) {
-			Baritone.stop();
-			endHandoff();
-		}
+		Job<Void> h = handoff;
+		handoff = null;
+		// Its cancel stops Baritone, and puts Baritone's settings back as it ends.
+		if (h != null) h.cancel();
 		state = State.IDLE;
 		groundY = Double.NaN;
 		wantJump = wantForward = wantSneak = forcedBlock = warned = baritoneFailed = false;
 		laneY = Double.NaN;
 		letGo();
 		putElytraBack();
-		pathWait = pauseTicks = progressCount = sinceStart = 0;
+		pauseTicks = progressCount = sinceStart = 0;
 		hopStarted = false;
-		pathTarget = null;
 		lane = Float.NaN;
 		setbacks.clear();
 		stopMining();
@@ -759,17 +760,11 @@ public class Recast extends GlideMode {
 				fillerSlot();
 			}
 		}
-		if (!Baritone.pathTo(Mth.floor(target.x), Mth.floor(target.y + 0.1), Mth.floor(target.z))) {
-			endHandoff();
-			baritoneFailed = true;
-			blocked(why + " and Baritone can't get past");
-			return;
-		}
+		// Recast says itself what a failure means for the lane (onFailed keeps core's own notice of it away).
+		handoff = Myriad.jobs().start(fly, Step.of("Past it", () -> new PastIt(target, why)).named(why + ": Baritone")
+			.onFailed(w -> baritoneFailed = true).finallyDo(this::endHandoff));
 		status(why + ": Baritone is taking you past it", false);
-		pathTarget = target;
 		state = State.PATHING;
-		pathWait = pathStall = 0;
-		pathBest = Double.MAX_VALUE;
 	}
 
 	/** Baritone's settings back as they were. */
@@ -778,7 +773,6 @@ public class Recast extends GlideMode {
 		if (placeBefore != null) Baritone.setSetting("allowPlace", placeBefore);
 		if (throwawayBefore != null) Baritone.setSetting("acceptableThrowawayItems", throwawayBefore);
 		breakBefore = placeBefore = throwawayBefore = null;
-		pathTarget = null;
 	}
 
 	/** Standing well to the side of the lane's line, or below its height. */
@@ -788,20 +782,18 @@ public class Recast extends GlideMode {
 	}
 
 	/**
-	 * Waits for Baritone to reach the goal, then faces along the lane (Baritone turned you while it walked) and bounces
-	 * on. Baritone stopping short, or getting no closer for a while, means it can't get past.
+	 * While the hand-off job runs, you're Baritone's. Once it's done you face along the lane (Baritone turned you while it
+	 * walked) and bounce on; if it failed, the lane counts as blocked. Cancelled (from the Jobs window, say), you wait
+	 * at the block as if it were blocked, but If Blocked's disconnect is left out: the player stopped it.
 	 */
 	private void tickPathing() {
 		spoofing = false;
 		holdGlide = false;
 		letGo();
-		Vec3 pos = mc.player.position();
-		// At the goal's height too: left on top of what was in the way (Baritone climbed it), the goal can be just ahead
-		// and below, and bouncing from up there runs straight back into it.
-		if (mc.player.onGround() && along(pos) >= along(pathTarget) - 1 && Math.abs(offLine(pos)) <= 1 && Math.abs(pos.y - pathTarget.y) < 0.6
-			&& !offLane()) {
-			Baritone.stop();
-			endHandoff();
+		Job<Void> h = handoff;
+		if (h == null || h.state().isActive()) return;
+		handoff = null;
+		if (h.state() == Job.State.DONE) {
 			// As the lane was fixed: along it, the camera's own way round so it doesn't spin.
 			mc.player.setYRot(mc.player.getYRot() + Mth.wrapDegrees(lane - mc.player.getYRot()));
 			mc.player.setXRot(handoffPitch);
@@ -809,19 +801,84 @@ public class Recast extends GlideMode {
 			progressCount = 0;
 			return;
 		}
-		double left = pos.distanceTo(pathTarget);
-		if (left < pathBest - 0.5) {
-			pathBest = left;
-			pathStall = 0;
-		}
-		boolean going = Baritone.isPathing();
-		// Give the pathfinder a moment to start (or to work out the next stretch) before taking it as having stopped.
-		pathWait = going ? 0 : pathWait + 1;
-		if (++pathStall < PATH_STALL && pathWait < PATH_START) return;
-		Baritone.stop();
-		endHandoff();
 		baritoneFailed = true;
-		blocked("Baritone couldn't get past");
+		Why why = h.why();
+		if (h.state() == Job.State.FAILED && why != null && why.is(Why.BLOCKED)) {
+			blocked(why.detail());
+			return;
+		}
+		stand();
+		state = State.BLOCKED;
+		if (!warned) status("Baritone was stopped, waiting until it's clear", true);
+		warned = true;
+	}
+
+	/**
+	 * Baritone walking you to a spot past an obstacle, mining and placing as it must: done once you stand on the lane's
+	 * line at the spot (or past it); failed as blocked if Baritone won't take the goal, stops short, or gets no closer
+	 * for {@link #PATH_STALL} ticks. One goal per obstacle: it never tries another.
+	 */
+	private final class PastIt implements Step.Run<Void> {
+		private final Vec3 target;
+		private final String why;
+		/** The closest it has got, ticks since it got closer, and ticks since Baritone last said it was going. */
+		private double best = Double.MAX_VALUE;
+		private int stall, idle;
+		private boolean refused;
+
+		PastIt(Vec3 target, String why) {
+			this.target = target;
+			this.why = why;
+		}
+
+		@Override
+		public void start(JobContext ctx) {
+			refused = !Baritone.pathTo(Mth.floor(target.x), Mth.floor(target.y + 0.1), Mth.floor(target.z));
+		}
+
+		@Override
+		public Progress<Void> tick(JobContext ctx) {
+			if (refused) return Progress.failed(Why.of(Why.BLOCKED, why + " and Baritone can't get past"));
+			Vec3 pos = mc.player.position();
+			// At the goal's height too: left on top of what was in the way (Baritone climbed it), the goal can be just
+			// ahead and below, and bouncing from up there runs straight back into it.
+			if (mc.player.onGround() && along(pos) >= along(target) - 1 && Math.abs(offLine(pos)) <= 1 && Math.abs(pos.y - target.y) < 0.6
+				&& !offLane()) {
+				Baritone.stop();
+				return Progress.done();
+			}
+			double left = pos.distanceTo(target);
+			if (left < best - 0.5) {
+				best = left;
+				stall = 0;
+			}
+			// Give the pathfinder a moment to start (or to work out the next stretch) before taking it as having stopped.
+			idle = Baritone.isPathing() ? 0 : idle + 1;
+			if (++stall < PATH_STALL && idle < PATH_START) return Progress.running();
+			Baritone.stop();
+			return Progress.failed(Why.of(Why.BLOCKED, "Baritone couldn't get past"));
+		}
+
+		@Override
+		public void pause(JobContext ctx) {
+			Baritone.pause(ctx.job());
+		}
+
+		@Override
+		public void resume(JobContext ctx) {
+			Baritone.resume(ctx.job());
+		}
+
+		@Override
+		public void cancel(JobContext ctx) {
+			Baritone.resume(ctx.job());
+			Baritone.stop();
+		}
+
+		@Override
+		public String status() {
+			return String.format("%.0f blocks to go", mc.player.position().distanceTo(target));
+		}
 	}
 
 	/**
