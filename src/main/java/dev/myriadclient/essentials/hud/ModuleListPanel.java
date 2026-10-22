@@ -18,7 +18,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** The classic "array list": enabled modules, longest first, sliding in and out. */
+/**
+ * The classic "array list": enabled modules, longest first, sliding in and out. A module another holds off for now
+ * (Search holding Elytra Fly) stays listed, faded, as "suspended": it's still on as far as you're concerned.
+ */
 public final class ModuleListPanel extends HudPanel {
 	public enum Sort {
 		WIDTH, ALPHABETICAL
@@ -37,6 +40,7 @@ public final class ModuleListPanel extends HudPanel {
 	}
 
 	private String info(Module m) {
+		if (m.isSuspended()) return " suspended";
 		String i = info.get() ? m.hudInfo() : null;
 		return i == null || i.isEmpty() ? null : " " + i;
 	}
@@ -48,7 +52,7 @@ public final class ModuleListPanel extends HudPanel {
 		float s = fontSize(c);
 		List<Row> rows = new ArrayList<>();
 		for (Module m : Myriad.modules()) {
-			boolean show = m.isEnabled() && m.visibleInList.get();
+			boolean show = (m.isEnabled() || m.isSuspended()) && m.visibleInList.get();
 			Animated a = slide.computeIfAbsent(m, k -> new Animated(show ? 1 : 0));
 			a.animateTo(show ? 1 : 0, 220, Bezier.EASE_OUT_QUINT);
 			float t = a.get();
@@ -86,7 +90,7 @@ public final class ModuleListPanel extends HudPanel {
 			float x = right ? w - rw * r.t : -rw * (1 - r.t);
 			int color = style.color(i, rows.size(), r.module);
 			c.push();
-			c.alpha(r.t);
+			c.alpha(r.module.isSuspended() ? r.t * 0.5f : r.t);
 			if (background.get()) {
 				c.rect(x, y, rw, lh, 0x66000000);
 				c.rect(right ? x + rw - 1 : x, y, 1, lh, color);
