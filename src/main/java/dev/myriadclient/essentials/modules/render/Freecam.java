@@ -23,8 +23,8 @@ import net.minecraft.world.phys.Vec3;
  * Fly the camera around while your player stays put. Movement keys move the camera, Space/Shift go up/down.
  */
 public class Freecam extends Module {
-	private final DoubleSetting speed = sgGeneral.doubleSetting("Speed").description("Blocks per tick.").defaultValue(1.0).range(0.1, 10).decimals(1).build();
-	private final DoubleSetting verticalSpeed = sgGeneral.doubleSetting("Vertical Speed").description("Blocks per tick going up and down.").defaultValue(1.0).range(0.1, 10).decimals(1).build();
+	private final DoubleSetting speed = sgGeneral.decimal("Speed").description("Blocks per tick.").defaultValue(1.0).range(0.1, 10).decimals(1).build();
+	private final DoubleSetting verticalSpeed = sgGeneral.decimal("Vertical Speed").description("Blocks per tick going up and down.").defaultValue(1.0).range(0.1, 10).decimals(1).build();
 	private final BoolSetting scrollSpeed = sgGeneral.bool("Scroll Speed").description("Scroll to change speed while flying.").defaultValue(true).build();
 	private final BoolSetting interaction = sgGeneral.bool("Interaction").description("Break, place and target from the camera's position.").defaultValue(true).build();
 	private final BoolSetting rotate = sgGeneral.bool("Rotate").description("Turn your real player to face where the camera looks.").build();

@@ -63,47 +63,47 @@ public class AutoDisconnect extends Module {
 
 	private final SettingGroup sgHealth = settings.group("Health");
 	private final BoolSetting health = sgHealth.bool("Health").description("Leave at low health (absorption included).").defaultValue(true).build();
-	private final DoubleSetting healthThreshold = sgHealth.doubleSetting("Threshold").defaultValue(6).range(1, 36).decimals(1).visible(health::get).build();
+	private final DoubleSetting healthThreshold = sgHealth.decimal("Threshold").defaultValue(6).range(1, 36).decimals(1).visible(health::get).build();
 	private final BoolSetting pops = sgHealth.bool("Totem Pops").description("Leave after this many totems pop in one life.").build();
-	private final IntSetting popCount = sgHealth.intSetting("Pops").defaultValue(3).range(1, 20).visible(pops::get).build();
+	private final IntSetting popCount = sgHealth.integer("Pops").defaultValue(3).range(1, 20).visible(pops::get).build();
 	private final BoolSetting totems = sgHealth.bool("Totems Left").description("Leave when you have this many totems or fewer.").build();
-	private final IntSetting totemCount = sgHealth.intSetting("Totems").defaultValue(0).range(0, 20).visible(totems::get).build();
+	private final IntSetting totemCount = sgHealth.integer("Totems").defaultValue(0).range(0, 20).visible(totems::get).build();
 	private final BoolSetting armor = sgHealth.bool("Armor").description("Leave when a piece of armour you wear is about to break.").build();
-	private final IntSetting armorDurability = sgHealth.intSetting("Armor Durability").description("Durability left, in percent.").defaultValue(10).range(1, 50).visible(armor::get).build();
+	private final IntSetting armorDurability = sgHealth.integer("Armor Durability").description("Durability left, in percent.").defaultValue(10).range(1, 50).visible(armor::get).build();
 
 	private final SettingGroup sgDanger = settings.group("Danger");
 	private final BoolSetting players = sgDanger.bool("Players").description("Leave when a player who isn't a friend comes close.").build();
-	private final DoubleSetting playerRange = sgDanger.doubleSetting("Player Range").defaultValue(16).range(1, 128).decimals(0).visible(players::get).build();
+	private final DoubleSetting playerRange = sgDanger.decimal("Player Range").defaultValue(16).range(1, 128).decimals(0).visible(players::get).build();
 	private final BoolSetting beds = sgDanger.bool("Beds").description("Leave when a bed nearby could kill you (outside the Overworld).").defaultValue(true).build();
 	private final BoolSetting anchors = sgDanger.bool("Anchors").description("Leave when a charged respawn anchor nearby could kill you (outside the Nether).").defaultValue(true).build();
 	private final BoolSetting crystals = sgDanger.bool("Crystals").description("Leave when end crystals nearby could kill you.").build();
 	private final BoolSetting creepers = sgDanger.bool("Creepers").description("Leave when a creeper comes close.").build();
-	private final DoubleSetting creeperRange = sgDanger.doubleSetting("Creeper Range").defaultValue(5).range(1, 16).decimals(1).visible(creepers::get).build();
+	private final DoubleSetting creeperRange = sgDanger.decimal("Creeper Range").defaultValue(5).range(1, 16).decimals(1).visible(creepers::get).build();
 	private final RegistryListSetting<EntityType<?>> entities = sgDanger.entityTypes("Entities").description("Leave when one of these comes close (TNT minecarts, withers...).").build();
-	private final DoubleSetting entityRange = sgDanger.doubleSetting("Entity Range").defaultValue(10).range(1, 64).decimals(0).visible(() -> !entities.get().isEmpty()).build();
+	private final DoubleSetting entityRange = sgDanger.decimal("Entity Range").defaultValue(10).range(1, 64).decimals(0).visible(() -> !entities.get().isEmpty()).build();
 
 	private final SettingGroup sgPosition = settings.group("Position");
 	private final BoolSetting hardDeck = sgPosition.bool("Hard Deck")
 		.description("Leave below Floor Y or above Ceiling Y. Each counts once you've been on its safe side in this dimension, so being "
 			+ "outside one when you turn this on or arrive doesn't make you leave. Left in the air, you're in the air when you rejoin.").build();
-	private final IntSetting floorY = sgPosition.intSetting("Floor Y").description("Leave below this height.")
+	private final IntSetting floorY = sgPosition.integer("Floor Y").description("Leave below this height.")
 		.defaultValue(64).range(-64, 2000).typed().visible(hardDeck::get).build();
-	private final IntSetting ceilingY = sgPosition.intSetting("Ceiling Y").description("Leave above this height.")
+	private final IntSetting ceilingY = sgPosition.integer("Ceiling Y").description("Leave above this height.")
 		.defaultValue(500).range(-64, 2000).typed().visible(hardDeck::get).build();
 	private final BoolSetting destination = sgPosition.bool("Destination")
 		.description("Leave once you're within Within blocks of a spot (sideways, at any height): where a flight or a walk you left "
 			+ "running should end. Pick one on its way (on the highway, for Recast).").build();
-	private final EnumSetting<Target> target = sgPosition.enumSetting("Target", Target.COORDS)
+	private final EnumSetting<Target> target = sgPosition.oneOf("Target", Target.COORDS)
 		.description("Coords: X and Z, in the dimension you're in. Waypoint: one of your map's (Xaero's Minimap), found from whichever "
 			+ "dimension you're in (a Nether waypoint at an eighth of the Overworld's distance).").visible(destination::get).build();
 	private final ChoiceSetting waypoint = sgPosition.choice("Waypoint", AutoDisconnect::waypointNames)
 		.description("The waypoint to leave near, from your map's waypoints for this server.")
 		.visible(() -> destination.get() && target.get() == Target.WAYPOINT).build();
-	private final IntSetting x = sgPosition.intSetting("X").defaultValue(0).range(-30_000_000, 30_000_000).typed()
+	private final IntSetting x = sgPosition.integer("X").defaultValue(0).range(-30_000_000, 30_000_000).typed()
 		.visible(() -> destination.get() && target.get() == Target.COORDS).build();
-	private final IntSetting z = sgPosition.intSetting("Z").defaultValue(0).range(-30_000_000, 30_000_000).typed()
+	private final IntSetting z = sgPosition.integer("Z").defaultValue(0).range(-30_000_000, 30_000_000).typed()
 		.visible(() -> destination.get() && target.get() == Target.COORDS).build();
-	private final IntSetting within = sgPosition.intSetting("Within").description("How close to the spot, in blocks.")
+	private final IntSetting within = sgPosition.integer("Within").description("How close to the spot, in blocks.")
 		.defaultValue(16).range(1, 1_000_000).typed().visible(destination::get).build();
 	private final ActionSetting useHere = sgPosition.action("Use Here", () -> {
 		if (!inGame()) return;
@@ -111,7 +111,7 @@ public class AutoDisconnect extends Module {
 		z.set(mc.player.getBlockZ());
 	}).description("Set X and Z to where you are.").visible(() -> destination.get() && target.get() == Target.COORDS).build();
 
-	private final EnumSetting<AfterLeaving> afterLeaving = sgGeneral.enumSetting("After Leaving", AfterLeaving.TURN_OFF)
+	private final EnumSetting<AfterLeaving> afterLeaving = sgGeneral.oneOf("After Leaving", AfterLeaving.TURN_OFF)
 		.description("Turn off, or stay on and wait for the reason you left to clear before it can make you leave again.").build();
 	private final BoolSetting copyCoords = sgGeneral.bool("Copy Coords").description("Copy where you were to the clipboard.").build();
 

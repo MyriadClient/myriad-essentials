@@ -77,9 +77,9 @@ public class KillAura extends Module {
 	public static final Hook<Candidates, Entity> TARGET = Hook.of("myriad-essentials:kill_aura_target", "Kill Aura target",
 		"Which entity in reach Kill Aura attacks.");
 
-	private final EnumSetting<Weapon> weapon = sgGeneral.enumSetting("Weapon", Weapon.HOLDING)
+	private final EnumSetting<Weapon> weapon = sgGeneral.oneOf("Weapon", Weapon.HOLDING)
 		.description("Holding: only attack while you hold a weapon. Switch: attack with your best weapon, from the hotbar or inventory, without changing what you hold. Anything: hit with whatever you hold.").build();
-	private final IntSetting turnSpeed = sgGeneral.intSetting("Turn Speed")
+	private final IntSetting turnSpeed = sgGeneral.integer("Turn Speed")
 		.description("Most degrees to turn per tick towards a target; 0 turns at once (fine on Grim, some anti-cheats want it limited).")
 		.defaultValue(0).range(0, 180).build();
 	private final BoolSetting render = sgGeneral.bool("Render").description("Outline the target.").defaultValue(true).build();

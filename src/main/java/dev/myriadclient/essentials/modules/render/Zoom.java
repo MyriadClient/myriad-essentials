@@ -24,11 +24,11 @@ public class Zoom extends Module {
 	private static final double SCROLL_STEP = 1.2;
 	private static final double MAX_ZOOM = 50;
 
-	private final DoubleSetting factor = sgGeneral.doubleSetting("Factor").description("How much the field of view is divided.").defaultValue(4).range(1.5, 12).decimals(1).build();
+	private final DoubleSetting factor = sgGeneral.decimal("Factor").description("How much the field of view is divided.").defaultValue(4).range(1.5, 12).decimals(1).build();
 	private final BoolSetting scroll = sgGeneral.bool("Scroll").description("Scroll to zoom further in or out while zoomed.").defaultValue(true).build();
-	private final IntSetting duration = sgGeneral.intSetting("Duration").description("Milliseconds to ease in and out; 0 snaps.").defaultValue(150).range(0, 600).build();
+	private final IntSetting duration = sgGeneral.integer("Duration").description("Milliseconds to ease in and out; 0 snaps.").defaultValue(150).range(0, 600).build();
 	private final BoolSetting smoothCamera = sgGeneral.bool("Smooth Camera").description("Use Minecraft's cinematic camera while zoomed.").build();
-	private final DoubleSetting smoothCameraSpeed = sgGeneral.doubleSetting("Smooth Camera Speed").description("Look speed multiplier with the smooth camera.").defaultValue(1)
+	private final DoubleSetting smoothCameraSpeed = sgGeneral.decimal("Smooth Camera Speed").description("Look speed multiplier with the smooth camera.").defaultValue(1)
 		.range(0.1, 3).decimals(1).visible(smoothCamera::get).build();
 
 	/** How far in the zoom is, 0 (off) to 1 (all the way), before easing. Moves at a steady rate towards on or off. */

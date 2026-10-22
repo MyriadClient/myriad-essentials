@@ -58,8 +58,8 @@ import java.util.Map;
 public class Nametags extends Module {
 	private static final float PAD_X = 3, PAD_Y = 2, GAP = 3, ITEM = 12, ITEM_GAP = 14;
 
-	private final DoubleSetting scale = sgGeneral.doubleSetting("Scale").defaultValue(1.1).range(0.3, 4).decimals(1).build();
-	private final DoubleSetting range = sgGeneral.doubleSetting("Range").description("0 = no limit.").defaultValue(0).range(0, 256).decimals(0).build();
+	private final DoubleSetting scale = sgGeneral.decimal("Scale").defaultValue(1.1).range(0.3, 4).decimals(1).build();
+	private final DoubleSetting range = sgGeneral.decimal("Range").description("0 = no limit.").defaultValue(0).range(0, 256).decimals(0).build();
 	private final BoolSetting background = sgGeneral.bool("Background").defaultValue(true).build();
 	private final ColorSetting fill = sgGeneral.color("Fill").defaultValue(0x64000000).visible(background::get).build();
 	private final ColorSetting line = sgGeneral.color("Line").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, 0xC0)).visible(background::get).build();
@@ -73,7 +73,7 @@ public class Nametags extends Module {
 	private final BoolSetting totemPops = sgPlayers.bool("Totem Pops").defaultValue(true).visible(players::get).build();
 	private final BoolSetting distance = sgPlayers.bool("Distance").visible(players::get).build();
 	private final BoolSetting gamemode = sgPlayers.bool("Gamemode").visible(players::get).build();
-	private final DoubleSetting offset = sgPlayers.doubleSetting("Offset").description("Height above the head, in blocks.").defaultValue(0.4).range(-2, 3).decimals(1).visible(players::get).build();
+	private final DoubleSetting offset = sgPlayers.decimal("Offset").description("Height above the head, in blocks.").defaultValue(0.4).range(-2, 3).decimals(1).visible(players::get).build();
 	private final ColorSetting nameColor = sgPlayers.color("Name").defaultValue(SettingColor.role(SettingColor.Mode.TEXT)).visible(players::get).build();
 	private final ColorSetting friendColor = sgPlayers.color("Friends").defaultValue(SettingColor.role(SettingColor.Mode.CYAN)).visible(players::get).build();
 
@@ -89,7 +89,7 @@ public class Nametags extends Module {
 	private final BoolSetting mobs = sgOthers.bool("Mobs").description("Name and health over mobs.").build();
 	private final BoolSetting items = sgOthers.bool("Items").description("Names and counts over dropped items.").defaultValue(true).build();
 	private final BoolSetting groupItems = sgOthers.bool("Group Items").description("One tag per item type for items lying together.").defaultValue(true).visible(items::get).build();
-	private final DoubleSetting itemRange = sgOthers.doubleSetting("Item Range").defaultValue(32).range(1, 128).decimals(0).visible(items::get).build();
+	private final DoubleSetting itemRange = sgOthers.decimal("Item Range").defaultValue(32).range(1, 128).decimals(0).visible(items::get).build();
 	private final BoolSetting pearls = sgOthers.bool("Pearls").description("Who threw each ender pearl.").defaultValue(true).build();
 
 	private record Segment(String text, int color) {

@@ -53,7 +53,7 @@ public class ElytraFly extends Module {
 			showSnap();
 			switchType();
 		}).build();
-	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve")
+	private final DoubleSetting preserve = sgGeneral.decimal("Preserve")
 		.description("Put elytras with less durability than this (%) aside, and fly with another.").defaultValue(5).range(0, 50).decimals(0).build();
 	/** Snap's value for each type, saved but not shown: {@link #snap} shows and edits the chosen type's. */
 	private final EnumSetting<Snap> recastSnap = snapFor(RECAST, Snap.DEGREES_45), altitudeSnap = snapFor(ALTITUDE, Snap.OFF),
@@ -146,7 +146,7 @@ public class ElytraFly extends Module {
 	}
 
 	private EnumSetting<Snap> snapFor(String type, Snap defaultValue) {
-		return sgGeneral.enumSetting(type + " Snap", defaultValue).description("Snap for " + type + ".").visible(() -> false)
+		return sgGeneral.oneOf(type + " Snap", defaultValue).description("Snap for " + type + ".").visible(() -> false)
 			.onChanged(v -> {
 				if (this.type.get().equals(type)) showSnap();
 			}).build();

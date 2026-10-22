@@ -10,7 +10,7 @@ public final class SpeedPanel extends TextHudPanel {
 		BLOCKS_PER_SECOND, KMH
 	}
 
-	private final EnumSetting<Unit> unit = sgGeneral.enumSetting("Unit", Unit.BLOCKS_PER_SECOND).build();
+	private final EnumSetting<Unit> unit = sgGeneral.oneOf("Unit", Unit.BLOCKS_PER_SECOND).build();
 
 	public SpeedPanel() {
 		super("Speed", "", HudStyle.Mode.TEXT);

@@ -55,8 +55,8 @@ public class ESP extends Module {
 
 	private static final long FADE_MS = 200;
 
-	private final EnumSetting<Mode> mode = sgGeneral.enumSetting("Mode", Mode.HITBOX).description("Hitbox: 3D boxes. Box 2D: screen rectangles. Model: the model's wireframe. Outline: a shader outline around the exact shape.").build();
-	private final DoubleSetting range = sgGeneral.doubleSetting("Range").description("0 = no limit.").defaultValue(0).range(0, 256).decimals(0).build();
+	private final EnumSetting<Mode> mode = sgGeneral.oneOf("Mode", Mode.HITBOX).description("Hitbox: 3D boxes. Box 2D: screen rectangles. Model: the model's wireframe. Outline: a shader outline around the exact shape.").build();
+	private final DoubleSetting range = sgGeneral.decimal("Range").description("0 = no limit.").defaultValue(0).range(0, 256).decimals(0).build();
 	private final BoolSetting fade = sgGeneral.bool("Fade In").description("Fade entities in as they appear.").defaultValue(true).build();
 	private final BoolSetting healthBar = sgGeneral.bool("Health Bar").description("A health bar beside each box.").visible(() -> mode.get() == Mode.BOX_2D).build();
 	private final BoxStyle style = new BoxStyle(sgGeneral, () -> mode.get() != Mode.OUTLINE);

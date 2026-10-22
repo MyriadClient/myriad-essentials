@@ -40,8 +40,8 @@ public class Velocity extends Module {
 	/** Shrinks boxes a hair so touching a wall doesn't count as being inside it. */
 	private static final double SKIN = 1.0E-7;
 
-	private final DoubleSetting horizontal = sgGeneral.doubleSetting("Horizontal").description("Percent of horizontal knockback to keep.").defaultValue(0).range(0, 100).decimals(0).build();
-	private final DoubleSetting vertical = sgGeneral.doubleSetting("Vertical").description("Percent of vertical knockback to keep.").defaultValue(0).range(0, 100).decimals(0).build();
+	private final DoubleSetting horizontal = sgGeneral.decimal("Horizontal").description("Percent of horizontal knockback to keep.").defaultValue(0).range(0, 100).decimals(0).build();
+	private final DoubleSetting vertical = sgGeneral.decimal("Vertical").description("Percent of vertical knockback to keep.").defaultValue(0).range(0, 100).decimals(0).build();
 	private final BoolSetting explosions = sgGeneral.bool("Explosions").defaultValue(true).build();
 	private final BoolSetting fishingRods = sgGeneral.bool("Fishing Rods").description("Don't get pulled by fishing rods.").defaultValue(true).build();
 	private final BoolSetting pauseLag = sgGeneral.bool("Pause Lag").description("Ignore the zero-velocity packet some servers send right after a setback.").build();

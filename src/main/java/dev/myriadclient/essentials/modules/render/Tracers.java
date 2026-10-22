@@ -29,9 +29,9 @@ public class Tracers extends Module {
 		FEET, BODY, HEAD
 	}
 
-	private final EnumSetting<Target> target = sgGeneral.enumSetting("Target", Target.BODY).description("Which part of the entity the line ends at.").build();
-	private final DoubleSetting range = sgGeneral.doubleSetting("Range").description("0 = no limit.").defaultValue(128).range(0, 512).decimals(0).build();
-	private final DoubleSetting lineWidth = sgGeneral.doubleSetting("Line Width").defaultValue(1.5).range(0.5, 5).decimals(1).build();
+	private final EnumSetting<Target> target = sgGeneral.oneOf("Target", Target.BODY).description("Which part of the entity the line ends at.").build();
+	private final DoubleSetting range = sgGeneral.decimal("Range").description("0 = no limit.").defaultValue(128).range(0, 512).decimals(0).build();
+	private final DoubleSetting lineWidth = sgGeneral.decimal("Line Width").defaultValue(1.5).range(0.5, 5).decimals(1).build();
 	private final BoolSetting fadeDistance = sgGeneral.bool("Fade With Distance").description("Far lines are fainter.").defaultValue(true).build();
 	private final BoolSetting storage = sgGeneral.bool("Storage").description("Also draw lines to what Storage highlights (needs Storage on).").build();
 	private final BoolSetting blocks = sgGeneral.bool("Blocks").description("Also draw lines to what Blocks highlights (needs Blocks on).").build();

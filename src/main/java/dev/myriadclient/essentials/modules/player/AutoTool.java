@@ -38,7 +38,7 @@ public class AutoTool extends Module {
 	private final BoolSetting swapBack = sgGeneral.bool("Swap Back").description("Go back to the slot you had when you stop mining.").defaultValue(true)
 		.visible(() -> !silent.get()).build();
 	private final BoolSetting weapon = sgGeneral.bool("Weapon").description("Switch to your best weapon when you attack.").build();
-	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve").description("Put tools and weapons with less durability than this (%) aside, to be mended.").defaultValue(3).range(0, 50).decimals(0).build();
+	private final DoubleSetting preserve = sgGeneral.decimal("Preserve").description("Put tools and weapons with less durability than this (%) aside, to be mended.").defaultValue(3).range(0, 50).decimals(0).build();
 
 	private boolean holding;
 	private int previousSlot = -1, holdTicks;

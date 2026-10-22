@@ -21,7 +21,7 @@ public class FullBright extends Module {
 	/** Far past vanilla's 1.0 ("Bright"), so even unlit caves read clearly. */
 	public static final float GAMMA = 15f;
 
-	private final EnumSetting<Mode> mode = sgGeneral.enumSetting("Mode", Mode.GAMMA)
+	private final EnumSetting<Mode> mode = sgGeneral.oneOf("Mode", Mode.GAMMA)
 		.description("Gamma brightens the lightmap; Night Vision gives a client-side night vision effect. Both work with shaders.").build();
 
 	/** The night vision effect this module gave you, so only that one is ever removed (never a real one). */

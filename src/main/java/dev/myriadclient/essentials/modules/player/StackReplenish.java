@@ -22,7 +22,7 @@ import java.util.Arrays;
  * hold (newer versions, not 2b2t), it waits for a moment you aren't pressing any.
  */
 public class StackReplenish extends Module {
-	private final IntSetting threshold = sgGeneral.intSetting("Threshold").description("Refill a stack when it drops to this percent of a full one.")
+	private final IntSetting threshold = sgGeneral.integer("Threshold").description("Refill a stack when it drops to this percent of a full one.")
 		.defaultValue(25).range(1, 99).build();
 	private final BoolSetting mainHand = sgGeneral.bool("Main Hand").description("Refill the stack you're holding.").defaultValue(true).build();
 	private final BoolSetting offHand = sgGeneral.bool("Off Hand").description("Refill the off hand (crystals, golden apples).").defaultValue(true).build();

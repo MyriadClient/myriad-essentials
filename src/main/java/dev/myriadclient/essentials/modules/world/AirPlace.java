@@ -28,7 +28,7 @@ import net.minecraft.world.phys.Vec3;
  * (6 looking along a diagonal).
  */
 public class AirPlace extends Module {
-	private final DoubleSetting distance = sgGeneral.doubleSetting("Distance").description("How far in front of you the block goes.")
+	private final DoubleSetting distance = sgGeneral.decimal("Distance").description("How far in front of you the block goes.")
 		.defaultValue(3).range(1, 6).decimals(1).build();
 
 	/** How far back along the look each try steps when the space is out of reach. */

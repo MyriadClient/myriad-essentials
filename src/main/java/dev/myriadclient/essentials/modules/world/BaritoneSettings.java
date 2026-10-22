@@ -101,11 +101,11 @@ public class BaritoneSettings extends Module {
 			return new Link(info.name(), group.bool(title).description(about).defaultValue((Boolean) def).build(), v -> v, false);
 		}
 		if (type == Integer.class) {
-			return new Link(info.name(), group.intSetting(title).description(about).defaultValue((Integer) def).typed().build(), v -> v, false);
+			return new Link(info.name(), group.integer(title).description(about).defaultValue((Integer) def).typed().build(), v -> v, false);
 		}
 		if (type == Double.class || type == Float.class) {
 			boolean f = type == Float.class;
-			return new Link(info.name(), group.doubleSetting(title).description(about).defaultValue(((Number) def).doubleValue()).decimals(3).typed().build(),
+			return new Link(info.name(), group.decimal(title).description(about).defaultValue(((Number) def).doubleValue()).decimals(3).typed().build(),
 				v -> f ? (Object) ((Number) v).floatValue() : v, false);
 		}
 		if (type == Color.class) {

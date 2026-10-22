@@ -35,9 +35,9 @@ public class AutoEat extends Module {
 	private static final int GRACE_TICKS = 20;
 
 	private final BoolSetting health = sgGeneral.bool("Health").description("Eat when health is low.").defaultValue(true).build();
-	private final IntSetting healthThreshold = sgGeneral.intSetting("Health Threshold").description("Health (including absorption) to eat at.").defaultValue(10).range(1, 36).visible(health::get).build();
+	private final IntSetting healthThreshold = sgGeneral.integer("Health Threshold").description("Health (including absorption) to eat at.").defaultValue(10).range(1, 36).visible(health::get).build();
 	private final BoolSetting hunger = sgGeneral.bool("Hunger").description("Eat when hunger is low.").defaultValue(true).build();
-	private final IntSetting hungerThreshold = sgGeneral.intSetting("Hunger Threshold").description("Food level to eat at; 18 or more keeps natural regeneration going.")
+	private final IntSetting hungerThreshold = sgGeneral.integer("Hunger Threshold").description("Food level to eat at; 18 or more keeps natural regeneration going.")
 		.defaultValue(16).range(1, 19).visible(hunger::get).build();
 	private final RegistryListSetting<Item> healthFoods = sgGeneral.items("Health Foods")
 		.description("Eaten first when health is low (the strongest of them first).")

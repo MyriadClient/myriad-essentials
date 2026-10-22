@@ -25,11 +25,11 @@ public final class ArmorPanel extends HudPanel {
 
 	private static final EquipmentSlot[] SLOTS = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
-	private final EnumSetting<Layout> layout = sgGeneral.enumSetting("Layout", Layout.HORIZONTAL).build();
-	private final EnumSetting<ItemHud.Durability> durability = sgGeneral.enumSetting("Durability", ItemHud.Durability.BAR).build();
+	private final EnumSetting<Layout> layout = sgGeneral.oneOf("Layout", Layout.HORIZONTAL).build();
+	private final EnumSetting<ItemHud.Durability> durability = sgGeneral.oneOf("Durability", ItemHud.Durability.BAR).build();
 	private final BoolSetting hideUndamaged = sgGeneral.bool("Hide Undamaged").description("No durability on armour that hasn't taken any.").defaultValue(true)
 		.visible(() -> durability.get() != ItemHud.Durability.NONE).build();
-	private final DoubleSetting textScale = sgGeneral.doubleSetting("Text Scale").description("Size of the percentage, relative to the HUD text.").defaultValue(0.8)
+	private final DoubleSetting textScale = sgGeneral.decimal("Text Scale").description("Size of the percentage, relative to the HUD text.").defaultValue(0.8)
 		.range(0.5, 1.5).decimals(2).visible(() -> ItemHud.showsPercent(durability.get())).build();
 	private final BoolSetting skipEmpty = sgGeneral.bool("Skip Empty").description("Close up gaps left by empty slots.").build();
 	private final BoolSetting avoidAir = sgGeneral.bool("Avoid Air Bar").description("Move up while the air bubbles are showing, like vanilla HUD rows.").defaultValue(true).build();

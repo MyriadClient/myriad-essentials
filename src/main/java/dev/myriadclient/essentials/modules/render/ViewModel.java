@@ -18,27 +18,27 @@ public class ViewModel extends Module {
 	public final BoolSetting noSway = sgGeneral.bool("No Sway").description("Stop the hands lagging behind camera movement.").build();
 	public final BoolSetting hideMain = sgGeneral.bool("Hide Main Hand").build();
 	public final BoolSetting hideOff = sgGeneral.bool("Hide Offhand").description("Handy for big shields and totems.").build();
-	public final DoubleSetting swingSpeed = sgGeneral.doubleSetting("Swing Speed").description("How fast your hands swing; 1 is vanilla (Haste and Mining Fatigue still count).")
+	public final DoubleSetting swingSpeed = sgGeneral.decimal("Swing Speed").description("How fast your hands swing; 1 is vanilla (Haste and Mining Fatigue still count).")
 		.defaultValue(1).range(0.25, 4).decimals(2).build();
 	public final BoolSetting noSwitch = sgGeneral.bool("No Switch Animation").description("Show a new item straight away instead of lowering and raising the hand.").build();
 
 	private final SettingGroup sgPosition = settings.group("Position");
-	public final DoubleSetting x = sgPosition.doubleSetting("X").description("Sideways; mirrored for the other hand.").defaultValue(0).range(-2, 2).build();
-	public final DoubleSetting y = sgPosition.doubleSetting("Y").defaultValue(0).range(-2, 2).build();
-	public final DoubleSetting z = sgPosition.doubleSetting("Z").defaultValue(0).range(-2, 2).build();
+	public final DoubleSetting x = sgPosition.decimal("X").description("Sideways; mirrored for the other hand.").defaultValue(0).range(-2, 2).build();
+	public final DoubleSetting y = sgPosition.decimal("Y").defaultValue(0).range(-2, 2).build();
+	public final DoubleSetting z = sgPosition.decimal("Z").defaultValue(0).range(-2, 2).build();
 	public final BoolSetting separateOffhand = sgPosition.bool("Separate Offhand").description("Position the off hand on its own instead of mirroring the main hand.").build();
-	public final DoubleSetting offX = sgPosition.doubleSetting("Offhand X").description("Sideways, outwards from the body.").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
-	public final DoubleSetting offY = sgPosition.doubleSetting("Offhand Y").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
-	public final DoubleSetting offZ = sgPosition.doubleSetting("Offhand Z").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
+	public final DoubleSetting offX = sgPosition.decimal("Offhand X").description("Sideways, outwards from the body.").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
+	public final DoubleSetting offY = sgPosition.decimal("Offhand Y").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
+	public final DoubleSetting offZ = sgPosition.decimal("Offhand Z").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
 
 	private final SettingGroup sgRotation = settings.group("Rotation");
-	public final IntSetting rotX = sgRotation.intSetting("Pitch").defaultValue(0).range(-180, 180).build();
-	public final IntSetting rotY = sgRotation.intSetting("Yaw").description("Mirrored for the other hand.").defaultValue(0).range(-180, 180).build();
-	public final IntSetting rotZ = sgRotation.intSetting("Roll").description("Mirrored for the other hand.").defaultValue(0).range(-180, 180).build();
+	public final IntSetting rotX = sgRotation.integer("Pitch").defaultValue(0).range(-180, 180).build();
+	public final IntSetting rotY = sgRotation.integer("Yaw").description("Mirrored for the other hand.").defaultValue(0).range(-180, 180).build();
+	public final IntSetting rotZ = sgRotation.integer("Roll").description("Mirrored for the other hand.").defaultValue(0).range(-180, 180).build();
 
 	private final SettingGroup sgScale = settings.group("Scale");
-	public final DoubleSetting scale = sgScale.doubleSetting("Scale").defaultValue(1).range(0.1, 3).build();
-	public final DoubleSetting offhandScale = sgScale.doubleSetting("Offhand Scale").defaultValue(1).range(0.1, 3).build();
+	public final DoubleSetting scale = sgScale.decimal("Scale").defaultValue(1).range(0.1, 3).build();
+	public final DoubleSetting offhandScale = sgScale.decimal("Offhand Scale").defaultValue(1).range(0.1, 3).build();
 
 	public ViewModel() {
 		super(Tags.RENDER, "View Model", "Move, rotate, scale or hide your first-person hands.");

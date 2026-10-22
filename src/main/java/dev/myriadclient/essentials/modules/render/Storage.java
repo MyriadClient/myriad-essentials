@@ -93,9 +93,9 @@ public class Storage extends Module {
 	/** How long after an open or close event a lid is drawn live, at least (the animation then has to settle). */
 	private static final long LID_MS = 1000;
 
-	private final IntSetting range = sgGeneral.intSetting("Range").description("Chunks around you.").defaultValue(8).range(1, 32).build();
+	private final IntSetting range = sgGeneral.integer("Range").description("Chunks around you.").defaultValue(8).range(1, 32).build();
 	private final BoolSetting lids = sgGeneral.bool("Lids").description("Follow chest and shulker box lids as they open.").defaultValue(true).build();
-	private final EnumSetting<Mode> mode = sgGeneral.enumSetting("Mode", Mode.BOXES).description("Boxes: 3D boxes. Outline: a shader outline around each container.").build();
+	private final EnumSetting<Mode> mode = sgGeneral.oneOf("Mode", Mode.BOXES).description("Boxes: 3D boxes. Outline: a shader outline around each container.").build();
 	private final BoolSetting merge = sgGeneral.bool("Merge").description("Draw touching containers of the same colour as one outline.")
 		.visible(() -> mode.get() == Mode.BOXES).build();
 	private final BoxStyle style = new BoxStyle(sgGeneral, () -> mode.get() == Mode.BOXES);

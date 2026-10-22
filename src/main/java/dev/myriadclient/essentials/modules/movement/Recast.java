@@ -71,10 +71,10 @@ public class Recast extends ElytraMode {
 		WAIT, DISCONNECT
 	}
 
-	private final EnumSetting<Obstacles> obstacles = sgGeneral.enumSetting("Obstacles", Obstacles.CLEAR)
+	private final EnumSetting<Obstacles> obstacles = sgGeneral.oneOf("Obstacles", Obstacles.CLEAR)
 		.description("Clear: Baritone takes you past (walking round, mining or placing), or without it, mines through blocks and fills holes at floor level. Stop: stop at them.")
 		.visible(this::chosen).build();
-	private final EnumSetting<IfBlocked> ifBlocked = sgGeneral.enumSetting("If Blocked", IfBlocked.WAIT)
+	private final EnumSetting<IfBlocked> ifBlocked = sgGeneral.oneOf("If Blocked", IfBlocked.WAIT)
 		.description("When the way can't be cleared (with Stop, anything in the lane): wait there, or disconnect.").visible(this::chosen).build();
 
 	private enum State {

@@ -29,7 +29,7 @@ public class FreeLook extends Module {
 	/** How much one scroll notch moves the camera: a ratio, so it feels the same near and far. */
 	private static final float SCROLL_STEP = 1.15f;
 
-	private final EnumSetting<View> view = sgGeneral.enumSetting("View", View.BEHIND).description("Which third-person view to use.").build();
+	private final EnumSetting<View> view = sgGeneral.oneOf("View", View.BEHIND).description("Which third-person view to use.").build();
 	private final BoolSetting snapBack = sgGeneral.bool("Snap Back").description("Return to your previous perspective when turned off.").defaultValue(true).build();
 
 	private float yaw, pitch;

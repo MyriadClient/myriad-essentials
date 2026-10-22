@@ -31,11 +31,11 @@ public class MiddleClick extends Module {
 		NONE, FRIEND, XP, ROCKET, PEARL
 	}
 
-	private final EnumSetting<Action> air = sgGeneral.enumSetting("Air", Action.PEARL).description("Pointing at nothing.").build();
-	private final EnumSetting<Action> entity = sgGeneral.enumSetting("Entity", Action.FRIEND).description("Pointing at an entity (Friend only works on players).").build();
-	private final EnumSetting<Action> block = sgGeneral.enumSetting("Block", Action.XP).description("Pointing at a block.").build();
-	private final EnumSetting<Action> flying = sgGeneral.enumSetting("Flying", Action.ROCKET).description("Flying with an elytra, whatever you point at.").build();
-	private final IntSetting xpDelay = sgGeneral.intSetting("XP Delay").description("Ticks between experience bottles while held.").defaultValue(0).range(0, 10).build();
+	private final EnumSetting<Action> air = sgGeneral.oneOf("Air", Action.PEARL).description("Pointing at nothing.").build();
+	private final EnumSetting<Action> entity = sgGeneral.oneOf("Entity", Action.FRIEND).description("Pointing at an entity (Friend only works on players).").build();
+	private final EnumSetting<Action> block = sgGeneral.oneOf("Block", Action.XP).description("Pointing at a block.").build();
+	private final EnumSetting<Action> flying = sgGeneral.oneOf("Flying", Action.ROCKET).description("Flying with an elytra, whatever you point at.").build();
+	private final IntSetting xpDelay = sgGeneral.integer("XP Delay").description("Ticks between experience bottles while held.").defaultValue(0).range(0, 10).build();
 	private final BoolSetting fromInventory = sgGeneral.bool("From Inventory").description("Use the item from your inventory when it isn't in the hotbar (it's put back after).").defaultValue(true).build();
 	private final BoolSetting whileUsing = sgGeneral.bool("While Using").description("Allow actions while eating or blocking.").build();
 

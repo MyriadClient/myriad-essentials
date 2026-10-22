@@ -24,7 +24,7 @@ public final class ModuleListPanel extends HudPanel {
 		WIDTH, ALPHABETICAL
 	}
 
-	private final EnumSetting<Sort> sort = sgGeneral.enumSetting("Sort", Sort.WIDTH).build();
+	private final EnumSetting<Sort> sort = sgGeneral.oneOf("Sort", Sort.WIDTH).build();
 	private final BoolSetting info = sgGeneral.bool("Show Info").description("Show each module's status text (mode, target, …).").defaultValue(true).build();
 	private final BoolSetting background = sgGeneral.bool("Background").defaultValue(true).build();
 

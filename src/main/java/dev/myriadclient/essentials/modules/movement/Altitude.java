@@ -35,7 +35,7 @@ public class Altitude extends ElytraMode {
 		DIVE, PULL_UP, CLIMB
 	}
 
-	private final EnumSetting<AfterLanding> afterLanding = sgGeneral.enumSetting("After Landing", AfterLanding.DISCONNECT)
+	private final EnumSetting<AfterLanding> afterLanding = sgGeneral.oneOf("After Landing", AfterLanding.DISCONNECT)
 		.description("When it has to come down (the last elytra wearing out): disconnect once landed, or stay there.").visible(this::chosen).build();
 
 	/**

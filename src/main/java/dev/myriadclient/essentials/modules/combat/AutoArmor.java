@@ -49,14 +49,14 @@ public class AutoArmor extends Module {
 
 	private static final EquipmentSlot[] SLOTS = {EquipmentSlot.CHEST, EquipmentSlot.HEAD, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
-	private final IntSetting delay = sgGeneral.intSetting("Delay").description("Ticks between equipping pieces.").defaultValue(2).range(0, 20).build();
-	private final EnumSetting<Protection> prefer = sgGeneral.enumSetting("Prefer", Protection.BLAST_LEGS)
+	private final IntSetting delay = sgGeneral.integer("Delay").description("Ticks between equipping pieces.").defaultValue(2).range(0, 20).build();
+	private final EnumSetting<Protection> prefer = sgGeneral.oneOf("Prefer", Protection.BLAST_LEGS)
 		.description("Protection enchantment to favour between otherwise equal pieces. Blast Legs: Protection, with Blast Protection on leggings.").build();
-	private final DoubleSetting preserve = sgGeneral.doubleSetting("Preserve").description("Put pieces with less durability than this (%) aside, to be mended.")
+	private final DoubleSetting preserve = sgGeneral.decimal("Preserve").description("Put pieces with less durability than this (%) aside, to be mended.")
 		.defaultValue(5).range(0, 50).decimals(0).build();
 
 	private final SettingGroup sgChest = settings.group("Chest Swap");
-	private final EnumSetting<Chest> chest = sgChest.enumSetting("Chest", Chest.CHESTPLATE).description("What to wear in the chest slot.").build();
+	private final EnumSetting<Chest> chest = sgChest.oneOf("Chest", Chest.CHESTPLATE).description("What to wear in the chest slot.").build();
 	private final KeybindSetting swapKey = sgChest.keybind("Swap Bind").description("Flip between chestplate and elytra.").build();
 	private final BoolSetting awaitLanding = sgChest.bool("Await Landing").description("Keep the elytra on until you land.").defaultValue(true).build();
 	private final BoolSetting notify = sgChest.bool("Notify").description("Say which one you swapped to.").defaultValue(true).build();

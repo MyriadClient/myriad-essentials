@@ -62,26 +62,26 @@ public class Offhand extends Module {
 
 	private static final Predicate<ItemStack> TOTEM = s -> s.is(Items.TOTEM_OF_UNDYING);
 
-	private final EnumSetting<Item> item = sgGeneral.enumSetting("Item", Item.TOTEM).description("What to keep in your off hand when you're safe.").build();
-	private final IntSetting health = sgGeneral.intSetting("Health").description("Switch to a totem at or below this health.").defaultValue(14).range(0, 36)
+	private final EnumSetting<Item> item = sgGeneral.oneOf("Item", Item.TOTEM).description("What to keep in your off hand when you're safe.").build();
+	private final IntSetting health = sgGeneral.integer("Health").description("Switch to a totem at or below this health.").defaultValue(14).range(0, 36)
 		.visible(() -> item.get() != Item.TOTEM).build();
 	private final BoolSetting elytra = sgGeneral.bool("Elytra").description("Always a totem while flying with an elytra.").defaultValue(true)
 		.visible(() -> item.get() != Item.TOTEM).build();
-	private final EnumSetting<Gapple> gappleMode = sgGeneral.enumSetting("Gapple", Gapple.BOTH).description("Which golden apples count.").build();
+	private final EnumSetting<Gapple> gappleMode = sgGeneral.oneOf("Gapple", Gapple.BOTH).description("Which golden apples count.").build();
 	private final BoolSetting swordGap = sgGeneral.bool("Sword Gap").description("A golden apple while you hold right click with a sword.").defaultValue(true).build();
-	private final IntSetting delay = sgGeneral.intSetting("Delay").description("Ticks between swaps.").defaultValue(0).range(0, 20).build();
+	private final IntSetting delay = sgGeneral.integer("Delay").description("Ticks between swaps.").defaultValue(0).range(0, 20).build();
 	private final BoolSetting mainHandTotem = sgGeneral.bool("Main Hand Totem").description("A totem you hold in your main hand counts: don't force another into the off hand.").build();
 	private final BoolSetting notify = sgGeneral.bool("Notify").description("Say when one of your totems pops.").build();
 
 	private final SettingGroup sgSafety = settings.group("Safety");
 	private final BoolSetting lethal = sgSafety.bool("Lethal").description("Force a totem when something nearby could kill you: crystals (added up), "
 		+ "beds, anchors, creepers, players or a fall.").defaultValue(true).build();
-	private final DoubleSetting buffer = sgSafety.doubleSetting("Buffer").description("Extra health kept as a margin.").defaultValue(1).range(0, 6).decimals(1).visible(lethal::get).build();
+	private final DoubleSetting buffer = sgSafety.decimal("Buffer").description("Extra health kept as a margin.").defaultValue(1).range(0, 6).decimals(1).visible(lethal::get).build();
 
 	private final SettingGroup sgHotbar = settings.group("Hotbar Totem");
 	private final BoolSetting hotbarTotem = sgHotbar.bool("Hotbar Totem").description("Keep a spare totem in a hotbar slot, selected at low health.").build();
-	private final IntSetting hotbarSlot = sgHotbar.intSetting("Slot").description("Hotbar slot (1-9).").defaultValue(9).range(1, 9).visible(hotbarTotem::get).build();
-	private final IntSetting hotbarHealth = sgHotbar.intSetting("Health").description("Select it at or below this health.").defaultValue(6).range(0, 36).visible(hotbarTotem::get).build();
+	private final IntSetting hotbarSlot = sgHotbar.integer("Slot").description("Hotbar slot (1-9).").defaultValue(9).range(1, 9).visible(hotbarTotem::get).build();
+	private final IntSetting hotbarHealth = sgHotbar.integer("Health").description("Select it at or below this health.").defaultValue(6).range(0, 36).visible(hotbarTotem::get).build();
 
 	private int wait;
 	private boolean popped;

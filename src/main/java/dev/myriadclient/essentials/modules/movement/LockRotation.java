@@ -43,7 +43,7 @@ public class LockRotation extends Module {
 	public static final Hook<Heading, Float> HEADING = Hook.of("myriad-essentials:locked_heading", "Locked heading",
 		"The yaw a flight flies while Lock Rotation holds its heading.");
 
-	private final EnumSetting<LockAt> lockAt = sgGeneral.enumSetting("Lock At", LockAt.TAKEOFF)
+	private final EnumSetting<LockAt> lockAt = sgGeneral.oneOf("Lock At", LockAt.TAKEOFF)
 		.description("Takeoff: lock the way you face as each glide starts. Turned On: lock the way you face when it's turned on.").build();
 
 	/** The yaw locked, or NaN while nothing is. */

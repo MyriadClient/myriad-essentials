@@ -22,11 +22,11 @@ import net.minecraft.world.phys.Vec3;
  * from nothing.
  */
 public class ElytraControl extends ElytraMode {
-	private final DoubleSetting speed = sgGeneral.doubleSetting("Speed")
+	private final DoubleSetting speed = sgGeneral.decimal("Speed")
 		.description("How fast the movement keys fly you, in blocks a second.").defaultValue(20).range(1, 80).decimals(1).visible(this::chosen).build();
-	private final DoubleSetting verticalSpeed = sgGeneral.doubleSetting("Vertical Speed")
+	private final DoubleSetting verticalSpeed = sgGeneral.decimal("Vertical Speed")
 		.description("How fast jump climbs and sneak descends, in blocks a second.").defaultValue(10).range(0, 40).decimals(1).visible(this::chosen).build();
-	private final DoubleSetting sink = sgGeneral.doubleSetting("Sink")
+	private final DoubleSetting sink = sgGeneral.decimal("Sink")
 		.description("How fast you drift down with neither jump nor sneak held, in blocks a second (0 holds your height).")
 		.defaultValue(0).range(0, 20).decimals(2).visible(this::chosen).build();
 

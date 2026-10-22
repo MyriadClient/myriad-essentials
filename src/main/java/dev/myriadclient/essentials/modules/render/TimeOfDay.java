@@ -13,7 +13,7 @@ public class TimeOfDay extends Module {
 	/** Ticks in a Minecraft day. */
 	private static final int DAY = 24000;
 
-	private final IntSetting time = sgGeneral.intSetting("Time")
+	private final IntSetting time = sgGeneral.integer("Time")
 		.description("Ticks into the day: 0 sunrise, 6000 noon, 12000 sunset, 18000 midnight.").defaultValue(6000).range(0, DAY - 1).build();
 
 	public TimeOfDay() {

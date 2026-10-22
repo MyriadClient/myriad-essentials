@@ -56,11 +56,11 @@ public class BaritoneRender extends Module {
 		.defaultValue(SettingColor.accent()).visible(path::get).build();
 	private final ColorSetting pathEnd = sgPath.color("End").description("The other end of the gradient.")
 		.defaultValue(SettingColor.role(SettingColor.Mode.SECONDARY)).visible(path::get).build();
-	private final DoubleSetting flow = sgPath.doubleSetting("Flow").description("How fast the gradient flows along the path, in blocks a second (0 holds it still).")
+	private final DoubleSetting flow = sgPath.decimal("Flow").description("How fast the gradient flows along the path, in blocks a second (0 holds it still).")
 		.defaultValue(6).range(0, 40).decimals(1).visible(path::get).build();
-	private final DoubleSetting width = sgPath.doubleSetting("Width").description("Line width, in pixels.")
+	private final DoubleSetting width = sgPath.decimal("Width").description("Line width, in pixels.")
 		.defaultValue(2.5).range(0.5, 8).decimals(1).visible(path::get).build();
-	private final IntSetting rounding = sgPath.intSetting("Rounding").description("How round the corners are: 0 draws Baritone's straight segments.")
+	private final IntSetting rounding = sgPath.integer("Rounding").description("How round the corners are: 0 draws Baritone's straight segments.")
 		.defaultValue(3).range(0, 5).visible(path::get).build();
 	private final BoolSetting pathThroughWalls = sgPath.bool("Through Walls").description("Draw the path over blocks in the way.")
 		.visible(path::get).build();
@@ -75,9 +75,9 @@ public class BaritoneRender extends Module {
 	private final HighlightSettings blockStyle = new HighlightSettings(sgBlocks, blocks::get, false);
 
 	private final SettingGroup sgGoal = settings.group("Goal");
-	private final EnumSetting<GoalLook> goal = sgGoal.enumSetting("Goal", GoalLook.GHOST)
+	private final EnumSetting<GoalLook> goal = sgGoal.oneOf("Goal", GoalLook.GHOST)
 		.description("Ghost: you, standing at the goal. Box: the goal block. None: nothing.").build();
-	private final DoubleSetting opacity = sgGoal.doubleSetting("Opacity").description("How solid the ghost is.")
+	private final DoubleSetting opacity = sgGoal.decimal("Opacity").description("How solid the ghost is.")
 		.defaultValue(0.35).range(0.05, 1).decimals(2).visible(() -> goal.get() == GoalLook.GHOST).build();
 	private final ColorSetting goalColor = sgGoal.color("Highlight").description("The ghost's (or the box's) highlight.")
 		.defaultValue(SettingColor.accent()).visible(() -> goal.get() != GoalLook.NONE).build();

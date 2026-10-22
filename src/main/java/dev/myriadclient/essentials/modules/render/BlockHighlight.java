@@ -28,7 +28,7 @@ public class BlockHighlight extends Module {
 		OUTLINE, BOX
 	}
 
-	private final EnumSetting<Mode> mode = sgGeneral.enumSetting("Mode", Mode.OUTLINE).description("Outline: a shader outline around the block's shape. Box: a box with fill and lines.").build();
+	private final EnumSetting<Mode> mode = sgGeneral.oneOf("Mode", Mode.OUTLINE).description("Outline: a shader outline around the block's shape. Box: a box with fill and lines.").build();
 	private final ColorSetting color = sgGeneral.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).build();
 	private final HighlightSettings outline = new HighlightSettings(settings.group("Outline"), () -> mode.get() == Mode.OUTLINE, false);
 	private final BoxStyle box = new BoxStyle(settings.group("Box"), () -> mode.get() == Mode.BOX, false);

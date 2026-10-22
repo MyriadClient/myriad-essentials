@@ -13,10 +13,10 @@ import dev.myriadclient.api.setting.DoubleSetting;
  * you raise them. Applied by this addon's PlayerEntityMixin.
  */
 public class Reach extends Module {
-	private final DoubleSetting blockRange = sgGeneral.doubleSetting("Block Range")
+	private final DoubleSetting blockRange = sgGeneral.decimal("Block Range")
 		.description("Blocks you can place, break and use, to their nearest point (vanilla 4.5; Grim flags more).")
 		.defaultValue(4.5).range(1, 10).decimals(2).build();
-	private final DoubleSetting entityRange = sgGeneral.doubleSetting("Entity Range")
+	private final DoubleSetting entityRange = sgGeneral.decimal("Entity Range")
 		.description("Entities you can hit and use, to their hitbox (vanilla 3; Grim flags more).")
 		.defaultValue(3).range(1, 10).decimals(2).build();
 
