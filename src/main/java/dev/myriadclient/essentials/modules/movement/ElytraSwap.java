@@ -28,8 +28,8 @@ import org.jetbrains.annotations.Nullable;
  *
  * <pre>{@code
  * ctx.hook(ElytraSwap.BEHAVIOUR)
- *     .named("Recast keeps its elytra on 6b6t")
- *     .when(Match.caller("myriad-essentials:recast").server("6b6t.org"))
+ *     .named("Recast keeps its elytra under NoCheatPlus")
+ *     .when(Match.caller("myriad-essentials:recast").on(AntiCheat.Profile.NCP))
  *     .handle(call -> call.input().withSwaps(false));
  * }</pre>
  */

@@ -126,9 +126,9 @@ public class ElytraFly extends Module {
 		}
 	}
 
-	/** The types offered on this server. */
+	/** The types offered on this server: Control only where the glide isn't simulated. */
 	private static List<String> types() {
-		return AntiCheat.strict() ? List.of(RECAST, ALTITUDE) : List.of(RECAST, ALTITUDE, CONTROL);
+		return AntiCheat.inEffect().simulatesGlide() ? List.of(RECAST, ALTITUDE) : List.of(RECAST, ALTITUDE, CONTROL);
 	}
 
 	/** The type chosen. */
@@ -176,7 +176,7 @@ public class ElytraFly extends Module {
 	private ElytraMode wanted() {
 		return switch (type.get()) {
 			case ALTITUDE -> altitude;
-			case CONTROL -> AntiCheat.strict() ? null : control;
+			case CONTROL -> AntiCheat.inEffect().simulatesGlide() ? null : control;
 			default -> recast;
 		};
 	}

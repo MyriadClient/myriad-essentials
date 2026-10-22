@@ -409,7 +409,7 @@ public class Recast extends ElytraMode {
 		boolean exposed = Myriad.elytra().glideHold().exposed(this);
 		// Where nothing holds the stop back from the anti-cheat (6b6t), only once the server has answered the last start:
 		// a stop older than it would have this start end the glide that one began.
-		boolean answered = AntiCheat.strict() || Myriad.elytra().glideHold().stoppedSinceStart(this);
+		boolean answered = AntiCheat.inEffect().simulatesGlide() || Myriad.elytra().glideHold().stoppedSinceStart(this);
 		if (cleared && answered && !ground && airTicks >= 2 && (exposed || settled && startDue)) {
 			// The server stopped the glide (at the landing, or when the chestplate went on) and the client kept it up:
 			// start it again now you're back in the air, the held ping answers first (on the tick jump goes down) so

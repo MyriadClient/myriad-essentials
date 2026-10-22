@@ -117,7 +117,7 @@ public abstract class ElytraMode implements NoDurability.Owner, Elytra.Pilot, Id
 
 	protected void onEnable() {
 		// Where the server simulates the glide, an elytra worn through a flight goes fast: say how to keep it.
-		if (AntiCheat.strict() && !noDurability()) info("Elytra Swap is off: your elytra wears as you fly.");
+		if (AntiCheat.inEffect().simulatesGlide() && !noDurability()) info("Elytra Swap is off: your elytra wears as you fly.");
 		spoofing = holdGlide = flagged = wantOpen = false;
 		resetFlight();
 		Myriad.elytra().addPilot(this);
@@ -189,7 +189,7 @@ public abstract class ElytraMode implements NoDurability.Owner, Elytra.Pilot, Id
 	 * {@link NoDurability}), and a chestplate worn mid-glide would only be checked as walking.
 	 */
 	protected boolean chestSwaps() {
-		return noDurability() && AntiCheat.strict();
+		return noDurability() && AntiCheat.inEffect().simulatesGlide();
 	}
 
 	// ---- tick -----------------------------------------------------------------------------------------------------
