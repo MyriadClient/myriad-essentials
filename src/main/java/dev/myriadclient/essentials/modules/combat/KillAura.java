@@ -10,11 +10,11 @@ import dev.myriadclient.api.hook.Hook;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Renderer3D;
+import dev.myriadclient.api.service.RotationSettings;
 import dev.myriadclient.api.service.Rotations;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.EnumSetting;
-import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Entities;
@@ -79,9 +79,7 @@ public class KillAura extends Module {
 
 	private final EnumSetting<Weapon> weapon = sgGeneral.oneOf("Weapon", Weapon.HOLDING)
 		.description("Holding: only attack while you hold a weapon. Switch: attack with your best weapon, from the hotbar or inventory, without changing what you hold. Anything: hit with whatever you hold.").build();
-	private final IntSetting turnSpeed = sgGeneral.integer("Turn Speed")
-		.description("Most degrees to turn per tick towards a target; 0 turns at once (fine on Grim, some anti-cheats want it limited).")
-		.defaultValue(0).range(0, 180).build();
+	private final RotationSettings rotation = new RotationSettings(sgGeneral);
 	private final BoolSetting render = sgGeneral.bool("Render").description("Outline the target.").defaultValue(true).build();
 	private final ColorSetting color = sgGeneral.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(render::get).build();
 
@@ -123,7 +121,7 @@ public class KillAura extends Module {
 		// Aimed from where you stand: Grim measures the hit from there.
 		Vec3 eyes = mc.player.getEyePosition();
 		float[] r = MathUtil.anglesTo(eyes, aimPoint(t, eyes));
-		Myriad.rotations().request(this, r[0], r[1], Rotations.PRIORITY_NORMAL, Rotations.Options.MOVE_FIX.withTurnSpeed(turnSpeed.get()), null);
+		Myriad.rotations().request(this, r[0], r[1], Rotations.PRIORITY_NORMAL, rotation.options(), null);
 
 		// The charge counts for the item the server holds (a held weapon's, not what you see).
 		if (Interactions.attackCharge() < 1) return;

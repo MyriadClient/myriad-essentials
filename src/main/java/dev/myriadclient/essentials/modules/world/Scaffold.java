@@ -50,7 +50,7 @@ public class Scaffold extends Module {
 	/** Clicks only faces you can see; with Rotate, faces each block first (walking along that yaw meanwhile). */
 	private Placement.Options options() {
 		// As if sneaking where the block below is one that opens or toggles (a chest, a crafting table), so it bridges past them.
-		return Placement.Options.STRICT.withRotate(rotate.get()).withRange(Reach.blockRange()).withSneak(true);
+		return Placement.Options.forServer().withRotate(rotate.get()).withRange(Reach.blockRange()).withSneak(true);
 	}
 
 	/** Which items it may place. */

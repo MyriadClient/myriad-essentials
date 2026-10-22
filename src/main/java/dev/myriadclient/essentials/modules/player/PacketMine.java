@@ -1,5 +1,6 @@
 package dev.myriadclient.essentials.modules.player;
 
+import com.google.gson.JsonPrimitive;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.BlockBreakEvent;
@@ -10,8 +11,10 @@ import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.HighlightStyle;
 import dev.myriadclient.api.service.Breaking;
+import dev.myriadclient.api.service.BreakingSettings;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
+import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Reach;
@@ -34,15 +37,12 @@ import java.util.List;
  * finishes aren't refused. The block you mined last can be re-broken with a single packet when something is placed
  * back there, once enough time has passed for that block.
  * <p>
- * Fast is the decoy trick for older Grim builds (see {@code Breaking.Mode.FAST_GRIM}; current Grim catches it): blocks
- * finish at 70% of the time, with decoy start packets that kept older Grim from noticing, and Double Break mines a
- * second block meanwhile.
+ * Mode Fast is the decoy trick for older Grim builds (see {@code Breaking.Mode.FAST_GRIM}; current Grim catches it):
+ * blocks finish at 70% of the time, with decoy start packets that kept older Grim from noticing, and Double Break mines
+ * a second block meanwhile.
  */
 public class PacketMine extends Module {
-	private final BoolSetting fast = sgGeneral.bool("Fast").description("Always finish at 70% of the time, as 2b2t clients do: once Grim's allowance "
-		+ "for early finishes runs out, a decoy start above the build limit hides the speed (needs ViaVersion, as 2b2t has). Each decoy is an AirLiquidBreak flag.").build();
-	private final BoolSetting doubleBreak = sgGeneral.bool("Double Break").description("Mine a second block while the server finishes the first.")
-		.defaultValue(true).visible(fast::get).build();
+	private final BreakingSettings breaking = new BreakingSettings(sgGeneral);
 	private final BoolSetting queue = sgGeneral.bool("Queue").description("A new click adds to the line, instead of replacing the blocks still waiting. "
 		+ "Dragging while you hold always adds.").build();
 	private final BoolSetting autoRebreak = sgGeneral.bool("Auto Rebreak").description("Break the last mined block again as soon as something placed there can be.").build();
@@ -62,6 +62,20 @@ public class PacketMine extends Module {
 
 	public PacketMine() {
 		super(Tags.PLAYER, "Packet Mine", "Mines the blocks you hit for you, with your hand free.");
+	}
+
+	/** 2: the Fast switch became the standard breaking Mode. */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) {
+			saved.move("General", "Fast", "General", "Mode");
+			saved.map("General", "Mode", v -> v.getAsBoolean() ? new JsonPrimitive("FAST") : null);
+		}
 	}
 
 	@Override
@@ -125,11 +139,9 @@ public class PacketMine extends Module {
 	}
 
 	private Breaking.Options options() {
-		Breaking.Mode mode = fast.get() ? Breaking.Mode.FAST_GRIM : Breaking.Mode.PACKET;
 		// No swings of its own: your hand only moves while you hold the button.
 		// The block stays on screen until the server says it's gone: a refused finish never shows a ghost block.
-		return Breaking.Options.PACKET.withMode(mode).withRotate(rotate.get()).withSwing(false).withRange(Reach.blockRange()).withDoubleBreak(fast.get() && doubleBreak.get())
-			.withWaitForServer(true);
+		return breaking.options().withRotate(rotate.get()).withSwing(false).withRange(Reach.blockRange()).withWaitForServer(true);
 	}
 
 	@Subscribe(inGame = true)
