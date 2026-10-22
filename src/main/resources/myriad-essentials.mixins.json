@@ -14,6 +14,7 @@
 		"ClientClockManagerMixin",
 		"ClientLevelMixin",
 		"ClientPlayerEntityMixin",
+		"ContainerScreenMixin",
 		"EntityMixin",
 		"EntityRenderDispatcherMixin",
 		"ExperienceBarMixin",

@@ -1,5 +1,7 @@
 package dev.myriadclient.essentials.modules.player;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
@@ -9,6 +11,7 @@ import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
+import dev.myriadclient.api.render.HighlightSettings;
 import dev.myriadclient.api.render.HighlightStyle;
 import dev.myriadclient.api.service.Breaking;
 import dev.myriadclient.api.service.BreakingSettings;
@@ -16,6 +19,7 @@ import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingColor;
+import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Reach;
 import net.minecraft.core.BlockPos;
@@ -47,12 +51,22 @@ public class PacketMine extends Module {
 		+ "Dragging while you hold always adds.").build();
 	private final BoolSetting autoRebreak = sgGeneral.bool("Auto Rebreak").description("Break the last mined block again as soon as something placed there can be.").build();
 	private final BoolSetting rotate = sgGeneral.bool("Rotate").description("Face the block when starting and finishing, for servers that check.").build();
-	private final ColorSetting color = sgGeneral.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).build();
+	private final ColorSetting color = sgGeneral.color("Color").description("Queued blocks and the block Auto Rebreak watches.")
+		.defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).build();
+
+	/** Opacities the block being mined fades between by default: faint as it starts, filled in as it breaks. */
+	private static final int START_ALPHA = 38, END_ALPHA = 166;
+	private final SettingGroup sgMining = settings.group("Mining");
+	private final ColorSetting startColor = sgMining.color("Start Color").description("The block being mined as it starts breaking; its opacity fades the whole look (fill, outline and glow).")
+		.defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, START_ALPHA)).build();
+	private final ColorSetting endColor = sgMining.color("End Color").description("The block being mined once it's broken, until the server says it's gone; "
+		+ "the colour and opacity blend from Start as it breaks.").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, END_ALPHA)).build();
+	/** The block being mined: by default no outline, just a fill that thickens as it breaks (see {@link #onHighlight}). */
+	private final HighlightSettings miningLook = HighlightSettings.builder(sgMining)
+		.defaults(HighlightStyle.OUTLINE.withOutlineWidth(0).withFill(HighlightStyle.Fill.SOLID).withFillOpacity(1)).build();
 
 	/** Queued blocks: faint and dotted, so each one in a line shows (touching ones share an outline) without competing with the block being mined. */
 	private static final HighlightStyle QUEUED = HighlightStyle.OUTLINE.withOutlineWidth(1).withFill(HighlightStyle.Fill.DOTS).withFillOpacity(0.6f);
-	/** The block being mined: no outline, just a fill that thickens as it breaks (see {@link #onHighlight}). */
-	private static final HighlightStyle MINING = HighlightStyle.OUTLINE.withOutlineWidth(0).withFill(HighlightStyle.Fill.SOLID);
 
 	/** Positions this module asked to break that haven't finished. */
 	private final List<BlockPos> mining = new ArrayList<>();
@@ -64,10 +78,10 @@ public class PacketMine extends Module {
 		super(Tags.PLAYER, "Packet Mine", "Mines the blocks you hit for you, with your hand free.");
 	}
 
-	/** 2: the Fast switch became the standard breaking Mode. */
+	/** 2: the Fast switch became the standard breaking Mode. 3: the block being mined got its own Start and End colours. */
 	@Override
 	public int settingsVersion() {
-		return 2;
+		return 3;
 	}
 
 	@Override
@@ -76,6 +90,25 @@ public class PacketMine extends Module {
 			saved.move("General", "Fast", "General", "Mode");
 			saved.map("General", "Mode", v -> v.getAsBoolean() ? new JsonPrimitive("FAST") : null);
 		}
+		if (fromVersion == 2) {
+			// The mined block was Color, faded from 15% to 65% of its opacity: a chosen Color carries over to both ends.
+			saved.get("General", "Color").ifPresent(c -> {
+				saved.set("Mining", "Start Color", faded(c, START_ALPHA));
+				saved.set("Mining", "End Color", faded(c, END_ALPHA));
+			});
+		}
+	}
+
+	/** A saved colour ({@code {"color": "#AARRGGBB", "mode": ...}}, or just the hex) with its opacity scaled by {@code alpha}/255. */
+	private static JsonElement faded(JsonElement saved, int alpha) {
+		JsonObject o = saved.isJsonObject() ? saved.getAsJsonObject().deepCopy() : new JsonObject();
+		if (!saved.isJsonObject()) {
+			o.addProperty("color", saved.getAsString());
+			o.addProperty("mode", SettingColor.Mode.STATIC.name());
+		}
+		int c = ColorUtil.parseHex(o.get("color").getAsString());
+		o.addProperty("color", ColorUtil.toHex(ColorUtil.withAlpha(c, Math.round(ColorUtil.alpha(c) * alpha / 255f))));
+		return o;
 	}
 
 	@Override
@@ -152,8 +185,9 @@ public class PacketMine extends Module {
 
 	/**
 	 * Shader outlines, drawn over the blocks rather than on their faces (a box there loses to the block's own faces):
-	 * the queue faint and dotted (touching blocks share an outline), the block being mined a fill that thickens as it
-	 * breaks and staying filled until the server says it's gone, and the block Auto Rebreak watches, outlined.
+	 * the queue faint and dotted (touching blocks share an outline), the block being mined in Mining's look, blending
+	 * from Start to End Color as it breaks and staying at End until the server says it's gone, and the block Auto
+	 * Rebreak watches, outlined.
 	 */
 	@Subscribe(inGame = true)
 	private void onHighlight(HighlightEvent.Shapes e) {
@@ -161,7 +195,7 @@ public class PacketMine extends Module {
 		for (BlockPos pos : mining) {
 			float progress = Myriad.breaking().progress(pos);
 			if (progress == 0) e.block(pos, QUEUED, ColorUtil.withAlpha(c, 110));
-			else e.block(pos, MINING.withFillOpacity(0.15f + 0.5f * progress), c, 0.002);
+			else e.block(pos, miningLook.style(), ColorUtil.lerp(startColor.argb(), endColor.argb(), progress), 0.002);
 		}
 		if (autoRebreak.get() && last != null && !mining.contains(last)) e.block(last, HighlightStyle.OUTLINE, ColorUtil.withAlpha(c, 140));
 	}

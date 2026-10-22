@@ -42,6 +42,8 @@ public class NoRender extends Module {
 	public final BoolSetting blindness = sgEffects.bool("Blindness").description("See normally while blinded.").defaultValue(true).build();
 	public final BoolSetting darkness = sgEffects.bool("Darkness").description("No pulsing darkness near wardens and sculk shriekers.").defaultValue(true).build();
 	public final BoolSetting nausea = sgEffects.bool("Nausea").description("No screen warping from nausea.").defaultValue(true).build();
+	public final BoolSetting ownEffectParticles = sgEffects.bool("Your Effect Particles").description("No potion swirls from your own effects; they drift right in front of the camera.")
+		.defaultValue(true).build();
 
 	private final SettingGroup sgHud = settings.group("HUD");
 	public final BoolSetting bossBar = sgHud.bool("Boss Bar").build();

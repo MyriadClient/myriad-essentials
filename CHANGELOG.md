@@ -3,6 +3,32 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.9.0 (unreleased)
+
+Needs Myriad 0.9.0.
+
+- **View Model highlights your hand, your held items, or both.** Hand Highlight and Item Highlight each have their own
+  on/off, colour and the standard highlight look (outline, glow, fill, gradient); hand and item that look alike get
+  one outline around both. Off by default, and while both are off View Model doesn't listen for highlights at all (a
+  listener would have Myriad draw vanilla's glowing entities itself).
+- **Packet Mine: the mined block's fade is yours.** A new Mining group: Start Color and End Color (the block blends
+  from one to the other, opacity too, as it breaks, and stays at End until the server says it's gone) and the
+  standard highlight look, starting from the old one (solid fill, no outline). By default it looks as before (accent,
+  15% to 65%). Color now only colours the queue and the block Auto Rebreak watches; a Color you'd changed carries over
+  to Start and End (settings version 3).
+- **Inventory Tweaks moves items with the mouse** (a new Mouse group, each on by default):
+  - **Shift Drag**: hold Shift and drag with the left button to shift-click every slot you pass.
+  - **Drag Collect**: carrying a stack, start a left drag on a slot of the same item, and every matching slot you
+    pass joins your stack until it's full. A drag started anywhere else spreads the stack as vanilla does, and
+    vanilla's right drag (one item per slot) is untouched.
+  - **Scroll Move**: scroll down over an item to move one to the other inventory (a chest's and yours, or in your own
+    inventory the hotbar and the rest), up to bring one back. Never takes from a crafting or furnace output.
+  - Every click goes through the screen as your own would, and only when the server takes clicks (on Grim, not while
+    you walk with Inventory Move), so a move of several clicks is never left half done. Checked in singleplayer
+    against the server's copy of the inventory; not yet on the Grim test server.
+- **No Render: Your Effect Particles** (on by default) hides the potion swirls your own effects give off, which drift
+  right in front of the camera in first person. Other players' and mobs' swirls still show.
+
 ## 0.8.0
 
 Needs Myriad 0.8.0.
