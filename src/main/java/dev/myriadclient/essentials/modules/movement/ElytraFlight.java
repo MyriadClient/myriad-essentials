@@ -54,7 +54,7 @@ public final class ElytraFlight {
 	 */
 	public static boolean holdsChest() {
 		ElytraMode m = flying();
-		if (m != null && (m.noDur.swapping() || m.swapsChest())) return true;
+		if (m != null && m.holdsChest()) return true;
 		ElytraSwap swap = Modules.active(ElytraSwap.class);
 		if (m == null && swap != null && swap.swappingForYou()) return true;
 		var p = Minecraft.getInstance().player;

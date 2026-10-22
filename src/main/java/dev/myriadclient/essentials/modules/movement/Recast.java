@@ -62,7 +62,7 @@ import java.util.function.Predicate;
  * where you first stand: off the line or below it (a fall off the highway), Baritone walks you back onto it before
  * bouncing on. When the way can't be cleared, If Blocked waits there or disconnects.
  */
-public class Recast extends ElytraMode {
+public class Recast extends GlideMode {
 	public enum Obstacles {
 		CLEAR, STOP
 	}
