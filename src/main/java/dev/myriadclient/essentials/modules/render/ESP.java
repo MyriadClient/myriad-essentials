@@ -21,6 +21,8 @@ import dev.myriadclient.api.render.ShapeBuilder;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
+import dev.myriadclient.api.ui.widget.Preview;
+import dev.myriadclient.api.ui.widget.Widget;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Entities;
 import dev.myriadclient.api.setting.SavedSettings;
@@ -32,6 +34,7 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -73,6 +76,15 @@ public class ESP extends Module {
 
 	public ESP() {
 		super(Tags.RENDER, "ESP", "Highlights players, mobs, crystals and more through walls.");
+	}
+
+	/** A zombie as a monster is drawn, in Hitbox mode (the other modes draw through shaders a preview doesn't run). */
+	@Override
+	public Widget preview() {
+		return Preview.entity(EntityTypes.ZOMBIE).decorate((shapes, box, entity) -> {
+			int c = entity == null ? 0 : targets.color(entity);
+			if (c != 0 && mode.get() == Mode.HITBOX) style.draw(shapes, box, c, 1);
+		});
 	}
 
 	/** 2: how it's drawn (the mode, fade, health bar and the box and outline styles) moved into one Render group. */

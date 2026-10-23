@@ -13,6 +13,8 @@ import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
+import dev.myriadclient.api.ui.widget.Preview;
+import dev.myriadclient.api.ui.widget.Widget;
 
 /**
  * First-person hand options: move, rotate and scale the held item and arm, stop the camera sway, render at full
@@ -69,6 +71,12 @@ public class ViewModel extends Module {
 	public ViewModel() {
 		super(Tags.RENDER, "View Model", "Move, rotate, scale, hide or highlight your first-person hands.");
 		whileEnabled(this::listenForHighlights, this::listenForHighlights);
+	}
+
+	/** Your hands and what you hold, as the camera sees them with these settings. */
+	@Override
+	public Widget preview() {
+		return Preview.viewModel().height(140);
 	}
 
 	private void listenForHighlights() {

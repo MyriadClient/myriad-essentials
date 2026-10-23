@@ -15,6 +15,8 @@ import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SettingColor;
+import dev.myriadclient.api.ui.widget.Preview;
+import dev.myriadclient.api.ui.widget.Widget;
 import dev.myriadclient.api.world.BlockScan;
 import dev.myriadclient.api.world.ChunkCache;
 import dev.myriadclient.api.setting.SavedSettings;
@@ -86,6 +88,16 @@ public class BlockESP extends Module {
 			for (String s : new String[]{"Mode", "Block Colors", "Color", "Merge", "Shape", "Fill Opacity", "Line Width", "Through Walls"}) saved.move("General", s, "Render", s);
 			saved.renameGroup("Outline", "Render");
 		}
+	}
+
+	/** The first block picked (a spawner by default) as it's drawn, in Boxes mode (Outline draws through a shader a preview doesn't run). */
+	@Override
+	public Widget preview() {
+		Block shown = blocks.get().isEmpty() ? Blocks.SPAWNER : blocks.get().iterator().next();
+		return Preview.block(shown).decorate((shapes, cube, entity) -> {
+			if (mode.get() != Mode.BOXES || mc.level == null) return;
+			style.draw(shapes, cube, colorOf(shown.defaultBlockState(), BlockPos.ZERO), 1);
+		});
 	}
 
 	public BlockESP() {

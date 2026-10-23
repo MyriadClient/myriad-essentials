@@ -11,11 +11,14 @@ import dev.myriadclient.api.render.HighlightSettings;
 import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.SettingColor;
+import dev.myriadclient.api.ui.widget.Preview;
+import dev.myriadclient.api.ui.widget.Widget;
 import dev.myriadclient.essentials.modules.world.AirPlace;
 import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
@@ -55,6 +58,16 @@ public class BlockHighlight extends Module {
 		super(Tags.RENDER, "Block Highlight", "Your own look for the block you're looking at, in place of vanilla's outline.");
 		// Vanilla's outline only while this is off.
 		LevelRenderEvents.BEFORE_BLOCK_OUTLINE.register((context, state) -> !isEnabled());
+	}
+
+	/** A block as the highlight looks on it: the box in Box mode, its outline's edges in Outline mode (drawn by a shader in the world). */
+	@Override
+	public Widget preview() {
+		return Preview.block(Blocks.STONE).decorate((shapes, cube, entity) -> {
+			int c = color.argb();
+			if (mode.get() == Mode.BOX) box.draw(shapes, cube, c, 1);
+			else shapes.lineWidth(Math.max(1, outline.outlineWidth.getFloat())).boxLines(cube, c, false);
+		});
 	}
 
 	/** The block under the crosshair, or where Air Place would place with nothing under it, or null. */

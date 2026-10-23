@@ -3,6 +3,16 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.11.0 (unreleased)
+
+Needs Myriad 0.11.0.
+
+- **Previews in the settings of the modules that draw**: ESP (a zombie with its hitbox in Hitbox mode), Blocks (the first
+  block picked), Block Highlight (a block with the box, or the outline's edges), Storage (a chest) and View Model (your
+  hands and held items, moving as you change its settings). Drag to turn, right-drag to move, scroll to zoom,
+  double-click to put back. The outline modes draw through a shader the preview doesn't run, so they show the subject
+  alone (Block Highlight shows the outline's edges).
+
 ## 0.10.0
 
 Needs Myriad 0.10.0.

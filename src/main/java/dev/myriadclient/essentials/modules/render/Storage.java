@@ -20,6 +20,8 @@ import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
+import dev.myriadclient.api.ui.widget.Preview;
+import dev.myriadclient.api.ui.widget.Widget;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Entities;
 import dev.myriadclient.api.world.ChunkCache;
@@ -35,6 +37,7 @@ import net.minecraft.world.entity.vehicle.minecart.MinecartChest;
 import net.minecraft.world.entity.vehicle.minecart.MinecartFurnace;
 import net.minecraft.world.entity.vehicle.minecart.MinecartHopper;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.EnderChestBlock;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
@@ -165,6 +168,17 @@ public class Storage extends Module {
 		super(Tags.RENDER, "Storage", "Highlights chests, shulker boxes and other storage through walls.");
 		settings.onAnyChanged(s -> found.remeshAll());
 	}
+
+	/** A chest as it's drawn, in Boxes mode (Outline draws through a shader a preview doesn't run). */
+	@Override
+	public Widget preview() {
+		return Preview.block(Blocks.CHEST).decorate((shapes, box, entity) -> {
+			if (mode.get() == Mode.BOXES && chests.enabled().get()) style.draw(shapes, CHEST_BOX, chests.color().argb(), 1);
+		});
+	}
+
+	/** A chest's shape: a sixteenth in from the sides, 14 high. */
+	private static final AABB CHEST_BOX = new AABB(1 / 16.0, 0, 1 / 16.0, 15 / 16.0, 14 / 16.0, 15 / 16.0);
 
 	private Kind kind(SettingGroup group, String name, boolean on, SettingColor.Mode color) {
 		BoolSetting enabled = group.bool(name).defaultValue(on).build();
