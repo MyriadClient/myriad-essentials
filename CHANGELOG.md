@@ -30,6 +30,13 @@ Needs Myriad 0.9.0.
 - **Auto Sort shows the sorted container at once** (core 0.10.0), instead of items flickering across it and the cursor
   while the clicks go out, and a click of yours stops it. Suite: `auto_sort` and `auto_sort full inventory` sort a
   double chest of 40 scattered part stacks and check on the server it's merged and packed with nothing lost (5.2 s).
+- **How a module draws is in one Render group, last, everywhere.** ESP, Blocks, Storage and Block Highlight had their
+  outline style in a group called Outline (and Block Highlight its box in Box), with the mode and colours in General;
+  Packet Mine's colours and looks were spread over Mining, Queue and Auto Rebreak; Kill Aura's target outline sat in
+  General. Each now has a Render group with its mode of drawing, colours and style, the box and outline styles sharing
+  Fill Opacity and Through Walls. Kill Aura's Render toggle is now Show Target. Packet Mine keeps a full style for the
+  block being mined, and colours for the queue and the rebreak block, whose looks (dotted, outlined) are now fixed.
+  Saved settings carry over.
 - **Middle Click takes rockets and pearls from the inventory with a full hotbar, and never fires late.** It only
   borrowed into an empty hotbar slot or one with building blocks, so with a hotbar of tools nothing happened; now the
   item swaps places with any slot but the selected one, and both go back after. A click that couldn't go through kept

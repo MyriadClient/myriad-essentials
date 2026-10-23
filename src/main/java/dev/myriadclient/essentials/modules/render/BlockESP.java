@@ -17,6 +17,8 @@ import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.world.BlockScan;
 import dev.myriadclient.api.world.ChunkCache;
+import dev.myriadclient.api.setting.SavedSettings;
+import dev.myriadclient.api.setting.SettingGroup;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
@@ -46,17 +48,19 @@ public class BlockESP extends Module {
 	/** Past this many in one chunk the rest are skipped, so picking something common can't swamp the renderer. */
 	private static final int MAX_PER_CHUNK = 2048;
 
-	private final EnumSetting<Mode> mode = sgGeneral.oneOf("Mode", Mode.BOXES).description("Boxes: 3D boxes. Outline: a shader outline around each block's shape.")
-		.onChanged(m -> found().setMeshesVisible(m == Mode.BOXES)).build();
 	private final RegistryListSetting<Block> blocks = sgGeneral.blocks("Blocks").description("The blocks to highlight.")
 		.defaultValue(Blocks.SPAWNER, Blocks.TRIAL_SPAWNER).build();
 	private final IntSetting range = sgGeneral.integer("Range").description("Chunks around you.").defaultValue(8).range(1, 32).build();
-	private final BoolSetting blockColors = sgGeneral.bool("Block Colors").description("Draw each block in its own colour (as on a map).").defaultValue(true).build();
-	private final ColorSetting color = sgGeneral.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(() -> !blockColors.get()).build();
-	private final BoolSetting merge = sgGeneral.bool("Merge").description("Draw touching blocks of the same colour as one outline (portals, veins, beds).")
+
+	private final SettingGroup sgRender = settings.group("Render");
+	private final EnumSetting<Mode> mode = sgRender.oneOf("Mode", Mode.BOXES).description("Boxes: 3D boxes. Outline: a shader outline around each block's shape.")
+		.onChanged(m -> found().setMeshesVisible(m == Mode.BOXES)).build();
+	private final BoolSetting blockColors = sgRender.bool("Block Colors").description("Draw each block in its own colour (as on a map).").defaultValue(true).build();
+	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(() -> !blockColors.get()).build();
+	private final BoolSetting merge = sgRender.bool("Merge").description("Draw touching blocks of the same colour as one outline (portals, veins, beds).")
 		.defaultValue(true).visible(() -> mode.get() == Mode.BOXES).build();
-	private final BoxStyle style = new BoxStyle(sgGeneral, () -> mode.get() == Mode.BOXES);
-	private final HighlightSettings outline = new HighlightSettings(settings.group("Outline"), () -> mode.get() == Mode.OUTLINE);
+	private final BoxStyle style = new BoxStyle(sgRender, () -> mode.get() == Mode.BOXES);
+	private final HighlightSettings outline = HighlightSettings.builder(sgRender).visible(() -> mode.get() == Mode.OUTLINE).sharing(style).build();
 
 	/**
 	 * Outline mode's colours: each chunk mesh's faces pick theirs from here by index, so one list serves every chunk.
@@ -69,6 +73,20 @@ public class BlockESP extends Module {
 		.mesh(this::mesh)
 		.neighbours()
 		.build();
+
+	/** 2: how it's drawn (the mode, colours, merging and the box and outline styles) moved into one Render group. */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) {
+			for (String s : new String[]{"Mode", "Block Colors", "Color", "Merge", "Shape", "Fill Opacity", "Line Width", "Through Walls"}) saved.move("General", s, "Render", s);
+			saved.renameGroup("Outline", "Render");
+		}
+	}
 
 	public BlockESP() {
 		super(Tags.RENDER, "Blocks", "Highlights the blocks you pick, like spawners or beds, through walls.");

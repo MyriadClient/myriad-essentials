@@ -12,6 +12,8 @@ import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.essentials.modules.world.AirPlace;
+import dev.myriadclient.api.setting.SavedSettings;
+import dev.myriadclient.api.setting.SettingGroup;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.BlockHitResult;
@@ -28,10 +30,26 @@ public class BlockHighlight extends Module {
 		OUTLINE, BOX
 	}
 
-	private final EnumSetting<Mode> mode = sgGeneral.oneOf("Mode", Mode.OUTLINE).description("Outline: a shader outline around the block's shape. Box: a box with fill and lines.").build();
-	private final ColorSetting color = sgGeneral.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).build();
-	private final HighlightSettings outline = new HighlightSettings(settings.group("Outline"), () -> mode.get() == Mode.OUTLINE, false);
-	private final BoxStyle box = new BoxStyle(settings.group("Box"), () -> mode.get() == Mode.BOX, false);
+	private final SettingGroup sgRender = settings.group("Render");
+	private final EnumSetting<Mode> mode = sgRender.oneOf("Mode", Mode.OUTLINE).description("Outline: a shader outline around the block's shape. Box: a box with fill and lines.").build();
+	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).build();
+	private final BoxStyle box = new BoxStyle(sgRender, () -> mode.get() == Mode.BOX, false);
+	private final HighlightSettings outline = HighlightSettings.builder(sgRender).visible(() -> mode.get() == Mode.OUTLINE).sharing(box).build();
+
+	/** 2: everything moved into one Render group (the box and outline styles were groups of their own). */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) {
+			for (String s : new String[]{"Mode", "Color"}) saved.move("General", s, "Render", s);
+			saved.renameGroup("Box", "Render");
+			saved.renameGroup("Outline", "Render");
+		}
+	}
 
 	public BlockHighlight() {
 		super(Tags.RENDER, "Block Highlight", "Your own look for the block you're looking at, in place of vanilla's outline.");

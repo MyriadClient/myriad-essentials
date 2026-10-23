@@ -23,6 +23,7 @@ import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Entities;
 import dev.myriadclient.api.world.ChunkCache;
+import dev.myriadclient.api.setting.SavedSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ClientboundBlockEventPacket;
@@ -94,12 +95,6 @@ public class Storage extends Module {
 	private static final long LID_MS = 1000;
 
 	private final IntSetting range = sgGeneral.integer("Range").description("Chunks around you.").defaultValue(8).range(1, 32).build();
-	private final BoolSetting lids = sgGeneral.bool("Lids").description("Follow chest and shulker box lids as they open.").defaultValue(true).build();
-	private final EnumSetting<Mode> mode = sgGeneral.oneOf("Mode", Mode.BOXES).description("Boxes: 3D boxes. Outline: a shader outline around each container.").build();
-	private final BoolSetting merge = sgGeneral.bool("Merge").description("Draw touching containers of the same colour as one outline.")
-		.visible(() -> mode.get() == Mode.BOXES).build();
-	private final BoxStyle style = new BoxStyle(sgGeneral, () -> mode.get() == Mode.BOXES);
-	private final HighlightSettings outline = new HighlightSettings(settings.group("Outline"), () -> mode.get() == Mode.OUTLINE);
 
 	private final SettingGroup sgBlocks = settings.group("Blocks");
 	private final Kind chests = kind(sgBlocks, "Chests", true, SettingColor.Mode.YELLOW);
@@ -120,6 +115,14 @@ public class Storage extends Module {
 	private final Kind furnaceMinecarts = kind(sgEntities, "Furnace Minecarts", false, SettingColor.Mode.SECONDARY);
 	private final Kind chestBoats = kind(sgEntities, "Chest Boats", true, SettingColor.Mode.YELLOW);
 	private final Kind chestAnimals = kind(sgEntities, "Chest Animals", false, SettingColor.Mode.GREEN);
+
+	private final SettingGroup sgRender = settings.group("Render");
+	private final BoolSetting lids = sgRender.bool("Lids").description("Follow chest and shulker box lids as they open.").defaultValue(true).build();
+	private final EnumSetting<Mode> mode = sgRender.oneOf("Mode", Mode.BOXES).description("Boxes: 3D boxes. Outline: a shader outline around each container.").build();
+	private final BoolSetting merge = sgRender.bool("Merge").description("Draw touching containers of the same colour as one outline.")
+		.visible(() -> mode.get() == Mode.BOXES).build();
+	private final BoxStyle style = new BoxStyle(sgRender, () -> mode.get() == Mode.BOXES);
+	private final HighlightSettings outline = HighlightSettings.builder(sgRender).visible(() -> mode.get() == Mode.OUTLINE).sharing(style).build();
 
 	/** Every storage block per chunk, whether or not its kind is shown: toggling a kind only re-meshes. */
 	private final ChunkCache<List<Found>> found = ChunkCache.of(this, this::scan)
@@ -142,6 +145,20 @@ public class Storage extends Module {
 
 	/** {@code pos} is the block it's drawn from (a double chest's left half); {@code tint} a shulker box's dye, or 0. */
 	private record Found(BlockPos pos, AABB box, Kind kind, int tint, Lid lid) {
+	}
+
+	/** 2: how it's drawn (lids, the mode, merging and the box and outline styles) moved into one Render group. */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) {
+			for (String s : new String[]{"Lids", "Mode", "Merge", "Shape", "Fill Opacity", "Line Width", "Through Walls"}) saved.move("General", s, "Render", s);
+			saved.renameGroup("Outline", "Render");
+		}
 	}
 
 	public Storage() {

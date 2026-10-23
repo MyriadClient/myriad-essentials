@@ -22,6 +22,8 @@ import dev.myriadclient.api.util.Interactions;
 import dev.myriadclient.api.util.ItemInfo;
 import dev.myriadclient.api.util.MathUtil;
 import dev.myriadclient.api.util.Reach;
+import dev.myriadclient.api.setting.SavedSettings;
+import dev.myriadclient.api.setting.SettingGroup;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -80,10 +82,12 @@ public class KillAura extends Module {
 	private final EnumSetting<Weapon> weapon = sgGeneral.oneOf("Weapon", Weapon.HOLDING)
 		.description("Holding: only attack while you hold a weapon. Switch: attack with your best weapon, from the hotbar or inventory, without changing what you hold. Anything: hit with whatever you hold.").build();
 	private final RotationSettings rotation = new RotationSettings(sgGeneral);
-	private final BoolSetting render = sgGeneral.bool("Render").description("Outline the target.").defaultValue(true).build();
-	private final ColorSetting color = sgGeneral.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(render::get).build();
 
 	private final TargetSettings targets = new TargetSettings(settings, Targets.Type.PLAYERS, Targets.Type.HOSTILES);
+
+	private final SettingGroup sgRender = settings.group("Render");
+	private final BoolSetting render = sgRender.bool("Show Target").description("Outline the target.").defaultValue(true).build();
+	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(render::get).build();
 
 	/** Switch: blocks beyond reach a target may be when the weapon is taken in hand, so its charge is full on arrival. */
 	private static final double PRE_CHARGE = 8;
@@ -94,6 +98,20 @@ public class KillAura extends Module {
 
 	public KillAura() {
 		super(Tags.COMBAT, "Kill Aura", "Attacks targets in reach, facing them first.");
+	}
+
+	/** 2: the target's outline (Render, now Show Target, and its Color) moved into a Render group. */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) {
+			saved.move("General", "Render", "Render", "Show Target");
+			saved.move("General", "Color", "Render", "Color");
+		}
 	}
 
 	@Override

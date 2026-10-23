@@ -23,6 +23,8 @@ import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Entities;
+import dev.myriadclient.api.setting.SavedSettings;
+import dev.myriadclient.api.setting.SettingGroup;
 import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import net.minecraft.client.model.Model;
@@ -55,13 +57,15 @@ public class ESP extends Module {
 
 	private static final long FADE_MS = 200;
 
-	private final EnumSetting<Mode> mode = sgGeneral.oneOf("Mode", Mode.HITBOX).description("Hitbox: 3D boxes. Box 2D: screen rectangles. Model: the model's wireframe. Outline: a shader outline around the exact shape.").build();
 	private final DoubleSetting range = sgGeneral.decimal("Range").description("0 = no limit.").defaultValue(0).range(0, 256).decimals(0).build();
-	private final BoolSetting fade = sgGeneral.bool("Fade In").description("Fade entities in as they appear.").defaultValue(true).build();
-	private final BoolSetting healthBar = sgGeneral.bool("Health Bar").description("A health bar beside each box.").visible(() -> mode.get() == Mode.BOX_2D).build();
-	private final BoxStyle style = new BoxStyle(sgGeneral, () -> mode.get() != Mode.OUTLINE);
-	private final HighlightSettings outline = new HighlightSettings(settings.group("Outline"), () -> mode.get() == Mode.OUTLINE);
 	private final EntityGroups targets = new EntityGroups(settings, Set.of(Group.PLAYERS, Group.FRIENDS, Group.MONSTERS, Group.CRYSTALS, Group.PEARLS));
+
+	private final SettingGroup sgRender = settings.group("Render");
+	private final EnumSetting<Mode> mode = sgRender.oneOf("Mode", Mode.HITBOX).description("Hitbox: 3D boxes. Box 2D: screen rectangles. Model: the model's wireframe. Outline: a shader outline around the exact shape.").build();
+	private final BoolSetting fade = sgRender.bool("Fade In").description("Fade entities in as they appear.").defaultValue(true).build();
+	private final BoolSetting healthBar = sgRender.bool("Health Bar").description("A health bar beside each box.").visible(() -> mode.get() == Mode.BOX_2D).build();
+	private final BoxStyle style = new BoxStyle(sgRender, () -> mode.get() != Mode.OUTLINE);
+	private final HighlightSettings outline = HighlightSettings.builder(sgRender).visible(() -> mode.get() == Mode.OUTLINE).sharing(style).build();
 
 	/** When each entity id was first drawn, for the fade-in; ids not drawn this frame are dropped. */
 	private final Int2LongOpenHashMap appeared = new Int2LongOpenHashMap();
@@ -69,6 +73,20 @@ public class ESP extends Module {
 
 	public ESP() {
 		super(Tags.RENDER, "ESP", "Highlights players, mobs, crystals and more through walls.");
+	}
+
+	/** 2: how it's drawn (the mode, fade, health bar and the box and outline styles) moved into one Render group. */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) {
+			for (String s : new String[]{"Mode", "Fade In", "Health Bar", "Shape", "Fill Opacity", "Line Width", "Through Walls"}) saved.move("General", s, "Render", s);
+			saved.renameGroup("Outline", "Render");
+		}
 	}
 
 	@Override
