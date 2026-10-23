@@ -3,7 +3,7 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
-## 0.9.0 (unreleased)
+## 0.9.0
 
 Needs Myriad 0.9.0.
 
@@ -25,7 +25,8 @@ Needs Myriad 0.9.0.
     inventory the hotbar and the rest), up to bring one back. Never takes from a crafting or furnace output.
   - Every click goes through the screen as your own would, and only when the server takes clicks (on Grim, not while
     you walk with Inventory Move), so a move of several clicks is never left half done. Checked in singleplayer
-    against the server's copy of the inventory; not yet on the Grim test server.
+    against the server's copy of the inventory, and Scroll Move on the Grim test server (five items each way, three
+    in one tick, no flags); a failure in any of them turns Inventory Tweaks off rather than crashing the game.
 - **No Render: Your Effect Particles** (on by default) hides the potion swirls your own effects give off, which drift
   right in front of the camera in first person. Other players' and mobs' swirls still show.
 - **Recast's Baritone hand-off is a job** of Elytra Fly's, so Myriad's Jobs window shows it ("Lane blocked: Baritone ·
