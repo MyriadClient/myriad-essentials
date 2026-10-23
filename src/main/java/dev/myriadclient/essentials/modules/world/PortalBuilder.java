@@ -137,6 +137,7 @@ public class PortalBuilder extends Module {
 		Build b = build;
 		build = null;
 		if (b != null) b.stop();
+		Myriad.inventory().giveBack(this);
 		lightOn = null;
 		oneShot = false;
 	}
@@ -218,13 +219,14 @@ public class PortalBuilder extends Module {
 		}
 		int slot = Myriad.inventory().findInHotbar(igniter);
 		if (slot < 0) {
-			int into = igniterSlot();
-			if (Myriad.inventory().findInInventory(igniter) < 0 || into < 0) {
-				warn(into < 0 ? "No hotbar slot for the flint and steel: free one." : "No flint and steel or fire charge to light the portal with.");
+			int from = Myriad.inventory().findInInventory(igniter);
+			if (from < 0) {
+				warn("No flint and steel or fire charge to light the portal with.");
 				lightOn = null;
 				oneShotDone();
-			} else if (Myriad.inventory().prepareClick()) {
-				Myriad.inventory().ensureInHotbar(igniter, into);
+			} else {
+				// Into any hotbar slot but the one you hold, put back once the portal's lit.
+				Myriad.inventory().borrow(this, from, s -> true);
 			}
 			return;
 		}
@@ -234,14 +236,6 @@ public class PortalBuilder extends Module {
 			lightTries++;
 			lightWait = LIGHT_WAIT;
 		}
-	}
-
-	/** Where the flint and steel goes: an empty hotbar slot, else the one with the obsidian; never your other things. */
-	private int igniterSlot() {
-		var inv = mc.player.getInventory();
-		for (int i = 0; i < 9; i++) if (inv.getItem(i).isEmpty()) return i;
-		for (int i = 0; i < 9; i++) if (inv.getItem(i).is(Items.OBSIDIAN)) return i;
-		return -1;
 	}
 
 	@Subscribe

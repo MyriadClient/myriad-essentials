@@ -21,6 +21,12 @@ Needs Myriad 0.9.0.
   clients with Litematica) saves a box as a schematic and places it elsewhere, so the tests run on any server; the test
   server's `myriad.lenientplace` lets the 2b2t-setting runs be judged by where blocks go rather than by checks 2b2t's
   Grim doesn't enforce.
+- **Portal Builder lights with a full hotbar.** The flint and steel came into an empty hotbar slot or the obsidian's,
+  and with neither it asked you to free one; it's now borrowed into any slot but the one you hold and put back after.
+- **More build tests in the Grim suite:** `printer full hotbar 2b2t` (every hotbar slot holding something of yours),
+  `portal_builder full hotbar` and `portal_builder air place`, each checking the hotbar and off hand come back as
+  they were; all pass on a direct connection and through `lag.py 120 25`. The Middle Click inventory test waits for
+  its items to reach the client before clicking, so it passes through `lag.py` too.
 - **Middle Click takes rockets and pearls from the inventory with a full hotbar, and never fires late.** It only
   borrowed into an empty hotbar slot or one with building blocks, so with a hotbar of tools nothing happened; now the
   item swaps places with any slot but the selected one, and both go back after. A click that couldn't go through kept

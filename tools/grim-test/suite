@@ -342,10 +342,12 @@ def hotbar():
 
 def t_middle_click_inventory():
     # No pearl in the hotbar and no free slot: one comes from the inventory over another slot, and both go back after.
+    # The wait before the click lets the items reach the client through lag.py.
     reset()
     cmd(*(f"item replace entity {P} hotbar.{i} with {t}" for i, t in enumerate(FULL_HOTBAR)), f"item replace entity {P} inventory.5 with ender_pearl 16")
-    client(".set middle_click air pearl", ".set middle_click block pearl", ".toggle middle_click on", "look -90 -60", "middle", "wait 60",
-        ".toggle middle_click off")
+    log = [".packets log on"] if os.environ.get("PRINT_LOG") else []
+    client(*log, ".set middle_click air pearl", ".set middle_click block pearl", ".toggle middle_click on", "look -90 -60", "wait 10", "middle", "wait 60",
+        ".toggle middle_click off", *([".packets log off"] if log else []))
     pearls, now = count(14), hotbar()
     # Thrown nearly straight up, it would land and teleport the tester in the middle of the next test.
     cmd("kill @e[type=ender_pearl]")
@@ -389,7 +391,7 @@ def has_litematica():
     return re.search(r"(?m)^\s*- litematica", log) is not None
 
 
-def printer_pass(keys, rotate, air, stand=None, lenient=False):
+def printer_pass(keys, rotate, air, stand=None, lenient=False, hotbar=PRINT_HOTBAR):
     if not has_litematica(): return True, "skipped: Litematica isn't in the dev client (start it with -Plitematica)"
     x0, y, z = PRINT_X, PRINT_Y, PRINT_Z
     client(*FRESH, ".printscene clear", "wait 5")
@@ -399,7 +401,7 @@ def printer_pass(keys, rotate, air, stand=None, lenient=False):
         *(f"setblock {x0 + i} {y} {z + PRINT_DZ} {b}" for i, b in enumerate(PRINT_ROW)),
         f"gamemode survival {P}", f"clear {P}", f"effect clear {P}", f"kill @e[type=item,x={x0},y={y},z={z},distance=..60]",
         f"item replace entity {P} weapon.offhand with totem_of_undying",
-        *(f"item replace entity {P} hotbar.{i} with {t}" for i, t in PRINT_HOTBAR.items()),
+        *(f"item replace entity {P} hotbar.{i} with {t}" for i, t in hotbar.items()),
         *(f"item replace entity {P} inventory.{k} with {it} 16" for k, it in enumerate(PRINT_ITEMS)),
         f"tp {P} {x0 - 4.5} {y} {z - 1.5} -90 20", f"effect give {P} saturation 1 20 true")
     settle(x0 - 4.5, y, z - 1.5)
@@ -429,7 +431,7 @@ def printer_pass(keys, rotate, air, stand=None, lenient=False):
     missing = [i for i in off if passed(f"if block {x0 + i} {y} {z} air")]
     wrong = [f"{x0 + i}:{PRINT_ROW[i]}" for i in off if i not in missing]
     hotbar_now = {i: item(i).removeprefix("minecraft:") for i in range(9)}
-    expected = {i: PRINT_HOTBAR.get(i, "") for i in range(9)}
+    expected = {i: hotbar.get(i, "") for i in range(9)}
     offhand = item(-106).removeprefix("minecraft:")
     moved = {i: hotbar_now[i] for i in range(9) if hotbar_now[i] != expected[i]}
     # Standing at fixed stops, some blocks have no face to click from any of them: there, only misplaces fail.
@@ -451,6 +453,47 @@ def t_printer_sprinting_2b2t():
 
 def t_printer_jumping_2b2t():
     return printer_pass("forward,sprint,jump", rotate=False, air=True, lenient=True)
+
+
+def t_printer_full_hotbar_2b2t():
+    # Every slot holding something of yours: the blocks have to borrow one and put it back.
+    return printer_pass("forward", rotate=False, air=True, lenient=True, hotbar=dict(enumerate(FULL_HOTBAR)))
+
+
+def portal_pass(air):
+    """Portal Builder from Enable with the obsidian and the flint and steel only in the inventory and the hotbar full."""
+    x0, y, z = 9000, 100, 0
+    client(*FRESH, "wait 5")
+    forceload_area(x0 - 8, z - 8, x0 + 8, z + 8)
+    cmd(f"fill {x0 - 6} {y - 1} {z - 6} {x0 + 6} {y - 1} {z + 6} stone", f"fill {x0 - 6} {y} {z - 6} {x0 + 6} {y + 6} {z + 6} air",
+        f"gamemode survival {P}", f"clear {P}", f"effect clear {P}", f"kill @e[type=item,x={x0},y={y},z={z},distance=..20]",
+        f"item replace entity {P} weapon.offhand with totem_of_undying",
+        *(f"item replace entity {P} hotbar.{i} with {t}" for i, t in enumerate(FULL_HOTBAR)),
+        f"item replace entity {P} inventory.10 with obsidian 16", f"item replace entity {P} inventory.11 with flint_and_steel",
+        f"tp {P} {x0 + 0.5} {y} {z + 0.5} -90 30")
+    settle(x0 + 0.5, y, z + 0.5)
+    client(".set portal_builder trigger enable", ".set portal_builder rotate false", f".set portal_builder corners {str(not air).lower()}",
+        f".set portal_builder air_place {str(air).lower()}", ".set portal_builder light true", "wait 5")
+    cmd(f"deop {P}", "grim reload")
+    mark()
+    # On the floor block you look at, across the view: a 2 by 3 portal somewhere in front.
+    log = [".packets log on"] if os.environ.get("PRINT_LOG") else []
+    client(*log, ".toggle portal_builder on", "wait 140", ".toggle portal_builder off", "wait 60", *([".packets log off"] if log else []), timeout=60)
+    cmd(f"op {P}", "grim reload")
+    lit = "filled 6 block" in cmd(f"fill {x0 + 1} {y} {z - 3} {x0 + 6} {y + 5} {z + 3} nether_portal replace nether_portal")
+    hotbar_now = {i: item(i).removeprefix("minecraft:") for i in range(9)}
+    moved = {i: hotbar_now[i] for i in range(9) if hotbar_now[i] != FULL_HOTBAR[i]}
+    offhand = item(-106).removeprefix("minecraft:")
+    return lit and not moved and offhand == "totem_of_undying", (f"{'lit' if lit else 'not lit'}, hotbar {'as it was' if not moved else moved}, "
+                                                                 f"off hand {offhand or 'empty'}")
+
+
+def t_portal_builder_full_hotbar():
+    return portal_pass(air=False)
+
+
+def t_portal_builder_air_place():
+    return portal_pass(air=True)
 
 
 def t_printer_sprinting():
@@ -902,6 +945,9 @@ TESTS = [
     ("printer walking 2b2t", t_printer_walking_2b2t),
     ("printer sprinting 2b2t", t_printer_sprinting_2b2t),
     ("printer jumping 2b2t", t_printer_jumping_2b2t),
+    ("printer full hotbar 2b2t", t_printer_full_hotbar_2b2t),
+    ("portal_builder full hotbar", t_portal_builder_full_hotbar),
+    ("portal_builder air place", t_portal_builder_air_place),
     ("auto_tool preserve", t_auto_tool_preserve),
     ("auto_armor preserve", t_auto_armor_preserve),
     ("auto_armor keeps worn elytra", t_auto_armor_keeps_worn_elytra),
@@ -929,7 +975,8 @@ TESTS = [
 FLAGS_IGNORED = {"selftest (every module)"}
 # Checks a test relaxes on purpose (see printer_pass): flagged, but not failing it.
 FLAGS_RELAXED = {name: {"RotationPlace", "AirLiquidPlace", "PositionPlace"} for name in ("printer walking 2b2t", "printer sprinting 2b2t",
-                                                                                        "printer jumping 2b2t")}
+                                                                                        "printer jumping 2b2t", "printer full hotbar 2b2t",
+                                                                                        "portal_builder full hotbar", "portal_builder air place")}
 # Known to fail now and then for reasons that aren't the code under test. They run as usual; one that fails gets one
 # more try, alone, at the end, and only fails the run if it fails again. Anything else that fails is a failure.
 FLAKY = {
