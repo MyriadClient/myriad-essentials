@@ -7,6 +7,11 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 Needs Myriad 0.9.0.
 
+- **Middle Click takes rockets and pearls from the inventory with a full hotbar, and never fires late.** It only
+  borrowed into an empty hotbar slot or one with building blocks, so with a hotbar of tools nothing happened; now the
+  item swaps places with any slot but the selected one, and both go back after. A click that couldn't go through kept
+  waiting, and fired whenever a stack reached the hotbar, minutes later; now it's dropped after a quarter of a second.
+  New suite tests: a pearl and a rocket while gliding, each from the inventory with a full hotbar (both failed before).
 - **Packet Mine: the queue and the block Auto Rebreak watches have their own look.** New Queue and Auto Rebreak groups,
   each with a Color and the standard highlight look (outline, glow, fill, gradient, through walls), starting from the
   old ones (the queue faint and dotted, the rebreak block outlined). General's Color is gone; one you'd changed

@@ -332,6 +332,41 @@ def t_stack_replenish():
     return count(0) > 1, f"hotbar stack now {count(0)}"
 
 
+# Every hotbar slot taken, with nothing Middle Click may use and no building blocks for a borrow to go over.
+FULL_HOTBAR = ["diamond_sword", "diamond_pickaxe", "diamond_axe", "diamond_shovel", "bow", "shield", "golden_apple", "totem_of_undying", "shears"]
+
+
+def hotbar():
+    return [item(i).removeprefix("minecraft:") for i in range(9)]
+
+
+def t_middle_click_inventory():
+    # No pearl in the hotbar and no free slot: one comes from the inventory over another slot, and both go back after.
+    reset()
+    cmd(*(f"item replace entity {P} hotbar.{i} with {t}" for i, t in enumerate(FULL_HOTBAR)), f"item replace entity {P} inventory.5 with ender_pearl 16")
+    client(".set middle_click air pearl", ".set middle_click block pearl", ".toggle middle_click on", "look -90 -60", "middle", "wait 60",
+        ".toggle middle_click off")
+    pearls, now = count(14), hotbar()
+    # Thrown nearly straight up, it would land and teleport the tester in the middle of the next test.
+    cmd("kill @e[type=ender_pearl]")
+    return pearls == 15 and now == FULL_HOTBAR, f"{pearls} pearls back in the inventory, hotbar {'as it was' if now == FULL_HOTBAR else now}"
+
+
+def t_middle_click_rocket_flying():
+    # A rocket from the inventory while gliding: there's never a still moment, so the click goes while flying.
+    client(*FRESH, "wait 20")
+    cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra",
+        *(f"item replace entity {P} hotbar.{i} with {t}" for i, t in enumerate(FULL_HOTBAR)), f"item replace entity {P} inventory.5 with firework_rocket 16",
+        f"tp {P} 6000.5 300 0.5 -90 0")
+    time.sleep(1.5)
+    mark()
+    x0 = position()[0]
+    client(".set middle_click flying rocket", ".toggle middle_click on", "look -90 -10", "hold jump 2", "wait 5", "middle", "wait 100",
+        ".toggle middle_click off", timeout=60)
+    rockets, now, x = count(14), hotbar(), position()[0]
+    return rockets == 15 and now == FULL_HOTBAR, f"{rockets} rockets back in the inventory, hotbar {'as it was' if now == FULL_HOTBAR else now}, {x - x0:.0f} blocks"
+
+
 def t_elytra_altitude():
     client(*FRESH, "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"tp {P} 2000.5 230 0.5 -90 0")
@@ -756,6 +791,8 @@ TESTS = [
     ("auto_eat choice", t_auto_eat_choice),
     ("auto_disconnect", t_auto_disconnect),
     ("stack_replenish", t_stack_replenish),
+    ("middle_click inventory", t_middle_click_inventory),
+    ("middle_click rocket flying", t_middle_click_rocket_flying),
     ("auto_tool preserve", t_auto_tool_preserve),
     ("auto_armor preserve", t_auto_armor_preserve),
     ("auto_armor keeps worn elytra", t_auto_armor_keeps_worn_elytra),

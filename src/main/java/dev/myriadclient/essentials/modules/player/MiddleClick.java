@@ -41,7 +41,10 @@ public class MiddleClick extends Module {
 
 	private boolean held;
 	private int xpWait;
-	/** An item to use once it has been borrowed from the inventory (the click waits a tick while you move). */
+	/**
+	 * An item to use once it can be brought from the inventory (a click waits while you move), for up to
+	 * {@link #PENDING_TICKS} after the click; a use that late would surprise you, so it's dropped then.
+	 */
 	private Item pending;
 	private int pendingTicks;
 	private static final int PENDING_TICKS = 5;
@@ -77,9 +80,8 @@ public class MiddleClick extends Module {
 	@Subscribe
 	private void onTick(TickEvent.Pre e) {
 		if (pending != null && inGame()) {
-			Item item = pending;
-			pending = null;
-			if (--pendingTicks >= 0) use(item);
+			if (--pendingTicks < 0) pending = null;
+			else use(pending);
 		}
 		if (!held || !inGame()) return;
 		if (mc.gui.screen() != null || GLFW.glfwGetMouseButton(mc.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_MIDDLE) != GLFW.GLFW_PRESS) {
@@ -133,10 +135,12 @@ public class MiddleClick extends Module {
 
 	/**
 	 * Uses {@code item} from the off hand or the hotbar, without changing the visible slot; or borrowed from the
-	 * inventory, which puts it back after (while you move, the click waits a tick, so the use does too).
+	 * inventory into any hotbar slot but the selected one (what was there swaps places with it, and both go back after).
+	 * While you move the click can wait a few ticks, and the use with it.
 	 */
 	private void use(Item item) {
 		if (mc.player.getOffhandItem().is(item)) {
+			pending = null;
 			Interactions.useItem(InteractionHand.OFF_HAND);
 			swing(InteractionHand.OFF_HAND);
 			return;
@@ -144,16 +148,19 @@ public class MiddleClick extends Module {
 		int slot = Myriad.inventory().findInHotbar(s -> s.is(item));
 		if (slot < 0 && fromInventory.get()) {
 			int from = Myriad.inventory().findInInventory(s -> s.is(item));
-			if (from < 0) return;
-			slot = Myriad.inventory().borrow(this, from, null);
+			if (from < 0) {
+				pending = null;
+				return;
+			}
+			slot = Myriad.inventory().borrow(this, from, s -> true);
 			if (slot < 0) {
-				if (pending == null && pendingTicks <= 0) pendingTicks = PENDING_TICKS;
+				if (pending == null) pendingTicks = PENDING_TICKS;
 				pending = item;
 				return;
 			}
 		}
+		pending = null;
 		if (slot < 0) return;
-		pendingTicks = 0;
 		// Keeps it if it's borrowed (it goes back once you stop using it).
 		Myriad.inventory().borrow(this, slot, null);
 		Myriad.inventory().silentSwap(slot, () -> {
