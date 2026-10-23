@@ -417,8 +417,9 @@ def printer_pass(keys, rotate, air, stand=None, lenient=False, hotbar=PRINT_HOTB
     mark()
     # Past the row and a little beyond, then time for what's still in reach, then off: what it moved goes back.
     if stand is None:
-        # PRINT_LOG=1: the client logs every packet of the pass (.packets log, in run/myriad/packets).
-        log = [".packets log on"] if os.environ.get("PRINT_LOG") else []
+        # PRINT_LOG=1: the client logs every packet of the pass (.packets log, in run/myriad/packets); PRINT_LOG=all keeps
+        # the received packets the log leaves out as noise (attribute updates, entity moves).
+        log = [".packets log on" + (" all" if os.environ.get("PRINT_LOG") == "all" else "")] if os.environ.get("PRINT_LOG") else []
         moving = [f"hold {keys} {ticks}", f"wait {ticks + 10}"] if keys else [f"wait {ticks}"]
         client(*log, ".toggle printer on", *moving, "wait 60", ".toggle printer off", *([".packets log off"] if log else []), "wait 60",
             ".printscene clear", timeout=90 + ticks // 20)
@@ -428,7 +429,13 @@ def printer_pass(keys, rotate, air, stand=None, lenient=False, hotbar=PRINT_HOTB
         for sx in stand:
             steps += [f"/tp {P} {x0 + sx + 0.5} {y} {z - 1.5} -90 20", f"wait {stop_ticks}"]
         client(*steps, ".toggle printer off", "wait 60", ".printscene clear", timeout=120)
-    if lenient: cmd(f"op {P}", "grim reload")
+    if lenient:
+        cmd(f"op {P}", "grim reload")
+        # The flags it takes leave Grim's RotationPlace checking every later placement by the look at the click, for
+        # as long as the session lasts: a fresh one, so the tests after it on this client aren't judged by that.
+        cmd(f"kick {P} fresh Grim session")
+        time.sleep(4.5)
+        if not rejoin(): return False, "couldn't rejoin after the pass"
     # Blocks left out on purpose (Skip) must stay air; the rest are judged as usual.
     skipped = [i for i, b in enumerate(PRINT_ROW) if b.split("[")[0] in left_out]
     placed_skipped = [i for i in skipped if not passed(f"if block {x0 + i} {y} {z} air")]
@@ -493,6 +500,7 @@ def t_printer_full_hotbar_2b2t():
 
 def portal_pass(air):
     """Portal Builder from Enable with the obsidian and the flint and steel only in the inventory and the hotbar full."""
+    if DIM: return True, "skipped: nether portals don't light in this worker's world (the first worker runs it)"
     x0, y, z = 9000, 100, 0
     client(*FRESH, "wait 5")
     forceload_area(x0 - 8, z - 8, x0 + 8, z + 8)
@@ -1208,12 +1216,14 @@ def online():
 
 
 def rejoin():
-    client("connect localhost:25565", timeout=10)
-    for _ in range(60):
-        if online():
-            time.sleep(3)
-            return True
-        time.sleep(1)
+    # The server turns away a connection within 4 s of the last one (bukkit.yml connection-throttle): try again.
+    for _ in range(4):
+        client("connect localhost:25565", timeout=10)
+        for _ in range(15):
+            if online():
+                time.sleep(3)
+                return True
+            time.sleep(1)
     return False
 
 
@@ -1356,6 +1366,10 @@ def run_tests(chosen):
     return results
 
 
+# Tests that need the overworld (a nether portal lights only there or in the Nether).
+OVERWORLD_ONLY = {"portal_builder full hotbar", "portal_builder air place"}
+
+
 def share(chosen, workers):
     """Splits the tests between the workers, longest first onto whoever has least so far (by the last run's times)."""
     try:
@@ -1365,7 +1379,8 @@ def share(chosen, workers):
     loads = [[0.0, []] for _ in range(workers)]
     order = {n: i for i, (n, _) in enumerate(chosen)}
     for name, _ in sorted(chosen, key=lambda t: -times.get(t[0], 15)):
-        least = min(loads, key=lambda l: l[0])
+        # The other workers play in worlds of their own, where nether portals don't light: those tests stay on the first.
+        least = loads[0] if name in OVERWORLD_ONLY else min(loads, key=lambda l: l[0])
         least[0] += times.get(name, 15)
         least[1].append(name)
     # Each worker runs its share in the suite's own order.
