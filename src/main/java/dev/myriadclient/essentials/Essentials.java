@@ -6,6 +6,9 @@ import dev.myriadclient.api.control.ControlPreset;
 import dev.myriadclient.api.module.ModuleGroup;
 import dev.myriadclient.api.ui.Icons;
 import dev.myriadclient.api.util.Baritone;
+import dev.myriadclient.essentials.dev.InvTest;
+import dev.myriadclient.essentials.dev.PortalTest;
+import dev.myriadclient.essentials.dev.PrintTest;
 import dev.myriadclient.essentials.hud.ArmorPanel;
 import dev.myriadclient.essentials.hud.BindsPanel;
 import dev.myriadclient.essentials.hud.ChestCountPanel;
@@ -34,6 +37,8 @@ import dev.myriadclient.essentials.modules.movement.LockRotation;
 import dev.myriadclient.essentials.modules.movement.RocketBoost;
 import dev.myriadclient.essentials.modules.movement.Velocity;
 import dev.myriadclient.essentials.modules.player.AutoEat;
+import dev.myriadclient.essentials.modules.player.AutoMend;
+import dev.myriadclient.essentials.modules.player.AutoSort;
 import dev.myriadclient.essentials.modules.player.AutoTool;
 import dev.myriadclient.essentials.modules.player.InventoryTweaks;
 import dev.myriadclient.essentials.modules.player.MiddleClick;
@@ -58,7 +63,10 @@ import dev.myriadclient.essentials.modules.render.ViewModel;
 import dev.myriadclient.essentials.modules.render.Zoom;
 import dev.myriadclient.essentials.modules.world.AirPlace;
 import dev.myriadclient.essentials.modules.world.BaritoneSettings;
+import dev.myriadclient.essentials.modules.world.PortalBuilder;
+import dev.myriadclient.essentials.modules.world.Printer;
 import dev.myriadclient.essentials.modules.world.Scaffold;
+import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.List;
 
@@ -92,8 +100,9 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerModules(travel, elytraSwap, lockRotation);
 		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), autoEat, new Velocity(), new AutoDisconnect());
 		ctx.registerModules(travel, elytraFly, new RocketBoost(), new AutoWalk(), new InventoryMove());
-		ctx.registerModules(building, new Scaffold(), new AirPlace(), new PacketMine(), new AutoTool(), new Reach(), new WallInteract());
-		ctx.registerModules(inventory, new InventoryTweaks(), new StackReplenish(), new MiddleClick());
+		ctx.registerModules(building, new Scaffold(), new AirPlace(), new PacketMine(), new AutoTool(), new Reach(), new WallInteract(), new Printer(),
+			new PortalBuilder());
+		ctx.registerModules(inventory, new InventoryTweaks(), new StackReplenish(), new MiddleClick(), new AutoSort(), new AutoMend());
 		ctx.registerModules(visuals, new ESP(), new Tracers(), new Nametags(), new Storage(), new BlockESP(), new BlockHighlight(), new FullBright(),
 			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips());
 		// Baritone's settings, made from Baritone's own list, and its path and goal drawn: only when it's installed.
@@ -115,6 +124,13 @@ public final class Essentials implements MyriadAddon {
 			.module(lockRotation)
 			.module(autoEat)
 			.build());
+
+		// Acceptance runs for the builders, Auto Sort and Auto Mend, in a dev client's singleplayer world.
+		if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
+			ctx.registerCommand(new InvTest());
+			ctx.registerCommand(new PortalTest());
+			if (FabricLoader.getInstance().isModLoaded("litematica")) ctx.registerCommand(new PrintTest());
+		}
 
 		// HUD elements. The ones with a position are placed on a fresh install; the rest are added from the HUD workspace.
 		ctx.registerHud("Watermark", "", WatermarkPanel::new, TOP_LEFT, 0, 0);

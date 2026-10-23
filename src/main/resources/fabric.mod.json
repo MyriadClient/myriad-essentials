@@ -23,5 +23,8 @@
 	"depends": {
 		"myriad": ">=${myriad_version}",
 		"minecraft": "~${minecraft_version}"
+	},
+	"suggests": {
+		"litematica": "*"
 	}
 }

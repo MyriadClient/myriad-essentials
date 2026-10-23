@@ -19,7 +19,7 @@ repositories {
 		})
 		filter { includeGroup "dev.myriadclient" }
 	}
-	// ViaFabricPlus for the dev client only.
+	// ViaFabricPlus, Xaero's maps and Litematica for the dev client, Litematica also to compile the Printer against.
 	maven {
 		name = "Modrinth"
 		url = "https://api.modrinth.com/maven"
@@ -43,8 +43,18 @@ dependencies {
 
 	// Most 2b2t players join through ViaFabricPlus as an older version, so the dev client does too (see `via` below).
 	localRuntime "maven.modrinth:viafabricplus:${project.viafabricplus_version}"
+	// The Printer reads Litematica's schematic world when it's installed (see the litematica package); never bundled.
+	// -Plitematica puts it in the dev client (for .printtest), without Xaero's maps: Litematica 0.28.8 with Xaero's
+	// Minimap 26.6.0 and World Map 1.47.0 crashes at start ("Missing uniform Globals" uploading animated textures).
+	compileOnly "maven.modrinth:litematica:${project.litematica_version}"
+	compileOnly "maven.modrinth:malilib:${project.malilib_version}"
+	def litematica = project.hasProperty("litematica")
+	if (litematica) {
+		localRuntime "maven.modrinth:litematica:${project.litematica_version}"
+		localRuntime "maven.modrinth:malilib:${project.malilib_version}"
+	}
 	// Xaero's maps in the dev client, for the features that take waypoints (core reads them); -PnoMaps leaves them out.
-	if (!project.hasProperty("noMaps")) {
+	if (!project.hasProperty("noMaps") && !litematica) {
 		localRuntime "maven.modrinth:xaeros-minimap:${project.xaero_minimap_version}"
 		localRuntime "maven.modrinth:xaeros-world-map:${project.xaero_worldmap_version}"
 	}

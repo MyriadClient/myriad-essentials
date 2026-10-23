@@ -7,6 +7,13 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 Needs Myriad 0.9.0.
 
+- **Printer, Portal Builder, Auto Sort and Auto Mend join Essentials**, from Myriad Automation (Auto Mend was its XP
+  Repair). Printer and Portal Builder are in Building & Mining, Auto Sort and Auto Mend in Inventory. The Printer needs
+  Litematica and MaLiLib installed; nothing else does. Settings saved under Automation's modules don't carry over.
+  The tests came with them: `.printtest` (in a dev client started with `-Plitematica`), `.portaltest`, `.invtest sort`
+  and `.invtest mend`; all pass in Essentials (portal lit in 0.55 s on 2b2t settings, sort 4/4, mend OK, print 282
+  right and 0 wrong). Litematica 0.28.8 with Xaero's Minimap and World Map crashes the game at start (each alone is fine), so
+  the dev client leaves the maps out with `-Plitematica`.
 - **Middle Click takes rockets and pearls from the inventory with a full hotbar, and never fires late.** It only
   borrowed into an empty hotbar slot or one with building blocks, so with a hotbar of tools nothing happened; now the
   item swaps places with any slot but the selected one, and both go back after. A click that couldn't go through kept
