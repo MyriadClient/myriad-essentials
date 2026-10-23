@@ -541,8 +541,11 @@ def chest_items(x, y, z):
     return items
 
 
-def sort_pass(full_inventory=False):
-    """Auto Sort on a double chest of scattered part stacks, opened by hand: merged, packed from the first slot, nothing lost."""
+def sort_pass(full_inventory=False, click_after=None, middle=False):
+    """Auto Sort on a double chest of scattered part stacks, opened by hand: merged, packed from the first slot, nothing lost
+    and nothing left on the cursor or in your inventory. click_after: you click a chest slot that many ticks after opening it,
+    which stops the sort: what it held is put down, and nothing is lost. middle: Auto Sort off, sorted by Inventory Tweaks'
+    middle-click over a chest slot instead."""
     import random
     x0, y, z = 10000, 100, 0
     client(*FRESH, "wait 5")
@@ -563,10 +566,13 @@ def sort_pass(full_inventory=False):
         f"gamemode survival {P}", f"clear {P}", *([f"item replace entity {P} inventory.{i} with torch 64" for i in range(27)] if full_inventory else []),
         f"tp {P} {x0 + 0.5} {y} {z + 1.0} -90 25")
     settle(x0 + 0.5, y, z + 1.0)
-    client(".toggle auto_sort on", "wait 5", timeout=30)
+    client(".toggle auto_sort off" if middle else ".toggle auto_sort on", ".toggle inventory_tweaks on", ".set inventory_tweaks middle_sort true", "wait 5",
+        timeout=30)
     mark()
     start = time.time()
-    client("use", timeout=30)
+    # The second slot of the chest's top row, where the screenshots put it.
+    client("use", *([f"wait {click_after}", "cursor slot 1", "mouse 0 click"] if click_after is not None else []),
+        *(["wait 20", "cursor slot 1", "mouse 2 click"] if middle else []), timeout=30)
     # Sorted on the server: polled until it is (or 20 s).
     def state():
         a, b = chest_items(x0 + 2, y, z + 1), chest_items(x0 + 2, y, z)
@@ -578,16 +584,26 @@ def sort_pass(full_inventory=False):
         for item, n in used: kinds.setdefault(item, []).append(n)
         return all(sum(1 for n in ns if n < SORT_ITEMS[item]) <= 1 for item, ns in kinds.items())
     took = None
-    while time.time() - start < 20:
+    while time.time() - start < (6 if click_after is not None else 20):
         if any(packed(order) for order in state()):
             took = time.time() - start
             break
         time.sleep(0.25)
+    time.sleep(1)
+    carried = re.search(r"carried=(.+?) screen=", client("wait 2", "status", timeout=30))
+    carried = carried.group(1) if carried else "?"
     client(".toggle auto_sort off", "wait 2", timeout=30)
     now = {}
     for item, n in filter(None, state()[0]): now[item] = now.get(item, 0) + n
+    # Parked in your inventory and not put back would show here (the torches of a full inventory aren't the chest's).
+    # One entry at a time: a whole list comes back cut short.
+    for entry in re.findall(r"\{[^{}]*\}", cmd(*(f"data get entity {P} Inventory[{i}]" for i in range(41)))):
+        item, n = re.search(r'id: "minecraft:([a-z_]+)"', entry), re.search(r"count: (\d+)", entry)
+        if item and n and item.group(1) in SORT_ITEMS: now[item.group(1)] = now.get(item.group(1), 0) + int(n.group(1))
     kept = now == totals
-    return took is not None and kept, (f"sorted in {took:.1f} s" if took is not None else "not sorted in 20 s") + (", nothing lost" if kept else f", items changed: {now} vs {totals}")
+    sorted_ok = took is not None or click_after is not None
+    text = (f"sorted in {took:.1f} s" if took is not None else "stopped by the click" if click_after is not None else "not sorted in 20 s")
+    return sorted_ok and kept and carried == "none", text + (", nothing lost" if kept else f", items changed: {now} vs {totals}") + f", cursor {carried}"
 
 
 def t_auto_sort():
@@ -596,6 +612,50 @@ def t_auto_sort():
 
 def t_auto_sort_full_inventory():
     return sort_pass(full_inventory=True)
+
+
+def t_auto_sort_your_click():
+    return sort_pass(click_after=12)
+
+
+def t_inventory_tweaks_middle_sort():
+    return sort_pass(middle=True)
+
+
+def t_inventory_tweaks_middle_sort_inventory():
+    """Inventory Tweaks' middle-click over your own inventory in its screen: the main inventory sorted, the hotbar as it was."""
+    import random
+    client(*FRESH, "wait 5")
+    rng = random.Random(11)
+    hotbar = ["diamond_sword", "", "bread", "", "", "torch", "", "", ""]
+    totals, setup = {}, []
+    for slot in rng.sample(range(27), 18):
+        item = rng.choice(list(SORT_ITEMS))
+        n = rng.randint(1, SORT_ITEMS[item] // 2)
+        setup.append(f"item replace entity {P} inventory.{slot} with {item} {n}")
+        totals[item] = totals.get(item, 0) + n
+    cmd(f"gamemode survival {P}", f"clear {P}", *(f"item replace entity {P} hotbar.{i} with {t}" for i, t in enumerate(hotbar) if t), *setup)
+    time.sleep(1)
+    # A screen left open by the test before (a chest) would take the E as its close.
+    if "screen=none" not in client("status", timeout=30): client("key escape", "wait 5", timeout=30)
+    client(".toggle auto_sort off", ".toggle inventory_tweaks on", ".set inventory_tweaks middle_sort true", "key e", "wait 10",
+        "cursor slot 20", "mouse 2 click", "wait 200", "status", "key escape", "wait 5", timeout=60)
+    items = {}
+    for entry in re.findall(r"\{[^{}]*\}", cmd(*(f"data get entity {P} Inventory[{i}]" for i in range(41)))):
+        slot, item, n = re.search(r"Slot: (\d+)b", entry), re.search(r'id: "minecraft:([a-z_]+)"', entry), re.search(r"count: (\d+)", entry)
+        if slot and item and n: items[int(slot.group(1))] = (item.group(1), int(n.group(1)))
+    main = [items.get(i) for i in range(9, 36)]
+    used = [s for s in main if s]
+    packed = all(s is not None for s in main[:len(used)])
+    kinds = {}
+    for item, n in used: kinds.setdefault(item, []).append(n)
+    merged = all(sum(1 for n in ns if n < SORT_ITEMS[item]) <= 1 for item, ns in kinds.items())
+    now = {}
+    for item, n in used: now[item] = now.get(item, 0) + n
+    hotbar_now = [items.get(i, ("", 0))[0] for i in range(9)]
+    ok = packed and merged and now == totals and hotbar_now == hotbar
+    return ok, (f"main inventory {'sorted' if packed and merged else 'not sorted'}, {'nothing lost' if now == totals else f'items changed: {now} vs {totals}'}, "
+                f"hotbar {'as it was' if hotbar_now == hotbar else hotbar_now}")
 
 
 def t_printer_sprinting():
@@ -1055,6 +1115,9 @@ TESTS = [
     ("portal_builder air place", t_portal_builder_air_place),
     ("auto_sort", t_auto_sort),
     ("auto_sort full inventory", t_auto_sort_full_inventory),
+    ("auto_sort your click", t_auto_sort_your_click),
+    ("inventory_tweaks middle sort", t_inventory_tweaks_middle_sort),
+    ("inventory_tweaks middle sort inventory", t_inventory_tweaks_middle_sort_inventory),
     ("auto_tool preserve", t_auto_tool_preserve),
     ("auto_armor preserve", t_auto_armor_preserve),
     ("auto_armor keeps worn elytra", t_auto_armor_keeps_worn_elytra),

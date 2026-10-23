@@ -45,6 +45,14 @@ Needs Myriad 0.9.0.
   Blocks), nearest first, passing over a container that had none lately; printing carries on after. Suite: `printer
   skip` (22/22, glass left out), `printer restock` (both glass from a chest beside the row), `printer walk` (24/24 from
   20 blocks away, no flags).
+- **Middle-click sorts in Inventory Tweaks.** In any inventory screen, middle-click over a chest's, barrel's, shulker
+  box's, dispenser's or hopper's slots to sort them, or over your inventory to sort it (the hotbar stays as you keep it):
+  shown sorted at once, as Auto Sort does it, for sorting by hand without every container sorting itself as it opens.
+  Middle Sort and Sort Order in its Mouse group. Suite: `inventory_tweaks middle sort` (a chest) and `inventory_tweaks
+  middle sort inventory`, through `lag.py 120 25` too.
+- **Sorting never leaves an item on your cursor** (core 0.10.0): with lag a sort could leave a stack on the cursor;
+  `auto_sort your click` clicks a chest slot mid-sort, and every sort test now checks the cursor is empty and nothing
+  is left in your inventory: 21 of 21 through `lag.py 120 25`.
 - **Middle Click takes rockets and pearls from the inventory with a full hotbar, and never fires late.** It only
   borrowed into an empty hotbar slot or one with building blocks, so with a hotbar of tools nothing happened; now the
   item swaps places with any slot but the selected one, and both go back after. A click that couldn't go through kept

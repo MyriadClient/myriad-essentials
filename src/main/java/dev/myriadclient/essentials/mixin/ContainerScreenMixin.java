@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Set;
 
-/** Inventory Tweaks: drags and the wheel over slots. */
+/** Inventory Tweaks: drags, the wheel and middle-click sorting over slots. */
 @Mixin(AbstractContainerScreen.class)
 public abstract class ContainerScreenMixin implements InventoryTweaks.ScreenAccess {
 	@Shadow
@@ -38,9 +38,14 @@ public abstract class ContainerScreenMixin implements InventoryTweaks.ScreenAcce
 		throw new AssertionError();
 	}
 
-	@Inject(method = "mouseClicked", at = @At("HEAD"))
+	@Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
 	private void essentials$press(MouseButtonEvent event, boolean doubleClick, CallbackInfoReturnable<Boolean> cir) {
-		InventoryTweaks.press(this, getHoveredSlot(event.x(), event.y()), event.button(), event.hasShiftDown());
+		Slot slot = getHoveredSlot(event.x(), event.y());
+		if (InventoryTweaks.middleClick(this, slot, event.button())) {
+			cir.setReturnValue(true);
+			return;
+		}
+		InventoryTweaks.press(this, slot, event.button(), event.hasShiftDown());
 	}
 
 	@Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)

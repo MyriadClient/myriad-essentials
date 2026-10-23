@@ -7,21 +7,32 @@ import dev.myriadclient.api.job.Steps;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
+import dev.myriadclient.api.service.Containers;
 import dev.myriadclient.api.setting.BoolSetting;
+import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.ItemInfo;
+import dev.myriadclient.essentials.util.Layouts;
+import dev.myriadclient.essentials.util.Menus;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.DispenserMenu;
+import net.minecraft.world.inventory.HopperMenu;
 import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Right-click a shulker box (or ender chest) in your inventory to open it on the spot: it's placed beside you, opened,
@@ -30,7 +41,10 @@ import java.util.Set;
  * <p>
  * And the mouse in any inventory screen: Shift-drag shift-clicks every slot you pass, a left drag that starts on a slot
  * of the item you're carrying gathers every matching slot it passes into your stack, and the wheel moves one item at a
- * time to the other inventory or back. Vanilla's own drags (spreading a stack, one item per slot) are left alone. Every
+ * time to the other inventory or back, and a middle-click sorts what's under the mouse: the container's slots, or your
+ * inventory (not the hotbar, which stays as you keep it), shown sorted at once as Auto Sort does it, for sorting by
+ * hand when you don't want every container sorted as it opens. Vanilla's own drags (spreading a stack, one item per
+ * slot) are left alone. Every
  * click goes through the screen as yours would, and only while the server takes clicks (not while you walk on Grim):
  * a multi-click move is never left half done. Applied by this addon's ContainerScreenMixin.
  */
@@ -46,6 +60,11 @@ public class InventoryTweaks extends Module {
 		+ "joins your stack, until it's full. A drag started anywhere else spreads the stack as vanilla does.").defaultValue(true).build();
 	private final BoolSetting scrollMove = sgMouse.bool("Scroll Move").description("Scroll down over an item to move one to the other inventory, up to bring one back from it. "
 		+ "In your own inventory, between the hotbar and the rest.").defaultValue(true).build();
+
+	private final BoolSetting middleSort = sgMouse.bool("Middle Sort").description("Middle-click over a container's slots to sort them, or over your "
+		+ "inventory to sort it (the hotbar stays as you keep it). It shows sorted at once; a click of yours stops it.").defaultValue(true).build();
+	private final EnumSetting<Layouts.Order> sortOrder = sgMouse.oneOf("Sort Order", Layouts.Order.ITEM).description("Item: the game's own "
+		+ "order, close to the creative tabs. Name: A to Z. Count: what you have most of first.").visible(middleSort::get).build();
 
 	/** How long to wait for you to close the box, in ticks: long enough to sort a whole box by hand. */
 	private static final int BROWSE_TICKS = 20 * 60 * 30;
@@ -139,10 +158,47 @@ public class InventoryTweaks extends Module {
 		if (m != null) Modules.guard(m, m::release);
 	}
 
+	/** A mouse button went down over {@code slot}: true if it was a middle-click this sorted with (vanilla then does nothing). */
+	public static boolean middleClick(ScreenAccess screen, @Nullable Slot slot, int button) {
+		InventoryTweaks m = active(screen);
+		return m != null && slot != null && button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && m.middleSort.get() && Modules.guard(m, () -> m.sort(screen, slot), false);
+	}
+
 	/** The wheel turned over {@code slot} and vanilla didn't use it (a bundle does): true if this did. */
 	public static boolean scroll(ScreenAccess screen, @Nullable Slot slot, double amount) {
 		InventoryTweaks m = active(screen);
 		return m != null && slot != null && amount != 0 && m.scrollMove.get() && Modules.guard(m, () -> m.onScroll(screen, slot, amount < 0), false);
+	}
+
+	/**
+	 * Sorts the side of the screen {@code slot} is on: your main inventory, or the container's own slots (chests, barrels,
+	 * shulker boxes, dispensers, hoppers). False, leaving the click to vanilla, with something on the cursor or over
+	 * anything else.
+	 */
+	private boolean sort(ScreenAccess screen, Slot slot) {
+		AbstractContainerMenu menu = screen.essentials$menu();
+		if (!menu.getCarried().isEmpty() || mc.player.isCreative()) return false;
+		boolean yours = slot.container == mc.player.getInventory();
+		boolean storage = menu instanceof ChestMenu || menu instanceof ShulkerBoxMenu || menu instanceof DispenserMenu || menu instanceof HopperMenu;
+		if (!yours && !storage) return false;
+		// Your hotbar stays as you keep it; only the main inventory is sorted.
+		if (yours && slot.getContainerSlot() < 9 || yours && slot.getContainerSlot() >= 36) return false;
+		int[] slots = yours ? Menus.playerSlots(menu, false) : Menus.containerSlots(menu);
+		List<ItemStack> layout = Layouts.sorted(menu, slots, sortOrder.get());
+		if (Layouts.holds(menu, slots, layout)) return true;
+		Containers.Arrangement arrangement = Containers.Arrangement.of(slots, layout);
+		CompletableFuture<Boolean> done;
+		if (menu == mc.player.inventoryMenu) {
+			done = Myriad.inventory().arrange(arrangement);
+		} else {
+			var view = Myriad.containers().current().filter(v -> v.handler() == menu);
+			if (view.isEmpty()) return false;
+			done = view.get().arrange(arrangement);
+		}
+		done.whenComplete((ok, t) -> {
+			if (t != null && !(t.getMessage() != null && t.getMessage().startsWith("You clicked")) && Menus.isOpen(menu)) warn("Stopped sorting: " + t.getMessage());
+		});
+		return true;
 	}
 
 	private void release() {
