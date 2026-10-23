@@ -2,6 +2,7 @@ package dev.myriadclient.essentials.modules.render;
 
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.HighlightEvent;
+import dev.myriadclient.api.event.events.PreviewEvent;
 import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
 import dev.myriadclient.api.event.events.TickEvent;
@@ -40,6 +41,8 @@ import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.EnderChestBlock;
+import net.minecraft.world.level.EmptyBlockGetter;
+import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
@@ -169,16 +172,38 @@ public class Storage extends Module {
 		settings.onAnyChanged(s -> found.remeshAll());
 	}
 
-	/** A chest as it's drawn, in Boxes mode (Outline draws through a shader a preview doesn't run). */
+	/** A chest, drawn as containers are (see {@link #onPreview}). */
 	@Override
 	public Widget preview() {
-		return Preview.block(Blocks.CHEST).decorate((shapes, box, entity) -> {
-			if (mode.get() == Mode.BOXES && chests.enabled().get()) style.draw(shapes, CHEST_BOX, chests.color().argb(), 1);
-		});
+		return Preview.block(Blocks.CHEST);
 	}
 
-	/** A chest's shape: a sixteenth in from the sides, 14 high. */
-	private static final AABB CHEST_BOX = new AABB(1 / 16.0, 0, 1 / 16.0, 15 / 16.0, 14 / 16.0, 15 / 16.0);
+	/** A preview's container (a block, or a chest minecart, boat or pack animal) in the mode's look. */
+	@Subscribe(inGame = true)
+	private void onPreview(PreviewEvent e) {
+		Kind k;
+		int color;
+		AABB box = e.box();
+		if (e.block() != null && e.block().getBlock() instanceof EntityBlock block) {
+			BlockEntity be = block.newBlockEntity(BlockPos.ZERO, e.block());
+			k = be == null ? null : kindOf(be);
+			if (k == null) return;
+			int tint = tintOf(be);
+			color = k == shulkers && !dyedShulkers.get() || tint == 0 ? k.color.argb() : tint;
+			if (!(block instanceof ShulkerBoxBlock)) {
+				VoxelShape shape = e.block().getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+				if (!shape.isEmpty()) box = shape.bounds();
+			}
+		} else if (e.entity() != null) {
+			k = kindOf(e.entity());
+			if (k == null) return;
+			color = k.color.argb();
+		} else return;
+		if (!k.enabled.get()) return;
+		// An entity is outlined through onHighlightEntity, as in the world.
+		if (mode.get() == Mode.BOXES) style.draw(e.shapes(), box, color, 1);
+		else if (e.block() != null) e.highlight(outline.style(), color);
+	}
 
 	private Kind kind(SettingGroup group, String name, boolean on, SettingColor.Mode color) {
 		BoolSetting enabled = group.bool(name).defaultValue(on).build();

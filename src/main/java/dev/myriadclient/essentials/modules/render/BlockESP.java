@@ -2,6 +2,7 @@ package dev.myriadclient.essentials.modules.render;
 
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.HighlightEvent;
+import dev.myriadclient.api.event.events.PreviewEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.BoxStyle;
@@ -90,14 +91,20 @@ public class BlockESP extends Module {
 		}
 	}
 
-	/** The first block picked (a spawner by default) as it's drawn, in Boxes mode (Outline draws through a shader a preview doesn't run). */
+	/** The first block picked (a spawner by default), drawn as the blocks are (see {@link #onPreview}). */
 	@Override
 	public Widget preview() {
-		Block shown = blocks.get().isEmpty() ? Blocks.SPAWNER : blocks.get().iterator().next();
-		return Preview.block(shown).decorate((shapes, cube, entity) -> {
-			if (mode.get() != Mode.BOXES || mc.level == null) return;
-			style.draw(shapes, cube, colorOf(shown.defaultBlockState(), BlockPos.ZERO), 1);
-		});
+		return Preview.block(blocks.get().isEmpty() ? Blocks.SPAWNER : blocks.get().iterator().next());
+	}
+
+	/** A preview's block, if it's one of those picked, in the mode's look. */
+	@Subscribe(inGame = true)
+	private void onPreview(PreviewEvent e) {
+		BlockState state = e.block();
+		if (state == null || !blocks.get().contains(state.getBlock())) return;
+		int c = colorOf(state, BlockPos.ZERO);
+		if (mode.get() == Mode.BOXES) style.draw(e.shapes(), e.box(), c, 1);
+		else e.highlight(outline.style(), c);
 	}
 
 	public BlockESP() {

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.EntityRenderEvent;
 import dev.myriadclient.api.event.events.HighlightEvent;
+import dev.myriadclient.api.event.events.PreviewEvent;
 import dev.myriadclient.api.event.events.Render2DEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
 import dev.myriadclient.api.module.Module;
@@ -78,13 +79,10 @@ public class ESP extends Module {
 		super(Tags.RENDER, "ESP", "Highlights players, mobs, crystals and more through walls.");
 	}
 
-	/** A zombie as a monster is drawn, in Hitbox mode (the other modes draw through shaders a preview doesn't run). */
+	/** A zombie, drawn as a monster is (see {@link #onPreview}). */
 	@Override
 	public Widget preview() {
-		return Preview.entity(EntityTypes.ZOMBIE).decorate((shapes, box, entity) -> {
-			int c = entity == null ? 0 : targets.color(entity);
-			if (c != 0 && mode.get() == Mode.HITBOX) style.draw(shapes, box, c, 1);
-		});
+		return Preview.entity(EntityTypes.ZOMBIE);
 	}
 
 	/** 2: how it's drawn (the mode, fade, health bar and the box and outline styles) moved into one Render group. */
@@ -154,6 +152,14 @@ public class ESP extends Module {
 		if (style.shape.get() != Renderer3D.ShapeMode.FILL) {
 			ModelShapes.wireframe(submits, poseStack, m, state, style.line(c, f), style.lineWidth.getFloat(), style.throughWalls.get());
 		}
+	}
+
+	/** Hitbox mode on a preview's entity; Outline mode outlines it through {@link #onHighlight}, as in the world. */
+	@Subscribe(inGame = true)
+	private void onPreview(PreviewEvent e) {
+		if (mode.get() != Mode.HITBOX || e.entity() == null) return;
+		int c = colorFor(e.entity());
+		if (c != 0) style.draw(e.shapes(), e.box(), c, 1);
 	}
 
 	/** Outline mode: each entity as it's prepared for drawing. */

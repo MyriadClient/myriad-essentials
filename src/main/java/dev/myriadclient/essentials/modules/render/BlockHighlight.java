@@ -1,7 +1,9 @@
 package dev.myriadclient.essentials.modules.render;
 
+import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.HighlightEvent;
+import dev.myriadclient.api.event.events.PreviewEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
@@ -60,14 +62,18 @@ public class BlockHighlight extends Module {
 		LevelRenderEvents.BEFORE_BLOCK_OUTLINE.register((context, state) -> !isEnabled());
 	}
 
-	/** A block as the highlight looks on it: the box in Box mode, its outline's edges in Outline mode (drawn by a shader in the world). */
+	/** A block as the highlight looks on it (see {@link #onPreview}). */
 	@Override
 	public Widget preview() {
-		return Preview.block(Blocks.STONE).decorate((shapes, cube, entity) -> {
-			int c = color.argb();
-			if (mode.get() == Mode.BOX) box.draw(shapes, cube, c, 1);
-			else shapes.lineWidth(Math.max(1, outline.outlineWidth.getFloat())).boxLines(cube, c, false);
-		});
+		return Preview.block(Blocks.STONE);
+	}
+
+	/** A preview's block as if you looked at it, unless another module's look is on it already (Storage on a chest). */
+	@Subscribe(inGame = true, priority = Priority.LOW)
+	private void onPreview(PreviewEvent e) {
+		if (e.block() == null || e.highlighted()) return;
+		if (mode.get() == Mode.BOX) box.draw(e.shapes(), e.box(), color.argb(), 1);
+		else e.highlight(outline.style(), color.argb());
 	}
 
 	/** The block under the crosshair, or where Air Place would place with nothing under it, or null. */
