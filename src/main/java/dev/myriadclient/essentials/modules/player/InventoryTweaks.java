@@ -104,7 +104,8 @@ public class InventoryTweaks extends Module {
 		return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
 	}
 
-	// The mouse, from ContainerScreenMixin.
+	// The mouse, from ContainerScreenMixin: each through Modules.guard, so a failure turns the module off rather than
+	// crashing the screen.
 
 	private static @Nullable InventoryTweaks active(ScreenAccess screen) {
 		InventoryTweaks m = Modules.active(InventoryTweaks.class);
@@ -116,30 +117,32 @@ public class InventoryTweaks extends Module {
 	public static void press(ScreenAccess screen, @Nullable Slot slot, int button, boolean shift) {
 		InventoryTweaks m = active(screen);
 		if (m == null) return;
-		m.release();
-		m.pressed = slot;
-		m.pressButton = button;
-		m.pressShift = shift;
-		ItemStack carried = screen.essentials$menu().getCarried();
-		m.collectStart = button == 0 && !carried.isEmpty() && slot != null && slot.hasItem() && ItemStack.isSameItemSameComponents(slot.getItem(), carried);
+		Modules.guard(m, () -> {
+			m.release();
+			m.pressed = slot;
+			m.pressButton = button;
+			m.pressShift = shift;
+			ItemStack carried = screen.essentials$menu().getCarried();
+			m.collectStart = button == 0 && !carried.isEmpty() && slot != null && slot.hasItem() && ItemStack.isSameItemSameComponents(slot.getItem(), carried);
+		});
 	}
 
 	/** The mouse moved with a button down, over {@code slot}: true if this took the drag (vanilla then does nothing). */
 	public static boolean drag(ScreenAccess screen, @Nullable Slot slot, boolean shift) {
 		InventoryTweaks m = active(screen);
-		return m != null && slot != null && m.pressButton == 0 && m.onDrag(screen, slot, shift);
+		return m != null && slot != null && m.pressButton == 0 && Modules.guard(m, () -> m.onDrag(screen, slot, shift), false);
 	}
 
 	/** The button came up: the drag is over. */
 	public static void released(ScreenAccess screen) {
 		InventoryTweaks m = Modules.active(InventoryTweaks.class);
-		if (m != null) m.release();
+		if (m != null) Modules.guard(m, m::release);
 	}
 
 	/** The wheel turned over {@code slot} and vanilla didn't use it (a bundle does): true if this did. */
 	public static boolean scroll(ScreenAccess screen, @Nullable Slot slot, double amount) {
 		InventoryTweaks m = active(screen);
-		return m != null && slot != null && amount != 0 && m.scrollMove.get() && m.onScroll(screen, slot, amount < 0);
+		return m != null && slot != null && amount != 0 && m.scrollMove.get() && Modules.guard(m, () -> m.onScroll(screen, slot, amount < 0), false);
 	}
 
 	private void release() {
