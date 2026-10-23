@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 
 /**
  * The schematics placed in Litematica, as a {@link Blueprint}: what its schematic world holds inside the enabled
@@ -33,12 +34,19 @@ import java.util.function.BooleanSupplier;
  */
 public final class LitematicaBlueprint implements Blueprint {
 	private final BooleanSupplier includeAir;
+	private final Predicate<BlockState> skip;
 	private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 	private final LongOpenHashSet seen = new LongOpenHashSet();
 
 	/** {@code includeAir}: also ask for the air inside the schematic (to clear what's in the way); false leaves it be. */
 	public LitematicaBlueprint(BooleanSupplier includeAir) {
+		this(includeAir, s -> false);
+	}
+
+	/** As {@link #LitematicaBlueprint(BooleanSupplier)}; positions whose schematic block {@code skip} accepts are left out. */
+	public LitematicaBlueprint(BooleanSupplier includeAir, Predicate<BlockState> skip) {
 		this.includeAir = includeAir;
+		this.skip = skip;
 	}
 
 	/** Whether Litematica and a schematic world are there to read. */
@@ -80,7 +88,7 @@ public final class LitematicaBlueprint implements Blueprint {
 								if (dx * dx + dy * dy + dz * dz > r2 || !layers.isPositionWithinRange(x, y, z)) continue;
 								pos.set(x, y, z);
 								BlockState state = chunk.getBlockState(pos);
-								if (state.isAir() && !air) continue;
+								if (state.isAir() ? !air : skip.test(state)) continue;
 								if (overlap && !seen.add(pos.asLong())) continue;
 								action.accept(pos, target(state));
 							}
@@ -107,7 +115,7 @@ public final class LitematicaBlueprint implements Blueprint {
 				if (!layers.isPositionWithinRange(pos)) continue;
 				if (!world.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()))) continue;
 				BlockState state = world.getBlockState(pos);
-				if (state.isAir() && !includeAir.getAsBoolean()) continue;
+				if (state.isAir() ? !includeAir.getAsBoolean() : skip.test(state)) continue;
 				BlockPos p = pos.immutable();
 				if (seen.add(p)) action.accept(p, target(state));
 			}

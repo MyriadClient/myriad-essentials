@@ -37,6 +37,14 @@ Needs Myriad 0.9.0.
   Fill Opacity and Through Walls. Kill Aura's Render toggle is now Show Target. Packet Mine keeps a full style for the
   block being mined, and colours for the queue and the rebreak block, whose looks (dotted, outlined) are now fixed.
   Saved settings carry over.
+- **The Printer gets options.** **Order**: Bottom Up (a layer at a time, as before) or Nearest (what's beside you first).
+  **Skip**: blocks of the schematic to leave out. **Walk To Blocks**: once nothing in reach is left, Baritone walks you
+  to beside the nearest unbuilt block, on a spot the schematic doesn't need, without mining or placing on the way; a
+  spot that didn't do is not tried again for that block. **Restock**: when a block runs out, a stack comes from the
+  shulker boxes you carry and the chests, barrels and shulker boxes in reach (within Container Range with Walk To
+  Blocks), nearest first, passing over a container that had none lately; printing carries on after. Suite: `printer
+  skip` (22/22, glass left out), `printer restock` (both glass from a chest beside the row), `printer walk` (24/24 from
+  20 blocks away, no flags).
 - **Middle Click takes rockets and pearls from the inventory with a full hotbar, and never fires late.** It only
   borrowed into an empty hotbar slot or one with building blocks, so with a hotbar of tools nothing happened; now the
   item swaps places with any slot but the selected one, and both go back after. A click that couldn't go through kept

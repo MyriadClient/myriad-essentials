@@ -391,22 +391,24 @@ def has_litematica():
     return re.search(r"(?m)^\s*- litematica", log) is not None
 
 
-def printer_pass(keys, rotate, air, stand=None, lenient=False, hotbar=PRINT_HOTBAR):
+def printer_pass(keys, rotate, air, stand=None, lenient=False, hotbar=PRINT_HOTBAR, settings=(), omit=(), setup=(), start=(-4.5, -1.5), ticks=140,
+                 left_out=(), stop_ticks=40):
     if not has_litematica(): return True, "skipped: Litematica isn't in the dev client (start it with -Plitematica)"
     x0, y, z = PRINT_X, PRINT_Y, PRINT_Z
     client(*FRESH, ".printscene clear", "wait 5")
     n = len(PRINT_ROW)
-    forceload_area(x0 - 8, z - 8, x0 + n + 48, z + PRINT_DZ + 8)
-    cmd(f"fill {x0 - 6} {y - 1} {z - 6} {x0 + n + 44} {y - 1} {z + PRINT_DZ + 2} stone", f"fill {x0 - 6} {y} {z - 6} {x0 + n + 44} {y + 6} {z + PRINT_DZ + 2} air",
+    forceload_area(x0 - 32, z - 8, x0 + n + 48, z + PRINT_DZ + 8)
+    cmd(f"fill {x0 - 30} {y - 1} {z - 6} {x0 + n + 44} {y - 1} {z + PRINT_DZ + 2} stone", f"fill {x0 - 30} {y} {z - 6} {x0 + n + 44} {y + 6} {z + PRINT_DZ + 2} air",
         *(f"setblock {x0 + i} {y} {z + PRINT_DZ} {b}" for i, b in enumerate(PRINT_ROW)),
         f"gamemode survival {P}", f"clear {P}", f"effect clear {P}", f"kill @e[type=item,x={x0},y={y},z={z},distance=..60]",
         f"item replace entity {P} weapon.offhand with totem_of_undying",
         *(f"item replace entity {P} hotbar.{i} with {t}" for i, t in hotbar.items()),
-        *(f"item replace entity {P} inventory.{k} with {it} 16" for k, it in enumerate(PRINT_ITEMS)),
-        f"tp {P} {x0 - 4.5} {y} {z - 1.5} -90 20", f"effect give {P} saturation 1 20 true")
-    settle(x0 - 4.5, y, z - 1.5)
+        *(f"item replace entity {P} inventory.{k} with {it} 16" for k, it in enumerate(PRINT_ITEMS) if it not in omit), *setup,
+        f"tp {P} {x0 + start[0]} {y} {z + start[1]} -90 20", f"effect give {P} saturation 1 20 true")
+    settle(x0 + start[0], y, z + start[1])
     client(f".printscene {x0} {y} {z + PRINT_DZ} {x0 + n - 1} {y} {z + PRINT_DZ} 0 0 {-PRINT_DZ}", f".set printer rotate {str(rotate).lower()}",
-        f".set printer air_place {str(air).lower()}", ".set printer click_settings true", ".set printer break_wrong_blocks false", "wait 5")
+        f".set printer air_place {str(air).lower()}", ".set printer click_settings true", ".set printer break_wrong_blocks false",
+        ".set printer order bottom_up", ".set printer skip clear", ".set printer walk_to_blocks false", ".set printer restock false", *settings, "wait 5")
     if lenient:
         # 2b2t's Grim takes air placements and clicks on faces you don't look at; this one would cancel them. Deopped, the
         # tester has myriad.lenientplace (start.sh), so they're only flagged and the game decides where blocks go.
@@ -417,16 +419,22 @@ def printer_pass(keys, rotate, air, stand=None, lenient=False, hotbar=PRINT_HOTB
     if stand is None:
         # PRINT_LOG=1: the client logs every packet of the pass (.packets log, in run/myriad/packets).
         log = [".packets log on"] if os.environ.get("PRINT_LOG") else []
-        client(*log, ".toggle printer on", f"hold {keys} 140", "wait 150", "wait 60", ".toggle printer off", *([".packets log off"] if log else []), "wait 60",
-            ".printscene clear", timeout=90)
+        moving = [f"hold {keys} {ticks}", f"wait {ticks + 10}"] if keys else [f"wait {ticks}"]
+        client(*log, ".toggle printer on", *moving, "wait 60", ".toggle printer off", *([".packets log off"] if log else []), "wait 60",
+            ".printscene clear", timeout=90 + ticks // 20)
     else:
         # Standing still at each of these x in turn, long enough for everything in reach.
         steps = [".toggle printer on"]
         for sx in stand:
-            steps += [f"/tp {P} {x0 + sx + 0.5} {y} {z - 1.5} -90 20", "wait 40"]
+            steps += [f"/tp {P} {x0 + sx + 0.5} {y} {z - 1.5} -90 20", f"wait {stop_ticks}"]
         client(*steps, ".toggle printer off", "wait 60", ".printscene clear", timeout=120)
     if lenient: cmd(f"op {P}", "grim reload")
-    off = [i for i, b in enumerate(PRINT_ROW) if not passed(f"if blocks {x0 + i} {y} {z + PRINT_DZ} {x0 + i} {y} {z + PRINT_DZ} {x0 + i} {y} {z} all")]
+    # Blocks left out on purpose (Skip) must stay air; the rest are judged as usual.
+    skipped = [i for i, b in enumerate(PRINT_ROW) if b.split("[")[0] in left_out]
+    placed_skipped = [i for i in skipped if not passed(f"if block {x0 + i} {y} {z} air")]
+    off = [i for i, b in enumerate(PRINT_ROW) if i not in skipped
+           and not passed(f"if blocks {x0 + i} {y} {z + PRINT_DZ} {x0 + i} {y} {z + PRINT_DZ} {x0 + i} {y} {z} all")]
+    n -= len(skipped)
     # Not placed (still air) is one thing, which a pass back fixes; a different block or state there is a misplace.
     missing = [i for i in off if passed(f"if block {x0 + i} {y} {z} air")]
     wrong = [f"{x0 + i}:{PRINT_ROW[i]}" for i in off if i not in missing]
@@ -435,8 +443,9 @@ def printer_pass(keys, rotate, air, stand=None, lenient=False, hotbar=PRINT_HOTB
     offhand = item(-106).removeprefix("minecraft:")
     moved = {i: hotbar_now[i] for i in range(9) if hotbar_now[i] != expected[i]}
     # Standing at fixed stops, some blocks have no face to click from any of them: there, only misplaces fail.
-    ok = not (wrong if stand else off) and not moved and offhand == "totem_of_undying"
+    ok = not (wrong if stand else off) and not moved and offhand == "totem_of_undying" and not placed_skipped
     return ok, (f"{n - len(off)}/{n} right, {len(missing)} not placed, {len(wrong)} wrong" + (f" ({', '.join(wrong[:6])})" if wrong else "")
+                + (f", {len(skipped) - len(placed_skipped)}/{len(skipped)} skipped left out" if skipped else "")
                 + f", hotbar {'as it was' if not moved else moved}, off hand {offhand or 'empty'}")
 
 
@@ -453,6 +462,28 @@ def t_printer_sprinting_2b2t():
 
 def t_printer_jumping_2b2t():
     return printer_pass("forward,sprint,jump", rotate=False, air=True, lenient=True)
+
+
+def t_printer_skip():
+    # Glass in Skip: its two places stay air, everything else is built.
+    return printer_pass("forward", rotate=True, air=False, settings=[".set printer skip add minecraft:glass"], left_out=("glass",))
+
+
+def t_printer_restock():
+    # No glass on you: a chest beside the row has it, and the Printer fetches a stack once glass is all that's left in reach.
+    x0, y, z = PRINT_X, PRINT_Y, PRINT_Z
+    ok, text = printer_pass(None, rotate=True, air=False, stand=[6, 9, 20], stop_ticks=80, omit=("glass",),
+                            settings=[".set printer restock true", ".set printer from_shulker_boxes false", ".set printer from_containers true"],
+                            setup=[f"setblock {x0 + 9} {y} {z - 3} chest", f"item replace block {x0 + 9} {y} {z - 3} container.0 with glass 32"])
+    left = chest_items(x0 + 9, y, z - 3).get(0, ("", 0))[1]
+    glass = [i for i, b in enumerate(PRINT_ROW) if b == "glass"]
+    built = [i for i in glass if passed(f"if block {x0 + i} {y} {z} glass")]
+    return ok and len(built) == len(glass) and left < 32, f"{text}; glass placed {len(built)}/{len(glass)}, {32 - left} taken from the chest"
+
+
+def t_printer_walk():
+    # Standing 20 blocks short of the row: Walk To Blocks walks over (Baritone) and builds it.
+    return printer_pass(None, rotate=True, air=False, start=(-24.5, -1.5), ticks=1000, settings=[".set printer walk_to_blocks true"])
 
 
 def t_printer_full_hotbar_2b2t():
@@ -1013,6 +1044,9 @@ TESTS = [
     ("printer walking", t_printer_walking),
     ("printer sprinting", t_printer_sprinting),
     ("printer jumping", t_printer_jumping),
+    ("printer skip", t_printer_skip),
+    ("printer restock", t_printer_restock),
+    ("printer walk", t_printer_walk),
     ("printer walking 2b2t", t_printer_walking_2b2t),
     ("printer sprinting 2b2t", t_printer_sprinting_2b2t),
     ("printer jumping 2b2t", t_printer_jumping_2b2t),

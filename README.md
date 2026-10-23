@@ -46,7 +46,14 @@ It runs as a job, so the Jobs window shows what it's doing and waiting for.
   about 26 blocks a second (Paper allows 30), your off hand and hotbar back in place a tick later.
 - It places against chests, doors and other blocks that open when clicked by telling the server you're sneaking for
   just that click. A block it placed that came out wrong is broken and placed again, up to three times; blocks it
-  didn't place are left alone. It only moves the blocks it builds with, and pauses while a screen is open or you eat.
+  didn't place are left alone. It pauses while a screen is open or you eat.
+- Blocks come into any hotbar slot but the one you hold (with a full hotbar, one of yours steps aside), and the hotbar
+  and off hand go back as they were when it's done; meanwhile the hotbar shows what was there.
+- **Order**: Bottom Up (a layer at a time) or Nearest (what's beside you first, as you walk past). **Skip**: blocks of
+  the schematic to leave out. **Walk To Blocks**: once nothing in reach is left, Baritone walks you to beside the
+  nearest unbuilt block (without mining or placing on the way). **Restock**: when a block runs out, a stack is fetched
+  from the shulker boxes you carry and the chests, barrels and shulker boxes in reach (or within Container Range with
+  Walk To Blocks), and printing carries on.
 
 ## For addon developers
 
