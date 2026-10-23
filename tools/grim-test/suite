@@ -1087,6 +1087,7 @@ FLAGS_RELAXED = {name: {"RotationPlace", "AirLiquidPlace", "PositionPlace"} for 
 # Known to fail now and then for reasons that aren't the code under test. They run as usual; one that fails gets one
 # more try, alone, at the end, and only fails the run if it fails again. Anything else that fails is a failure.
 FLAKY = {
+    "altitude preserve": "the worn elytra's wear lands on 4 now and then against a limit of 3 (1 run in 8 on core 7875627 too)",
     "altitude no durability": "fails about half the time on any version (elytra wore -2/-3: the swap and the reading race)",
     "stack_replenish": "the first stack_replenish run right after ./clients starts them reads the hotbar before it's synced",
     "stack_replenish walking": "as stack_replenish, and flags Simulation now and then with three clients running",
