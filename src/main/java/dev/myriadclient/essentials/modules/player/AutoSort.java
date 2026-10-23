@@ -18,8 +18,9 @@ import java.util.List;
 
 /**
  * Sorts chests, barrels and shulker boxes as you open them: stacks of the same item merged, everything in order from
- * the first slot. Each click puts a stack where it belongs (swapping through the cursor), so a full double chest takes
- * a few seconds at the server's click budget. Clicking in the container yourself stops it.
+ * the first slot. The container shows the sorted result at once while the clicks go out behind it at the server's
+ * click budget (a full double chest takes a few seconds), so nothing jumps about; clicking in it yourself stops the
+ * sort and shows what's really there.
  */
 public class AutoSort extends Module {
 	private final EnumSetting<Layouts.Order> order = sgGeneral.oneOf("Order", Layouts.Order.ITEM)

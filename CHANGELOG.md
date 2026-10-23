@@ -27,6 +27,9 @@ Needs Myriad 0.9.0.
   `portal_builder full hotbar` and `portal_builder air place`, each checking the hotbar and off hand come back as
   they were; all pass on a direct connection and through `lag.py 120 25`. The Middle Click inventory test waits for
   its items to reach the client before clicking, so it passes through `lag.py` too.
+- **Auto Sort shows the sorted container at once** (core 0.10.0), instead of items flickering across it and the cursor
+  while the clicks go out, and a click of yours stops it. Suite: `auto_sort` and `auto_sort full inventory` sort a
+  double chest of 40 scattered part stacks and check on the server it's merged and packed with nothing lost (5.2 s).
 - **Middle Click takes rockets and pearls from the inventory with a full hotbar, and never fires late.** It only
   borrowed into an empty hotbar slot or one with building blocks, so with a hotbar of tools nothing happened; now the
   item swaps places with any slot but the selected one, and both go back after. A click that couldn't go through kept

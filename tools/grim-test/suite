@@ -496,6 +496,77 @@ def t_portal_builder_air_place():
     return portal_pass(air=True)
 
 
+SORT_ITEMS = {"cobblestone": 64, "dirt": 64, "oak_planks": 64, "sand": 64, "glass": 64, "iron_ingot": 64, "ender_pearl": 16, "snowball": 16}
+
+
+def chest_items(x, y, z):
+    """A chest's contents on the server: {slot: (item, count)}."""
+    # One entry at a time: a whole list comes back cut short.
+    out = cmd(*(f"data get block {x} {y} {z} Items[{i}]" for i in range(27)))
+    items = {}
+    for entry in re.findall(r"\{[^{}]*\}", out):
+        slot, item, n = re.search(r"Slot: (\d+)b", entry), re.search(r'id: "([^"]+)"', entry), re.search(r"count: (\d+)", entry)
+        if slot and item and n: items[int(slot.group(1))] = (item.group(1).removeprefix("minecraft:"), int(n.group(1)))
+    return items
+
+
+def sort_pass(full_inventory=False):
+    """Auto Sort on a double chest of scattered part stacks, opened by hand: merged, packed from the first slot, nothing lost."""
+    import random
+    x0, y, z = 10000, 100, 0
+    client(*FRESH, "wait 5")
+    forceload_area(x0 - 8, z - 8, x0 + 8, z + 8)
+    rng = random.Random(7)
+    halves = {z: [], z + 1: []}
+    totals = {}
+    for zz in halves:
+        for slot in rng.sample(range(27), 20):
+            item = rng.choice(list(SORT_ITEMS))
+            n = rng.randint(1, SORT_ITEMS[item] // 2)
+            halves[zz].append(f"item replace block {x0 + 2} {y} {zz} container.{slot} with {item} {n}")
+            totals[item] = totals.get(item, 0) + n
+    # Facing west, the left half's other half is north of it.
+    cmd(f"fill {x0 - 4} {y - 1} {z - 4} {x0 + 4} {y - 1} {z + 4} stone", f"fill {x0 - 4} {y} {z - 4} {x0 + 4} {y + 3} {z + 4} air",
+        f"setblock {x0 + 2} {y} {z} chest[facing=west,type=right]", f"setblock {x0 + 2} {y} {z + 1} chest[facing=west,type=left]",
+        *halves[z], *halves[z + 1],
+        f"gamemode survival {P}", f"clear {P}", *([f"item replace entity {P} inventory.{i} with torch 64" for i in range(27)] if full_inventory else []),
+        f"tp {P} {x0 + 0.5} {y} {z + 1.0} -90 25")
+    settle(x0 + 0.5, y, z + 1.0)
+    client(".toggle auto_sort on", "wait 5", timeout=30)
+    mark()
+    start = time.time()
+    client("use", timeout=30)
+    # Sorted on the server: polled until it is (or 20 s).
+    def state():
+        a, b = chest_items(x0 + 2, y, z + 1), chest_items(x0 + 2, y, z)
+        return [a.get(i) for i in range(27)] + [b.get(i) for i in range(27)], [b.get(i) for i in range(27)] + [a.get(i) for i in range(27)]
+    def packed(slots):
+        used = [s for s in slots if s]
+        if any(s is None for s in slots[:len(used)]): return False
+        kinds = {}
+        for item, n in used: kinds.setdefault(item, []).append(n)
+        return all(sum(1 for n in ns if n < SORT_ITEMS[item]) <= 1 for item, ns in kinds.items())
+    took = None
+    while time.time() - start < 20:
+        if any(packed(order) for order in state()):
+            took = time.time() - start
+            break
+        time.sleep(0.25)
+    client(".toggle auto_sort off", "wait 2", timeout=30)
+    now = {}
+    for item, n in filter(None, state()[0]): now[item] = now.get(item, 0) + n
+    kept = now == totals
+    return took is not None and kept, (f"sorted in {took:.1f} s" if took is not None else "not sorted in 20 s") + (", nothing lost" if kept else f", items changed: {now} vs {totals}")
+
+
+def t_auto_sort():
+    return sort_pass()
+
+
+def t_auto_sort_full_inventory():
+    return sort_pass(full_inventory=True)
+
+
 def t_printer_sprinting():
     return printer_pass("forward,sprint", rotate=True, air=False)
 
@@ -948,6 +1019,8 @@ TESTS = [
     ("printer full hotbar 2b2t", t_printer_full_hotbar_2b2t),
     ("portal_builder full hotbar", t_portal_builder_full_hotbar),
     ("portal_builder air place", t_portal_builder_air_place),
+    ("auto_sort", t_auto_sort),
+    ("auto_sort full inventory", t_auto_sort_full_inventory),
     ("auto_tool preserve", t_auto_tool_preserve),
     ("auto_armor preserve", t_auto_armor_preserve),
     ("auto_armor keeps worn elytra", t_auto_armor_keeps_worn_elytra),
