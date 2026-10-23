@@ -41,7 +41,8 @@ except FileNotFoundError:
     s = ""
 s = re.sub(r'(?ms)^# myriad: like 2b2t.*?^# myriad: end\n', '', s)
 if strict == "false":
-    s = s.rstrip("\n") + ("\n" if s.strip() else "") + "# myriad: like 2b2t (Grim registers its own nodes default false: granted through this parent)\nmyriad.like2b2t:\n  default: op\n  children:\n    grim.nomodifypacket.multiactionsc: true\n# myriad: end\n"
+    s = s.rstrip("\n") + ("\n" if s.strip() else "") + "# myriad: like 2b2t (Grim registers its own nodes default false: granted through this parent)\nmyriad.like2b2t:\n  default: op\n  children:\n    grim.nomodifypacket.multiactionsc: true\n" \
+        + "# The suite's 2b2t placement runs deop the tester for this: placements Grim would cancel for the look or for air (which\n# 2b2t's Grim takes) are only flagged, so what's left to judge is where the game puts the blocks.\nmyriad.lenientplace:\n  default: notop\n  children:\n    grim.nomodifypacket.multiactionsc: true\n    grim.nomodifypacket.rotationplace: true\n    grim.nomodifypacket.airliquidplace: true\n    grim.nomodifypacket.positionplace: true\n# myriad: end\n"
 open(path, "w").write(s if s.strip() else "")
 PY
 	# Alert on every violation (Grim normally waits for several). Alerts are only messages: what Grim cancels or sets

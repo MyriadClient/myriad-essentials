@@ -367,6 +367,108 @@ def t_middle_click_rocket_flying():
     return rockets == 15 and now == FULL_HOTBAR, f"{rockets} rockets back in the inventory, hotbar {'as it was' if now == FULL_HOTBAR else now}, {x - x0:.0f} blocks"
 
 
+# The Printer: a row of blocks built with server commands (the reference) is saved as a Litematica schematic and placed
+# PRINT_DZ away, and the Printer builds it while the tester walks, sprints or jumps past; the server then compares the
+# two rows block for block, and reads the hotbar and off hand, which must be as they were.
+PRINT_X, PRINT_Y, PRINT_Z, PRINT_DZ = 8000, 100, 0, 8
+# Every block here can be placed from the row's own floor and neighbours (a log along z would need a block north or
+# south of it to be clicked; this row has none).
+PRINT_ROW = ["stone", "oak_log[axis=x]", "oak_stairs[facing=north]", "stone_brick_slab[type=top]", "cobblestone", "birch_planks",
+             "stone_stairs[facing=south]", "smooth_stone_slab[type=bottom]", "glass", "furnace[facing=north]", "spruce_log[axis=y]",
+             "brick_stairs[facing=east]"] * 2
+PRINT_ITEMS = sorted({b.split("[")[0] for b in PRINT_ROW})
+PRINT_HOTBAR = {0: "diamond_sword", 1: "diamond_pickaxe", 2: "golden_apple"}
+
+
+def has_litematica():
+    """Whether the running dev client loaded Litematica (started with -Plitematica)."""
+    try:
+        log = open(os.path.join(HERE, "..", "..", RUN, "logs", "latest.log"), errors="replace").read()
+    except OSError:
+        return False
+    return re.search(r"(?m)^\s*- litematica", log) is not None
+
+
+def printer_pass(keys, rotate, air, stand=None, lenient=False):
+    if not has_litematica(): return True, "skipped: Litematica isn't in the dev client (start it with -Plitematica)"
+    x0, y, z = PRINT_X, PRINT_Y, PRINT_Z
+    client(*FRESH, ".printscene clear", "wait 5")
+    n = len(PRINT_ROW)
+    forceload_area(x0 - 8, z - 8, x0 + n + 48, z + PRINT_DZ + 8)
+    cmd(f"fill {x0 - 6} {y - 1} {z - 6} {x0 + n + 44} {y - 1} {z + PRINT_DZ + 2} stone", f"fill {x0 - 6} {y} {z - 6} {x0 + n + 44} {y + 6} {z + PRINT_DZ + 2} air",
+        *(f"setblock {x0 + i} {y} {z + PRINT_DZ} {b}" for i, b in enumerate(PRINT_ROW)),
+        f"gamemode survival {P}", f"clear {P}", f"effect clear {P}", f"kill @e[type=item,x={x0},y={y},z={z},distance=..60]",
+        f"item replace entity {P} weapon.offhand with totem_of_undying",
+        *(f"item replace entity {P} hotbar.{i} with {t}" for i, t in PRINT_HOTBAR.items()),
+        *(f"item replace entity {P} inventory.{k} with {it} 16" for k, it in enumerate(PRINT_ITEMS)),
+        f"tp {P} {x0 - 4.5} {y} {z - 1.5} -90 20", f"effect give {P} saturation 1 20 true")
+    settle(x0 - 4.5, y, z - 1.5)
+    client(f".printscene {x0} {y} {z + PRINT_DZ} {x0 + n - 1} {y} {z + PRINT_DZ} 0 0 {-PRINT_DZ}", f".set printer rotate {str(rotate).lower()}",
+        f".set printer air_place {str(air).lower()}", ".set printer click_settings true", ".set printer break_wrong_blocks false", "wait 5")
+    if lenient:
+        # 2b2t's Grim takes air placements and clicks on faces you don't look at; this one would cancel them. Deopped, the
+        # tester has myriad.lenientplace (start.sh), so they're only flagged and the game decides where blocks go.
+        # Grim reads permissions when you join and when it reloads.
+        cmd(f"deop {P}", "grim reload")
+    mark()
+    # Past the row and a little beyond, then time for what's still in reach, then off: what it moved goes back.
+    if stand is None:
+        # PRINT_LOG=1: the client logs every packet of the pass (.packets log, in run/myriad/packets).
+        log = [".packets log on"] if os.environ.get("PRINT_LOG") else []
+        client(*log, ".toggle printer on", f"hold {keys} 140", "wait 150", "wait 60", ".toggle printer off", *([".packets log off"] if log else []), "wait 60",
+            ".printscene clear", timeout=90)
+    else:
+        # Standing still at each of these x in turn, long enough for everything in reach.
+        steps = [".toggle printer on"]
+        for sx in stand:
+            steps += [f"/tp {P} {x0 + sx + 0.5} {y} {z - 1.5} -90 20", "wait 40"]
+        client(*steps, ".toggle printer off", "wait 60", ".printscene clear", timeout=120)
+    if lenient: cmd(f"op {P}", "grim reload")
+    off = [i for i, b in enumerate(PRINT_ROW) if not passed(f"if blocks {x0 + i} {y} {z + PRINT_DZ} {x0 + i} {y} {z + PRINT_DZ} {x0 + i} {y} {z} all")]
+    # Not placed (still air) is one thing, which a pass back fixes; a different block or state there is a misplace.
+    missing = [i for i in off if passed(f"if block {x0 + i} {y} {z} air")]
+    wrong = [f"{x0 + i}:{PRINT_ROW[i]}" for i in off if i not in missing]
+    hotbar_now = {i: item(i).removeprefix("minecraft:") for i in range(9)}
+    expected = {i: PRINT_HOTBAR.get(i, "") for i in range(9)}
+    offhand = item(-106).removeprefix("minecraft:")
+    moved = {i: hotbar_now[i] for i in range(9) if hotbar_now[i] != expected[i]}
+    # Standing at fixed stops, some blocks have no face to click from any of them: there, only misplaces fail.
+    ok = not (wrong if stand else off) and not moved and offhand == "totem_of_undying"
+    return ok, (f"{n - len(off)}/{n} right, {len(missing)} not placed, {len(wrong)} wrong" + (f" ({', '.join(wrong[:6])})" if wrong else "")
+                + f", hotbar {'as it was' if not moved else moved}, off hand {offhand or 'empty'}")
+
+
+# Rotate on throughout: this server's Grim checks the look on every click (RotationPlace), as 2b2t's doesn't, so
+# 2b2t's settings (Rotate off, Air Place on) flag here, and leave Grim cancelling the next tests' placements too.
+# 2b2t's settings: Rotate off, Air Place on, with the placement checks 2b2t's Grim doesn't enforce only flagging.
+def t_printer_walking_2b2t():
+    return printer_pass("forward", rotate=False, air=True, lenient=True)
+
+
+def t_printer_sprinting_2b2t():
+    return printer_pass("forward,sprint", rotate=False, air=True, lenient=True)
+
+
+def t_printer_jumping_2b2t():
+    return printer_pass("forward,sprint,jump", rotate=False, air=True, lenient=True)
+
+
+def t_printer_sprinting():
+    return printer_pass("forward,sprint", rotate=True, air=False)
+
+
+def t_printer_jumping():
+    return printer_pass("forward,sprint,jump", rotate=True, air=False)
+
+
+def t_printer_walking():
+    return printer_pass("forward", rotate=True, air=False)
+
+
+def t_printer_standing():
+    return printer_pass(None, rotate=True, air=False, stand=[1, 4, 7, 10, 13, 16, 19, 22])
+
+
 def t_elytra_altitude():
     client(*FRESH, "wait 20")
     cmd(f"clear {P}", f"gamemode survival {P}", f"item replace entity {P} armor.chest with elytra", f"tp {P} 2000.5 230 0.5 -90 0")
@@ -793,6 +895,13 @@ TESTS = [
     ("stack_replenish", t_stack_replenish),
     ("middle_click inventory", t_middle_click_inventory),
     ("middle_click rocket flying", t_middle_click_rocket_flying),
+    ("printer standing", t_printer_standing),
+    ("printer walking", t_printer_walking),
+    ("printer sprinting", t_printer_sprinting),
+    ("printer jumping", t_printer_jumping),
+    ("printer walking 2b2t", t_printer_walking_2b2t),
+    ("printer sprinting 2b2t", t_printer_sprinting_2b2t),
+    ("printer jumping 2b2t", t_printer_jumping_2b2t),
     ("auto_tool preserve", t_auto_tool_preserve),
     ("auto_armor preserve", t_auto_armor_preserve),
     ("auto_armor keeps worn elytra", t_auto_armor_keeps_worn_elytra),
@@ -818,6 +927,9 @@ TESTS = [
 ]
 # Tests that toggle many modules at once; Grim's opinion of them isn't part of the result.
 FLAGS_IGNORED = {"selftest (every module)"}
+# Checks a test relaxes on purpose (see printer_pass): flagged, but not failing it.
+FLAGS_RELAXED = {name: {"RotationPlace", "AirLiquidPlace", "PositionPlace"} for name in ("printer walking 2b2t", "printer sprinting 2b2t",
+                                                                                        "printer jumping 2b2t")}
 # Known to fail now and then for reasons that aren't the code under test. They run as usual; one that fails gets one
 # more try, alone, at the end, and only fails the run if it fails again. Anything else that fails is a failure.
 FLAKY = {
@@ -842,7 +954,7 @@ def run_tests(chosen):
         except Exception as e:
             ok, detail = False, f"error: {e}"
         flagged = flags()
-        if flagged and name not in FLAGS_IGNORED: ok = False
+        if set(flagged) - FLAGS_RELAXED.get(name, set()) and name not in FLAGS_IGNORED: ok = False
         took = time.time() - start
         results.append((name, ok, detail, flagged, took))
         print(f"{'PASS' if ok else 'FAIL'}  {took:5.1f}s  {name:<30} {detail}" + (f"  [flags: {', '.join(flagged)}]" if flagged else ""), flush=True)

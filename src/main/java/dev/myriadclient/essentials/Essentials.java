@@ -8,6 +8,7 @@ import dev.myriadclient.api.ui.Icons;
 import dev.myriadclient.api.util.Baritone;
 import dev.myriadclient.essentials.dev.InvTest;
 import dev.myriadclient.essentials.dev.PortalTest;
+import dev.myriadclient.essentials.dev.PrintScene;
 import dev.myriadclient.essentials.dev.PrintTest;
 import dev.myriadclient.essentials.hud.ArmorPanel;
 import dev.myriadclient.essentials.hud.BindsPanel;
@@ -129,7 +130,10 @@ public final class Essentials implements MyriadAddon {
 		if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
 			ctx.registerCommand(new InvTest());
 			ctx.registerCommand(new PortalTest());
-			if (FabricLoader.getInstance().isModLoaded("litematica")) ctx.registerCommand(new PrintTest());
+			if (FabricLoader.getInstance().isModLoaded("litematica")) {
+				ctx.registerCommand(new PrintTest());
+				ctx.registerCommand(new PrintScene());
+			}
 		}
 
 		// HUD elements. The ones with a position are placed on a fresh install; the rest are added from the HUD workspace.

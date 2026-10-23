@@ -113,3 +113,12 @@ GrimTester2.. in flat copies made by `datapack/myriad-tests`, so every test keep
 
 Extra clients run the build the first client's `runClient` set up (Loom's launch files), so start the first one once
 after changing dependencies. `./client --run run2 ...` drives a single extra client.
+
+The Printer tests (`./suite printer`) need Litematica in the client: start it with `-Plitematica` (which leaves out
+Xaero's maps, as they crash together). Each builds a row of blocks with commands, saves it as a Litematica schematic
+with `.printscene`, and has the Printer build the copy while the tester stands, walks, sprints or sprint-jumps past;
+the server compares the two rows (blocks not placed and blocks placed wrong are told apart) and checks the hotbar and
+off hand came back as they were. The `2b2t` ones print with 2b2t's settings (Rotate off, Air Place on): this server's
+Grim would cancel those clicks (RotationPlace, AirLiquidPlace, PositionPlace), which 2b2t's takes, so for them the tester
+is deopped into `myriad.lenientplace` (see `start.sh`), where those checks only flag. For 2b2t's lag, run them through
+`./lag.py 120 25` (join localhost:25566).

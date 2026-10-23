@@ -14,6 +14,13 @@ Needs Myriad 0.9.0.
   and `.invtest mend`; all pass in Essentials (portal lit in 0.55 s on 2b2t settings, sort 4/4, mend OK, print 282
   right and 0 wrong). Litematica 0.28.8 with Xaero's Minimap and World Map crashes the game at start (each alone is fine), so
   the dev client leaves the maps out with `-Plitematica`.
+- **Printer tests in the Grim suite**, for printing while moving: standing, walking, sprinting and sprint-jumping past
+  a row of 24 mixed blocks, with Rotate on and with 2b2t's settings, checking every block (not placed and placed
+  wrong told apart) and that the hotbar and off hand come back as they were. They found Myriad core's builds leaving
+  the hotbar full of blocks and, with lag, placing wrong blocks (both fixed in core 0.10.0). `.printscene` (dev
+  clients with Litematica) saves a box as a schematic and places it elsewhere, so the tests run on any server; the test
+  server's `myriad.lenientplace` lets the 2b2t-setting runs be judged by where blocks go rather than by checks 2b2t's
+  Grim doesn't enforce.
 - **Middle Click takes rockets and pearls from the inventory with a full hotbar, and never fires late.** It only
   borrowed into an empty hotbar slot or one with building blocks, so with a hotbar of tools nothing happened; now the
   item swaps places with any slot but the selected one, and both go back after. A click that couldn't go through kept
