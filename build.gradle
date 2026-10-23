@@ -1,6 +1,9 @@
+// The Myriad addon plugin (released with core) sets up what every addon has: Loom, Minecraft, Fabric and Myriad, the
+// dev client and its switches, checkApiOnly (Essentials is an ordinary addon and may only use Myriad's public API),
+// the maven publication and publishAddon. `-PcoreDir=../myriad` builds against a core checkout next to this one, the
+// plugin included. What's below is Essentials' own.
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
-	id 'maven-publish'
+	id 'dev.myriadclient.addon' version '0.10.0'
 }
 
 version = project.mod_version
@@ -11,15 +14,7 @@ base {
 }
 
 repositories {
-	// Myriad's releases.
-	exclusiveContent {
-		forRepositories(maven {
-			name = "Myriad"
-			url = "https://maven.myriadclient.dev/releases"
-		})
-		filter { includeGroup "dev.myriadclient" }
-	}
-	// ViaFabricPlus for the dev client only.
+	// ViaFabricPlus and Xaero's maps for the dev client only.
 	maven {
 		name = "Modrinth"
 		url = "https://api.modrinth.com/maven"
@@ -28,19 +23,6 @@ repositories {
 }
 
 dependencies {
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-
-	// The released core by default. While changing core and Essentials together, build core's jar in a checkout next
-	// to this one (`./gradlew :core:jar` there) and point here at it: `./gradlew build -PcoreDir=../myriad`. No
-	// publishing step, and no version bump until the core change is released.
-	if (project.hasProperty("coreDir")) {
-		implementation fileTree(dir: "${project.coreDir}/core/build/libs", include: "myriad-*.jar", exclude: ["*-sources.jar", "*-javadoc.jar"])
-	} else {
-		implementation "dev.myriadclient:myriad:${project.myriad_version}"
-	}
-
 	// Most 2b2t players join through ViaFabricPlus as an older version, so the dev client does too (see `via` below).
 	localRuntime "maven.modrinth:viafabricplus:${project.viafabricplus_version}"
 	// Xaero's maps in the dev client, for the features that take waypoints (core reads them); -PnoMaps leaves them out.
@@ -53,7 +35,6 @@ dependencies {
 // The protocol the dev client joins servers with, through ViaFabricPlus: 1.20.4 by default (what most 2b2t players
 // use), `-Pvia=native` for the client's own. Singleplayer is never translated.
 def viaProtocol = project.findProperty("via")?.toString() ?: "1.20.4"
-// -PrunDir=run2: another game directory, for a second dev client beside the first (tools/grim-test/clients starts them).
 def runDir = project.findProperty("runDir")?.toString() ?: "run"
 def selectViaProtocol = tasks.register("selectViaProtocol") {
 	def settings = file("${runDir}/config/viafabricplus/settings.json")
@@ -70,104 +51,16 @@ def selectViaProtocol = tasks.register("selectViaProtocol") {
 }
 tasks.matching { it.name == "runClient" }.configureEach { dependsOn selectViaProtocol }
 
-// -Photswap: the dev client on the JetBrains Runtime (Java 25) with a debug port, so tools/grim-test/reload can swap
-// freshly compiled classes in without a restart (JBR's enhanced redefinition takes added and removed methods and fields
-// too). -PdebugPort=5006 for a second client.
-if (project.hasProperty("hotswap")) {
-	tasks.matching { it.name == "runClient" }.configureEach {
-		javaLauncher = javaToolchains.launcherFor {
-			languageVersion = JavaLanguageVersion.of(25)
-			vendor = JvmVendorSpec.JETBRAINS
-		}
-		jvmArgs("-XX:+AllowEnhancedClassRedefinition", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=localhost:" + (project.findProperty("debugPort") ?: "5005"))
-	}
-}
-
 loom {
 	runs {
 		client {
-			runDir = runDir
-			// The same dev switches as Myriad's own runs.
-			// Dev checks: core's services log a call from a thread other than the render thread (Threads.assertRender).
-			property("myriad.dev", "true")
-			property("myriad.openDesktop", project.hasProperty("openDesktop").toString())
-			if (project.hasProperty("screenshotEvery")) property("myriad.screenshotEvery", project.property("screenshotEvery").toString())
-			property("myriad.auditMixins", project.hasProperty("auditMixins").toString())
-			// Lines appended to run/myriad-dev-inbox are run in game (Myriad commands, held keys, the menu, screenshots);
-			// tools/grim-test/client writes there.
-			property("myriad.devConsole", "myriad-dev-inbox")
 			// The Grim test server is set up like 2b2t's (tools/grim-test/start.sh), so the client clicks there as on 2b2t.
 			// -Pstrict (with ./start.sh --strict) for current Grim's rules.
 			property("myriad.noInputRuleHosts", project.hasProperty("strict") ? "" : "localhost,127.0.0.1")
-			if (project.hasProperty("quickPlay")) programArgs("--quickPlaySingleplayer", project.property("quickPlay").toString())
-			// -PquickPlayServer=localhost:25565 joins a server (the Grim test server in tools/grim-test).
-			if (project.hasProperty("quickPlayServer")) programArgs("--quickPlayMultiplayer", project.property("quickPlayServer").toString())
-			if (project.hasProperty("username")) programArgs("--username", project.property("username").toString())
 		}
-	}
-}
-
-processResources {
-	def props = [version: project.version, myriad_version: project.myriad_version, minecraft_version: project.minecraft_version]
-	inputs.properties props
-	filesMatching("fabric.mod.json") {
-		expand props
 	}
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 25
-	it.options.encoding = "UTF-8"
 	it.options.compilerArgs += ["-Xmaxerrs", "10000"]
-}
-
-java {
-	withSourcesJar()
-	sourceCompatibility = JavaVersion.VERSION_25
-	targetCompatibility = JavaVersion.VERSION_25
-}
-
-jar {
-	from("LICENSE") {
-		rename { "${it}_${project.base.archivesName.get()}" }
-	}
-}
-
-// Essentials is an ordinary addon and may only use Myriad's public API. dev.myriadclient.impl is internal and changes
-// without notice, so a reference to it fails the build here rather than players' games later.
-def checkApiOnly = tasks.register("checkApiOnly") {
-	group = "verification"
-	description = "Fails if Essentials references Myriad internals (dev.myriadclient.impl)."
-	def sources = fileTree("src/main/java") { include "**/*.java" }
-	inputs.files(sources)
-	doLast {
-		def bad = []
-		sources.each { f ->
-			f.eachLine { line, n ->
-				if (line.contains("dev.myriadclient.impl")) bad << "${projectDir.toPath().relativize(f.toPath())}:${n}: ${line.trim()}"
-			}
-		}
-		if (!bad.isEmpty()) {
-			throw new GradleException("Addons may only use Myriad's API (dev.myriadclient.api.*), but these lines reference internals:\n  " + bad.join("\n  "))
-		}
-	}
-}
-tasks.named("compileJava") { dependsOn checkApiOnly }
-
-// `publishToMavenLocal` for an addon that wants Essentials on its dev runtime before a release; the release workflow
-// uses `publishAllPublicationsToMyriadRepository` (Myriad's maven, with the myriadUsername and myriadPassword properties).
-publishing {
-	publications {
-		create("mavenJava", MavenPublication) {
-			artifactId = project.archives_base_name
-			from components.java
-		}
-	}
-	repositories {
-		maven {
-			name = "myriad"
-			url = "https://maven.myriadclient.dev/releases"
-			credentials(PasswordCredentials)
-		}
-	}
 }
