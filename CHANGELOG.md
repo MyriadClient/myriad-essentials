@@ -3,6 +3,15 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 0.9.1 (unreleased)
+
+Needs Myriad 0.9.0.
+
+- **Packet Mine: the queue and the block Auto Rebreak watches have their own look.** New Queue and Auto Rebreak groups,
+  each with a Color and the standard highlight look (outline, glow, fill, gradient, through walls), starting from the
+  old ones (the queue faint and dotted, the rebreak block outlined). General's Color is gone; one you'd changed
+  carries over to both, at the opacities it drew them with (settings version 4).
+
 ## 0.9.0
 
 Needs Myriad 0.9.0.

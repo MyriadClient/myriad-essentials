@@ -28,6 +28,7 @@ import net.minecraft.world.InteractionHand;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntUnaryOperator;
 
 /**
  * Hit a block once and it's mined for you with packets, through the shared breaking service, while your hand stays
@@ -51,8 +52,6 @@ public class PacketMine extends Module {
 		+ "Dragging while you hold always adds.").build();
 	private final BoolSetting autoRebreak = sgGeneral.bool("Auto Rebreak").description("Break the last mined block again as soon as something placed there can be.").build();
 	private final BoolSetting rotate = sgGeneral.bool("Rotate").description("Face the block when starting and finishing, for servers that check.").build();
-	private final ColorSetting color = sgGeneral.color("Color").description("Queued blocks and the block Auto Rebreak watches.")
-		.defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).build();
 
 	/** Opacities the block being mined fades between by default: faint as it starts, filled in as it breaks. */
 	private static final int START_ALPHA = 38, END_ALPHA = 166;
@@ -65,8 +64,19 @@ public class PacketMine extends Module {
 	private final HighlightSettings miningLook = HighlightSettings.builder(sgMining)
 		.defaults(HighlightStyle.OUTLINE.withOutlineWidth(0).withFill(HighlightStyle.Fill.SOLID).withFillOpacity(1)).build();
 
-	/** Queued blocks: faint and dotted, so each one in a line shows (touching ones share an outline) without competing with the block being mined. */
-	private static final HighlightStyle QUEUED = HighlightStyle.OUTLINE.withOutlineWidth(1).withFill(HighlightStyle.Fill.DOTS).withFillOpacity(0.6f);
+	/** Opacities of the queue and the block Auto Rebreak watches by default. */
+	private static final int QUEUE_ALPHA = 110, REBREAK_ALPHA = 140;
+	private final SettingGroup sgQueue = settings.group("Queue");
+	private final ColorSetting queueColor = sgQueue.color("Color").description("Blocks waiting their turn; its opacity fades the whole look.")
+		.defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, QUEUE_ALPHA)).build();
+	/** Queued blocks: faint and dotted by default, so each one in a line shows (touching ones share an outline) without competing with the block being mined. */
+	private final HighlightSettings queueLook = HighlightSettings.builder(sgQueue)
+		.defaults(HighlightStyle.OUTLINE.withOutlineWidth(1).withFill(HighlightStyle.Fill.DOTS).withFillOpacity(0.6f)).build();
+
+	private final SettingGroup sgRebreak = settings.group("Auto Rebreak");
+	private final ColorSetting rebreakColor = sgRebreak.color("Color").description("The block Auto Rebreak watches; its opacity fades the whole look.")
+		.defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, REBREAK_ALPHA)).visible(autoRebreak::get).build();
+	private final HighlightSettings rebreakLook = HighlightSettings.builder(sgRebreak).visible(autoRebreak::get).defaults(HighlightStyle.OUTLINE).build();
 
 	/** Positions this module asked to break that haven't finished. */
 	private final List<BlockPos> mining = new ArrayList<>();
@@ -78,10 +88,13 @@ public class PacketMine extends Module {
 		super(Tags.PLAYER, "Packet Mine", "Mines the blocks you hit for you, with your hand free.");
 	}
 
-	/** 2: the Fast switch became the standard breaking Mode. 3: the block being mined got its own Start and End colours. */
+	/**
+	 * 2: the Fast switch became the standard breaking Mode. 3: the block being mined got its own Start and End colours.
+	 * 4: the queue and the block Auto Rebreak watches got groups of their own, in place of General's Color.
+	 */
 	@Override
 	public int settingsVersion() {
-		return 3;
+		return 4;
 	}
 
 	@Override
@@ -93,21 +106,29 @@ public class PacketMine extends Module {
 		if (fromVersion == 2) {
 			// The mined block was Color, faded from 15% to 65% of its opacity: a chosen Color carries over to both ends.
 			saved.get("General", "Color").ifPresent(c -> {
-				saved.set("Mining", "Start Color", faded(c, START_ALPHA));
-				saved.set("Mining", "End Color", faded(c, END_ALPHA));
+				saved.set("Mining", "Start Color", withAlpha(c, a -> Math.round(a * START_ALPHA / 255f)));
+				saved.set("Mining", "End Color", withAlpha(c, a -> Math.round(a * END_ALPHA / 255f)));
 			});
+		}
+		if (fromVersion == 3) {
+			// Color drew the queue at a fixed 110 and the rebreak block at 140, whatever its own opacity.
+			saved.get("General", "Color").ifPresent(c -> {
+				saved.set("Queue", "Color", withAlpha(c, a -> QUEUE_ALPHA));
+				saved.set("Auto Rebreak", "Color", withAlpha(c, a -> REBREAK_ALPHA));
+			});
+			saved.remove("General", "Color");
 		}
 	}
 
-	/** A saved colour ({@code {"color": "#AARRGGBB", "mode": ...}}, or just the hex) with its opacity scaled by {@code alpha}/255. */
-	private static JsonElement faded(JsonElement saved, int alpha) {
+	/** A saved colour ({@code {"color": "#AARRGGBB", "mode": ...}}, or just the hex) with its opacity changed by {@code alpha}. */
+	private static JsonElement withAlpha(JsonElement saved, IntUnaryOperator alpha) {
 		JsonObject o = saved.isJsonObject() ? saved.getAsJsonObject().deepCopy() : new JsonObject();
 		if (!saved.isJsonObject()) {
 			o.addProperty("color", saved.getAsString());
 			o.addProperty("mode", SettingColor.Mode.STATIC.name());
 		}
 		int c = ColorUtil.parseHex(o.get("color").getAsString());
-		o.addProperty("color", ColorUtil.toHex(ColorUtil.withAlpha(c, Math.round(ColorUtil.alpha(c) * alpha / 255f))));
+		o.addProperty("color", ColorUtil.toHex(ColorUtil.withAlpha(c, alpha.applyAsInt(ColorUtil.alpha(c)))));
 		return o;
 	}
 
@@ -185,18 +206,17 @@ public class PacketMine extends Module {
 
 	/**
 	 * Shader outlines, drawn over the blocks rather than on their faces (a box there loses to the block's own faces):
-	 * the queue faint and dotted (touching blocks share an outline), the block being mined in Mining's look, blending
+	 * the queue in Queue's look (touching blocks share an outline), the block being mined in Mining's look, blending
 	 * from Start to End Color as it breaks and staying at End until the server says it's gone, and the block Auto
-	 * Rebreak watches, outlined.
+	 * Rebreak watches in its group's look.
 	 */
 	@Subscribe(inGame = true)
 	private void onHighlight(HighlightEvent.Shapes e) {
-		int c = color.argb();
 		for (BlockPos pos : mining) {
 			float progress = Myriad.breaking().progress(pos);
-			if (progress == 0) e.block(pos, QUEUED, ColorUtil.withAlpha(c, 110));
+			if (progress == 0) e.block(pos, queueLook.style(), queueColor.argb());
 			else e.block(pos, miningLook.style(), ColorUtil.lerp(startColor.argb(), endColor.argb(), progress), 0.002);
 		}
-		if (autoRebreak.get() && last != null && !mining.contains(last)) e.block(last, HighlightStyle.OUTLINE, ColorUtil.withAlpha(c, 140));
+		if (autoRebreak.get() && last != null && !mining.contains(last)) e.block(last, rebreakLook.style(), rebreakColor.argb());
 	}
 }
