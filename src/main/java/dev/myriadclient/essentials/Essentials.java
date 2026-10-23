@@ -41,7 +41,6 @@ import dev.myriadclient.essentials.modules.player.PacketMine;
 import dev.myriadclient.essentials.modules.player.Reach;
 import dev.myriadclient.essentials.modules.player.StackReplenish;
 import dev.myriadclient.essentials.modules.player.WallInteract;
-import dev.myriadclient.essentials.modules.player.XCarry;
 import dev.myriadclient.essentials.modules.render.BaritoneRender;
 import dev.myriadclient.essentials.modules.render.BlockESP;
 import dev.myriadclient.essentials.modules.render.BlockHighlight;
@@ -94,7 +93,7 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), autoEat, new Velocity(), new AutoDisconnect());
 		ctx.registerModules(travel, elytraFly, new RocketBoost(), new AutoWalk(), new InventoryMove());
 		ctx.registerModules(building, new Scaffold(), new AirPlace(), new PacketMine(), new AutoTool(), new Reach(), new WallInteract());
-		ctx.registerModules(inventory, new InventoryTweaks(), new StackReplenish(), new XCarry(), new MiddleClick());
+		ctx.registerModules(inventory, new InventoryTweaks(), new StackReplenish(), new MiddleClick());
 		ctx.registerModules(visuals, new ESP(), new Tracers(), new Nametags(), new Storage(), new BlockESP(), new BlockHighlight(), new FullBright(),
 			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips());
 		// Baritone's settings, made from Baritone's own list, and its path and goal drawn: only when it's installed.

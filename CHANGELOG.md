@@ -12,6 +12,7 @@ Needs Myriad 0.9.0.
   item swaps places with any slot but the selected one, and both go back after. A click that couldn't go through kept
   waiting, and fired whenever a stack reached the hotbar, minutes later; now it's dropped after a quarter of a second.
   New suite tests: a pearl and a rocket while gliding, each from the inventory with a full hotbar (both failed before).
+- **X Carry is gone.** Items left in the crafting grid come back to your inventory the next time you close it.
 - **Packet Mine: the queue and the block Auto Rebreak watches have their own look.** New Queue and Auto Rebreak groups,
   each with a Color and the standard highlight look (outline, glow, fill, gradient, through walls), starting from the
   old ones (the queue faint and dotted, the rebreak block outlined). General's Color is gone; one you'd changed
