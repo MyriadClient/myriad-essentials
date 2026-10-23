@@ -1,12 +1,20 @@
 pluginManagement {
 	repositories {
 		maven {
+			name = 'Myriad'
+			url = 'https://maven.myriadclient.dev/releases'
+		}
+		maven {
 			name = 'Fabric'
 			url = 'https://maven.fabricmc.net/'
 		}
 		mavenCentral()
 		gradlePluginPortal()
 	}
+	// -PcoreDir=../myriad: the addon plugin and core from a Myriad checkout next to this one (`./gradlew :core:jar`
+	// there), no publishing step and no version bump until the core change is released.
+	def coreDir = settings.providers.gradleProperty("coreDir")
+	if (coreDir.isPresent()) includeBuild("${coreDir.get()}/gradle-plugin")
 }
 
 rootProject.name = 'myriad-essentials'

@@ -3,9 +3,12 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
-## 0.9.1 (unreleased)
+## 0.10.0
 
-Needs Myriad 0.9.0.
+Needs Myriad 0.10.0.
+
+- **Builds on Myriad's addon Gradle plugin** (`dev.myriadclient.addon` 0.10.0): the build file keeps only what's
+  Essentials' own (ViaFabricPlus, Xaero's maps and Litematica for the dev client, the protocol it joins with).
 
 - **Printer, Portal Builder, Auto Sort and Auto Mend join Essentials**, from Myriad Automation (Auto Mend was its XP
   Repair). Printer and Portal Builder are in Building & Mining, Auto Sort and Auto Mend in Inventory. The Printer needs

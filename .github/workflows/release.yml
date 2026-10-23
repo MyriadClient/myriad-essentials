@@ -47,4 +47,4 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_myriadUsername: ${{ secrets.MAVEN_USERNAME }}
           ORG_GRADLE_PROJECT_myriadPassword: ${{ secrets.MAVEN_PASSWORD }}
-        run: ./gradlew publishAllPublicationsToMyriadRepository
+        run: ./gradlew publishAddon

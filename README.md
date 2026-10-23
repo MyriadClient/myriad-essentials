@@ -97,7 +97,8 @@ client's own version (or `-Pvia=1.21.4`, any version ViaFabricPlus knows).
 ```
 
 `-PcoreDir` is for changing core and Essentials together: build core's jar there (`./gradlew :core:jar`), build
-here against it, and nothing needs publishing or a version bump until the core change is released. The other way
+here against it (Myriad's addon Gradle plugin, which sets up this build, comes from that checkout too), and nothing
+needs publishing or a version bump until the core change is released. The other way
 round, Myriad's "everything" dev client loads this checkout's jar with `-PessentialsDir=../myriad-essentials`.
 
 ## Testing against Grim
