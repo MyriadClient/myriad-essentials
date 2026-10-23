@@ -129,7 +129,7 @@ def settle(x, y, z, timeout=5.0):
 
 # Respawned with every module off (.panic), then Elytra Swap back on for Elytra Fly's flights (No Durability, its
 # setting before it became a module, was on by default) but not for flying yourself.
-FRESH = ("respawn", ".panic", ".set elytra_swap when_you_fly false", ".toggle elytra_swap on")
+FRESH = ("closescreen", "respawn", ".panic", ".set elytra_swap when_you_fly false", ".toggle elytra_swap on")
 
 
 def reset(x=1000.5, y=100, z=0.5, yaw=-90, pitch=0, arena=True):
@@ -541,11 +541,12 @@ def chest_items(x, y, z):
     return items
 
 
-def sort_pass(full_inventory=False, click_after=None, middle=False):
+def sort_pass(full_inventory=False, click_after=None, middle=False, by_hand=False):
     """Auto Sort on a double chest of scattered part stacks, opened by hand: merged, packed from the first slot, nothing lost
     and nothing left on the cursor or in your inventory. click_after: you click a chest slot that many ticks after opening it,
     which stops the sort: what it held is put down, and nothing is lost. middle: Auto Sort off, sorted by Inventory Tweaks'
-    middle-click over a chest slot instead."""
+    middle-click over a chest slot instead. by_hand: the chest opened with the right button held a moment and the middle
+    button held a few ticks, as by hand: the releases come with the sort under way, and must not count as clicks."""
     import random
     x0, y, z = 10000, 100, 0
     client(*FRESH, "wait 5")
@@ -571,8 +572,10 @@ def sort_pass(full_inventory=False, click_after=None, middle=False):
     mark()
     start = time.time()
     # The second slot of the chest's top row, where the screenshots put it.
-    client("use", *([f"wait {click_after}", "cursor slot 1", "mouse 0 click"] if click_after is not None else []),
-        *(["wait 20", "cursor slot 1", "mouse 2 click"] if middle else []), timeout=30)
+    opening = ["mouse 1 press", "wait 12", "mouse 1 release"] if by_hand else ["use"]
+    middle_click = ["wait 20", "cursor slot 1", "mouse 2 press", "wait 8", "mouse 2 release"] if by_hand else ["wait 20", "cursor slot 1", "mouse 2 click"]
+    client(*opening, *([f"wait {click_after}", "cursor slot 1", "mouse 0 click"] if click_after is not None else []),
+        *(middle_click if middle else []), timeout=30)
     # Sorted on the server: polled until it is (or 20 s).
     def state():
         a, b = chest_items(x0 + 2, y, z + 1), chest_items(x0 + 2, y, z)
@@ -606,6 +609,162 @@ def sort_pass(full_inventory=False, click_after=None, middle=False):
     return sorted_ok and kept and carried == "none", text + (", nothing lost" if kept else f", items changed: {now} vs {totals}") + f", cursor {carried}"
 
 
+SHULKER_COLORS = ["red", "blue", "lime", "yellow", "purple", "black", "white", "cyan"]
+
+
+def slots_of(target, n):
+    """{slot: (item, count)} of a block's Items (target "block x y z") or the tester's Inventory (target "entity"), read a
+    field at a time: a whole entry comes back cut short when it holds a shulker box's contents."""
+    path = "Items" if target.startswith("block") else "Inventory"
+    where = target if target.startswith("block") else f"entity {P}"
+    out = cmd(*(f"data get {where} {path}[{i}].{f}" for i in range(n) for f in ("Slot", "id", "count"))).splitlines()
+    found = {}
+    for i in range(n):
+        lines = out[3 * i:3 * i + 3]
+        if len(lines) < 3 or any("Found no" in l for l in lines): continue
+        slot, item, count = (re.search(r"data: (.*)$", l) for l in lines)
+        if slot and item and count:
+            found[int(re.sub(r"\D", "", slot.group(1)))] = (item.group(1).strip('"').removeprefix("minecraft:"), int(re.sub(r"\D", "", count.group(1))))
+    return found
+
+
+def box_with(where, color, n):
+    """Whether a {color} shulker box holding exactly n dirt in its first slot is in {where} ("block x y z" or the tester)."""
+    match = f'{{id:"minecraft:{color}_shulker_box",components:{{"minecraft:container":[{{slot:0,item:{{id:"minecraft:dirt",count:{n}}}}}]}}}}'
+    return passed(f"if data {where} Items[{match}]") if where.startswith("block") else passed(f"if data entity {P} Inventory[{match}]")
+
+
+def stack_limit(item):
+    return 1 if item.endswith("shulker_box") else SORT_ITEMS.get(item, 64)
+
+
+def sorted_and_merged(slots):
+    """Whether a run of slots (each (item, count) or None) is packed from the first and every item fills its stacks."""
+    used = [x for x in slots if x]
+    if any(x is None for x in slots[:len(used)]): return False
+    kinds = {}
+    for item, n in used: kinds.setdefault(item, []).append(n)
+    return all(sum(1 for n in ns if n < stack_limit(item)) <= 1 for item, ns in kinds.items())
+
+
+def shulker_sort_pass(mode):
+    """Sorts with shulker boxes in the mix (they don't stack and each carries its contents, the heaviest updates there are):
+    "auto" or "middle" sort a double chest of boxes and part stacks with Auto Sort or a middle-click, "auto_carry" the same
+    with boxes in your inventory too (left alone), "inventory" your own inventory by middle-click. Every box must come out
+    with its own contents (n dirt each), nothing lost, the cursor empty."""
+    import random
+    x0, y, z = 10000, 100, 0
+    client(*FRESH, "wait 5")
+    if "screen=none" not in client("status", timeout=30): client("key escape", "wait 5", timeout=30)
+    forceload_area(x0 - 8, z - 8, x0 + 8, z + 8)
+    rng = random.Random(23)
+    boxes, totals, setup = [], {}, []
+    def add(item, n):
+        totals[item] = totals.get(item, 0) + n
+    def box_item(color, n):
+        return f'{color}_shulker_box[container=[{{slot:0,item:{{id:"dirt",count:{n}}}}},{{slot:5,item:{{id:"iron_ingot",count:{n}}}}}]]'
+    chest = mode != "inventory"
+    if chest:
+        halves = [z, z + 1]
+        spots = [(zz, s) for zz in halves for s in range(27)]
+        rng.shuffle(spots)
+        for k in range(16):
+            zz, slot = spots.pop()
+            color = rng.choice(SHULKER_COLORS)
+            boxes.append((color, k + 1))
+            setup.append(f"item replace block {x0 + 2} {y} {zz} container.{slot} with {box_item(color, k + 1)}")
+            add(f"{color}_shulker_box", 1)
+        for k in range(4):
+            zz, slot = spots.pop()
+            setup.append(f"item replace block {x0 + 2} {y} {zz} container.{slot} with white_shulker_box")
+            add("white_shulker_box", 1)
+        for k in range(14):
+            zz, slot = spots.pop()
+            item = rng.choice(list(SORT_ITEMS))
+            n = rng.randint(1, SORT_ITEMS[item] // 2)
+            setup.append(f"item replace block {x0 + 2} {y} {zz} container.{slot} with {item} {n}")
+            add(item, n)
+    carried = []
+    if mode in ("auto_carry", "inventory"):
+        for k, slot in enumerate(rng.sample(range(27), 12 if mode == "inventory" else 6)):
+            if k % 3 == 2 and mode == "inventory":
+                item = rng.choice(list(SORT_ITEMS))
+                n = rng.randint(1, SORT_ITEMS[item] // 2)
+                setup.append(f"item replace entity {P} inventory.{slot} with {item} {n}")
+                add(item, n)
+                continue
+            color = rng.choice(SHULKER_COLORS)
+            boxes.append((color, 40 + k))
+            carried.append(slot + 9)
+            setup.append(f"item replace entity {P} inventory.{slot} with {box_item(color, 40 + k)}")
+            add(f"{color}_shulker_box", 1)
+    cmd(f"fill {x0 - 4} {y - 1} {z - 4} {x0 + 4} {y - 1} {z + 4} stone", f"fill {x0 - 4} {y} {z - 4} {x0 + 4} {y + 3} {z + 4} air",
+        f"gamemode survival {P}", f"clear {P}", f"item replace entity {P} hotbar.0 with diamond_sword",
+        *([f"setblock {x0 + 2} {y} {z} chest[facing=west,type=right]", f"setblock {x0 + 2} {y} {z + 1} chest[facing=west,type=left]"] if chest else []),
+        *setup, f"tp {P} {x0 + 0.5} {y} {z + 1.0} -90 25")
+    settle(x0 + 0.5, y, z + 1.0)
+    inv_before = slots_of("entity", 41)
+    client(".toggle auto_sort " + ("on" if mode.startswith("auto") else "off"), ".toggle inventory_tweaks on", ".set inventory_tweaks middle_sort true",
+        "wait 5", timeout=30)
+    mark()
+    start = time.time()
+    if chest:
+        client("use", *(["wait 20", "cursor slot 1", "mouse 2 click"] if mode == "middle" else []), timeout=30)
+    else:
+        client("key e", "wait 10", "cursor slot 20", "mouse 2 click", timeout=30)
+    def state():
+        a, b = slots_of(f"block {x0 + 2} {y} {z + 1}", 27), slots_of(f"block {x0 + 2} {y} {z}", 27)
+        return [a.get(i) for i in range(27)] + [b.get(i) for i in range(27)], [b.get(i) for i in range(27)] + [a.get(i) for i in range(27)]
+    def done():
+        if chest: return any(sorted_and_merged(order) for order in state())
+        inv = slots_of("entity", 41)
+        return sorted_and_merged([inv.get(i) for i in range(9, 36)])
+    took = None
+    while time.time() - start < 30:
+        if done():
+            took = time.time() - start
+            break
+        time.sleep(0.5)
+    time.sleep(1)
+    st = client("wait 2", "status", timeout=30)
+    cursor = re.search(r"carried=(.+?) screen=", st)
+    cursor = cursor.group(1) if cursor else "?"
+    client(".toggle auto_sort off", "key escape", "wait 5", timeout=30)
+    now = {}
+    places = []
+    if chest:
+        for zz in (z, z + 1):
+            for item, n in slots_of(f"block {x0 + 2} {y} {zz}", 27).values(): now[item] = now.get(item, 0) + n
+            places.append(f"block {x0 + 2} {y} {zz}")
+    inv_after = slots_of("entity", 41)
+    for slot, (item, n) in inv_after.items():
+        if item in totals and slot != 0: now[item] = now.get(item, 0) + n
+    places.append("entity")
+    lost = [f"{c} {n}" for c, n in boxes if not any(box_with(w, c, n) for w in places)]
+    kept = now == totals
+    untouched = mode != "auto_carry" or all(inv_before.get(s) == inv_after.get(s) for s in carried)
+    ok = took is not None and kept and not lost and cursor == "none" and untouched
+    return ok, ((f"sorted in {took:.1f} s" if took is not None else "not sorted in 30 s") + (", nothing lost" if kept else f", items changed: {now} vs {totals}")
+                + (f", boxes not found as they were: {lost}" if lost else f", all {len(boxes)} boxes with their contents") + f", cursor {cursor}"
+                + ("" if untouched else ", your boxes moved"))
+
+
+def t_auto_sort_shulkers():
+    return shulker_sort_pass("auto")
+
+
+def t_auto_sort_shulkers_carried():
+    return shulker_sort_pass("auto_carry")
+
+
+def t_inventory_tweaks_middle_sort_shulkers():
+    return shulker_sort_pass("middle")
+
+
+def t_inventory_tweaks_middle_sort_inventory_shulkers():
+    return shulker_sort_pass("inventory")
+
+
 def t_auto_sort():
     return sort_pass()
 
@@ -620,6 +779,14 @@ def t_auto_sort_your_click():
 
 def t_inventory_tweaks_middle_sort():
     return sort_pass(middle=True)
+
+
+def t_auto_sort_opened_by_hand():
+    return sort_pass(by_hand=True)
+
+
+def t_inventory_tweaks_middle_sort_held():
+    return sort_pass(middle=True, by_hand=True)
 
 
 def t_inventory_tweaks_middle_sort_inventory():
@@ -1116,7 +1283,13 @@ TESTS = [
     ("auto_sort", t_auto_sort),
     ("auto_sort full inventory", t_auto_sort_full_inventory),
     ("auto_sort your click", t_auto_sort_your_click),
+    ("auto_sort shulkers", t_auto_sort_shulkers),
+    ("auto_sort shulkers in your inventory", t_auto_sort_shulkers_carried),
+    ("inventory_tweaks middle sort shulkers", t_inventory_tweaks_middle_sort_shulkers),
+    ("inventory_tweaks middle sort inventory shulkers", t_inventory_tweaks_middle_sort_inventory_shulkers),
     ("inventory_tweaks middle sort", t_inventory_tweaks_middle_sort),
+    ("auto_sort opened by hand", t_auto_sort_opened_by_hand),
+    ("inventory_tweaks middle sort held", t_inventory_tweaks_middle_sort_held),
     ("inventory_tweaks middle sort inventory", t_inventory_tweaks_middle_sort_inventory),
     ("auto_tool preserve", t_auto_tool_preserve),
     ("auto_armor preserve", t_auto_armor_preserve),
@@ -1163,6 +1336,9 @@ FLAKY = {
 
 
 def run_tests(chosen):
+    # ANSWER_CLICKS=on: the server answers inventory clicks as 2b2t does; =pre, harsher (see answerclicks/).
+    answer_mode = os.environ.get("ANSWER_CLICKS") or "off"
+    cmd(f"answerclicks {answer_mode}")
     results = []
     for name, test in chosen:
         mark()

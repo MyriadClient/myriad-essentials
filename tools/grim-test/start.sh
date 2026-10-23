@@ -5,6 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 source versions.env
 [[ -f server/paper.jar ]] || ./setup.sh
+# The AnswerClicks test plugin (answerclicks/), built against the server's libraries once its first start fetched them.
+if [[ ! -f server/plugins/answer-clicks.jar && -d server/libraries ]]; then answerclicks/build.sh; fi
 if ./cmd list >/dev/null 2>&1; then echo "already running"; exit 0; fi
 
 grim_config=server/plugins/GrimAC/config.yml

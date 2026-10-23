@@ -1,0 +1,8 @@
+name: AnswerClicks
+version: 1.0.0
+main: dev.myriadclient.grimtest.AnswerClicks
+api-version: '1.21'
+description: Answers every inventory click with the whole inventory, as 2b2t does (for the Myriad Grim suite).
+commands:
+  answerclicks:
+    description: answerclicks on|off

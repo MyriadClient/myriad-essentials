@@ -14,6 +14,7 @@ Needs JDK 21 for the server (path in `versions.env`) and Python 3.
 | GrimAC, current build | Whether 2b2t turns on Grim's experimental checks (`./start.sh --experimental` to try with them) |
 | 2b2t's world seed, hard survival, PvP, no spawn protection, Nether and End | Paper tweaks, the queue proxy, plugins |
 | About 2b2t's ping, with `./lag.py` | |
+| 2b2t answering every inventory click, with `answerclicks` (below) | |
 
 Where 2b2t is known to differ from current Grim, the server is set like 2b2t: Grim's MultiActionsC takes inventory
 clicks over held movement keys and jump (live captures on 2b2t, 2026-10-14, showed its Grim doesn't judge them). The
@@ -21,6 +22,14 @@ test players get `grim.nomodifypacket.multiactionsc` (through `myriad.like2b2t` 
 still flags them but cancels nothing, and `./suite` lets a keys-only flag pass while a sprinting or sneaking one fails.
 Dev clients click on `localhost` as on 2b2t (`-Dmyriad.noInputRuleHosts`). For current Grim as shipped: `./start.sh
 --strict`, the client with `-Pstrict` (`./clients N --strict`), and `GRIM_STRICT=1 ./suite`.
+
+A vanilla server sends nothing back for an inventory click that came out as the client predicted; 2b2t answers every
+one, so the later clicks of a burst carry an old state id and the whole inventory comes back after each, a few clicks
+behind. The AnswerClicks plugin (`answerclicks/`, built by `start.sh` once the server has its libraries) does the same:
+`./cmd "answerclicks on"`, or `ANSWER_CLICKS=on ./suite`, which also turns it off for a plain run. `answerclicks pre`
+is harsher than any real server: it resends the inventory as it was before each click, which leaves the client
+showing the click undone until something else updates the slot (a stress test; a module acting on that view clicks
+again).
 
 Passing here means "passes current Grim as configured here", not "safe on 2b2t". Grim alerts on every violation in
 this setup (it normally waits for several); that only changes the messages, not what it cancels or sets back.
@@ -59,7 +68,9 @@ Then a test is: set the scene, mark the log, act, read the flags.
 
 The client steps come from `DevConsole` in core, which dev runs turn on: Myriad commands (`.toggle kill_aura on`),
 server commands as the player (`/gamemode survival`), `hold forward,sprint,jump 40`, `look <yaw> <pitch>`,
-`select <1-9>`, `attack`, `use`, `wait <ticks>`, `respawn`, `status`, `connect <host:port>` (from a disconnect
+`select <1-9>`, `attack`, `use`, `wait <ticks>`, `respawn`, `status` (with what's on the cursor and which screen is
+open), `closescreen`, `cursor slot <n>` (the mouse over a slot of the open screen, whatever the window size; then
+`mouse 0 click` or `mouse 2 press` ... `mouse 2 release`), `connect <host:port>` (from a disconnect
 screen: `./cmd "kick GrimTester"` first, then `connect localhost:25566` to play through `./lag.py`), and
 `selftest [ticks] [-module]`, which turns every module on for a while and off again and reports any that failed or
 whose handlers threw.
