@@ -239,14 +239,32 @@ def t_no_slow_items():
 
 
 def t_no_slow_webs():
-    # Grim forces web slowdown and catches the ways round it: with Webs on, a row of cobwebs is walked through slowed, unflagged.
+    # A block of cobwebs three wide and two high, walked through at full speed: Grim has them as air while the tester
+    # is in them (reported broken, which the server refuses), and nothing flags. A TNT block overhead broken first (at
+    # once, by hand) is the block Grim's FastBreak times finishes against then, whatever an earlier test left half dug.
     reset()
-    cmd("fill 1002 100 0 1012 101 0 cobweb")
+    cmd("setblock 1000 102 0 tnt", "fill 1002 100 -1 1012 101 1 cobweb")
+    client("look -90 -90", "wait 3", "mouse 0 press", "wait 2", "mouse 0 release", "look -90 0", "wait 5")
     x0 = position()[0]
-    client(".toggle no_slow on", "hold forward 30", "wait 32", ".toggle no_slow off")
+    client(".toggle no_slow on", "wait 3", "hold forward 30", "wait 32", ".toggle no_slow off", "wait 10")
     walked = position()[0] - x0
-    cmd("fill 1002 100 0 1012 101 0 air")
-    return walked > 0.5, f"walked {walked:.2f} blocks through cobwebs (slowed, as Grim requires)"
+    intact = passed("if block 1004 100 0 cobweb") and passed("if block 1006 101 0 cobweb")
+    cmd("fill 1002 100 -1 1012 101 1 air")
+    # Walking 30 ticks covers about 6.5 blocks, and webs slow that to under one.
+    return walked > 5.5 and intact, f"walked {walked:.2f} blocks through cobwebs, webs still there: {intact}"
+
+
+def t_no_slow_webs_after_tap():
+    # A stone block tapped and given up stays the block Grim's FastBreak times finishes against, so a web's would be
+    # refused: the webs are walked through slowed, as Grim has them, and nothing flags.
+    reset()
+    cmd("setblock 1001 100 1 stone", "fill 1002 100 -1 1012 101 1 cobweb")
+    client("look -45 38", "wait 3", "mouse 0 press", "wait 4", "mouse 0 release", "look -90 0", "wait 5")
+    x0 = position()[0]
+    client(".toggle no_slow on", "wait 3", "hold forward 30", "wait 32", ".toggle no_slow off", "wait 10")
+    walked = position()[0] - x0
+    cmd("fill 1001 100 -1 1012 101 1 air")
+    return 0.3 < walked < 2.5, f"walked {walked:.2f} blocks through cobwebs (slowed)"
 
 
 def t_tick_shift():
@@ -1319,6 +1337,7 @@ TESTS = [
     ("scaffold", t_scaffold),
     ("no_slow items", t_no_slow_items),
     ("no_slow webs", t_no_slow_webs),
+    ("no_slow webs after a tap", t_no_slow_webs_after_tap),
     ("tick_shift", t_tick_shift),
     ("auto_reconnect", t_auto_reconnect),
     ("offhand", t_offhand),

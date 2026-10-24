@@ -10,8 +10,14 @@ Needs Myriad 1.1.0.
 - **No Slow** (Movement): full speed while eating, drinking, blocking or drawing a bow, and through cobwebs and sweet
   berry bushes. Under Grim, one tick in three goes at full speed while you use an item, which its NoSlow check lets
   pass (it flags two fast ticks in a row it can't explain): about twice the speed the item allows (3.0 blocks in 34
-  ticks of walking while eating, against about 1.5). Webs only off Grim: it forces their slowdown on its prediction,
-  and every way round that (claiming the web broken) draws its breaking checks, on Grim 2.3.74 at least.
+  ticks of walking while eating, against about 1.5). Webs under Grim too, at full speed (6.5 blocks in 30 ticks of
+  walking through them, 8.4 sprinting, against under one): Grim always slows you in a web its world has, so the webs
+  round you are reported broken, which makes it hold air there until the server's answer comes back, though the
+  server refuses and nothing changes on screen, and each is reported again as that answer arrives. The reports pass
+  its break checks and stay well under the server's packet limit (about 140 a second at most, of the 500 Paper
+  allows). No sprint jumps into webs, whose push the server's own movement check sets back, and none while the block
+  you last started breaking still stands (a tap on stone, given up), whose break time Grim measures every web's
+  against: you go slowed then, until you break something.
 - **Tick Shift** (Movement): saves up to ten ticks while you stand still and spends them in one burst as you move off,
   2.8 blocks in the first two ticks of walking, against about 0.2. Grim's Timer allows it: ticks that send nothing
   build up time it lets you spend, as long as the burst goes out before the next ping is answered.
