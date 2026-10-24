@@ -69,7 +69,7 @@ public class BlockHighlight extends Module {
 	/** A preview's block as if you looked at it, unless another module's look is on it already (Storage on a chest). */
 	@Subscribe(inGame = true, priority = Priority.LOW)
 	private void onPreview(PreviewEvent e) {
-		if (e.block() != null && !e.highlighted()) e.render(look, color.argb());
+		if (e.block() != null && !e.shown()) e.render(look, color.argb());
 	}
 
 	/** The block under the crosshair, or where Air Place would place with nothing under it, or null. */

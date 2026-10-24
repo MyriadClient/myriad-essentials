@@ -270,7 +270,7 @@ public class BaritoneRender extends Module {
 		// Outlined by the shader in Shader mode; in Box mode, a box around it.
 		boolean shader = RenderMode.current() == RenderMode.SHADER;
 		Ghosts.submit(e, state, at, opacity.getFloat(), shader ? goalStyle.style() : null, color);
-		if (!shader) goalStyle.box(e.shapes(), mc.player.getDimensions(Pose.STANDING).makeBoundingBox(at), color, 1);
+		if (!shader) goalStyle.box(e.shapes(), mc.player.getDimensions(Pose.STANDING).makeBoundingBox(at), color);
 	}
 
 	/**

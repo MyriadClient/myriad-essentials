@@ -3,7 +3,7 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
-## 0.11.0 (unreleased)
+## 0.11.0
 
 Needs Myriad 0.11.0.
 
@@ -20,11 +20,10 @@ Needs Myriad 0.11.0.
 - **Previews in the settings of the modules that draw**: ESP (a zombie), Blocks (the first block picked), Block
   Highlight (a block), Storage (a chest) and View Model (your hands and held items, moving as you change its settings).
   Drag to turn, right-drag to move, scroll to zoom, double-click to put back.
-- **The modules draw on every preview as in the world**, the outline modes included (the shader outline, glow and fill),
-  so a Preview window on a workspace shows the look of everything that's on: ESP on a mob or you (Hitbox boxes or the
-  outline), Storage on a container or a chest minecart, boat or pack animal (boxes or the outline, shulker boxes in
-  their dye), Blocks on a block it's set to show, View Model's hand and item highlights on your hands, and Block
-  Highlight on a block nothing else highlights (as if you looked at it).
+- **The modules draw on every preview as in the world**, in either render mode, so a Preview window on a workspace
+  shows the look of everything that's on: ESP on a mob or you, Storage on a container or a chest minecart, boat or pack
+  animal (shulker boxes in their dye), Blocks on a block it's set to show, View Model's hand and item highlights on
+  your hands, and Block Highlight on a block nothing else shows (as if you looked at it).
 
 ## 0.10.0
 

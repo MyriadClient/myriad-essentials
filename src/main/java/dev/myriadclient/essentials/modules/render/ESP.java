@@ -188,7 +188,8 @@ public class ESP extends Module {
 		if (c == 0) return;
 		float f = fadeOf(e);
 		Model<LivingEntityRenderState> m = (Model<LivingEntityRenderState>) event.model();
-		int fill = look.boxFill(c, f), line = look.boxLine(c, f);
+		int faded = ColorUtil.withAlpha(c, (int) (ColorUtil.alpha(c) * f));
+		int fill = look.boxFill(faded), line = look.boxLine(faded);
 		if (fill != 0) ModelShapes.fill(event.submits(), event.pose(), m, state, fill, look.throughWalls());
 		if (line != 0) ModelShapes.wireframe(event.submits(), event.pose(), m, state, line, look.lineWidth.getFloat(), look.throughWalls());
 	}
@@ -210,7 +211,8 @@ public class ESP extends Module {
 	private void drawBox2D(Canvas c, Entity entity, float[] r, int color, float f) {
 		float x = r[0], y = r[1], w = r[2] - r[0], h = r[3] - r[1];
 		float width = look.lineWidth.getFloat();
-		int fill = look.boxFill(color, f), line = look.boxLine(color, f);
+		int faded = ColorUtil.withAlpha(color, (int) (ColorUtil.alpha(color) * f));
+		int fill = look.boxFill(faded), line = look.boxLine(faded);
 		if (fill != 0) c.rect(x, y, w, h, fill);
 		if (line != 0) {
 			c.outline(x - 0.5f, y - 0.5f, w + 1, h + 1, 0, width + 1, ColorUtil.withAlpha(0xFF000000, (int) (ColorUtil.alpha(color) * f / 2)));
