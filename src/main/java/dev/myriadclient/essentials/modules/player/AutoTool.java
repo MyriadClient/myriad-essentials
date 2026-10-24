@@ -105,6 +105,10 @@ public class AutoTool extends Module {
 		if (slot >= 0) {
 			Myriad.inventory().borrow(this, slot, null);
 			use(slot, 2);
+		} else if (holding) {
+			// Nothing to mine it with yet (a better tool still on its way from the inventory): not the weapon a fight
+			// left held, which mines no faster than a hand and keeps the breaking service from holding its tool.
+			stop();
 		}
 	}
 
