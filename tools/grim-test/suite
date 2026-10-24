@@ -226,6 +226,57 @@ def t_scaffold():
     return len(path) >= 4 and placed == len(path) and y >= 99.9, f"{placed}/{len(path)} blocks bridged under the path, y={y:.2f}"
 
 
+def t_no_slow_items():
+    # A golden apple eaten while walking: one tick in three at full speed, the most Grim's NoSlow lets through.
+    reset()
+    cmd(f"item replace entity {P} hotbar.0 with golden_apple 4")
+    x0 = position()[0]
+    client("select 1", ".toggle no_slow on", "mouse 1 press", "hold forward 34", "wait 36", "mouse 1 release", "wait 5", ".toggle no_slow off")
+    walked = position()[0] - x0
+    eaten = 4 - count(0)
+    # Walking 34 ticks covers about 7 blocks, and eating slows that to about 1.5; No Slow makes it about 3.
+    return eaten == 1 and walked > 2.5, f"walked {walked:.2f} blocks while eating, {eaten} eaten"
+
+
+def t_no_slow_webs():
+    # Grim forces web slowdown and catches the ways round it: with Webs on, a row of cobwebs is walked through slowed, unflagged.
+    reset()
+    cmd("fill 1002 100 0 1012 101 0 cobweb")
+    x0 = position()[0]
+    client(".toggle no_slow on", "hold forward 30", "wait 32", ".toggle no_slow off")
+    walked = position()[0] - x0
+    cmd("fill 1002 100 0 1012 101 0 air")
+    return walked > 0.5, f"walked {walked:.2f} blocks through cobwebs (slowed, as Grim requires)"
+
+
+def t_tick_shift():
+    # Standing still saves ticks; moving off spends them in one frame.
+    reset()
+    client(".set tick_shift ticks 10", ".toggle tick_shift on", "wait 30")
+    x0 = position()[0]
+    client("hold forward 20", "wait 2")
+    burst = position()[0] - x0
+    client("wait 20", ".toggle tick_shift off")
+    # Two ticks from standing walk about 0.2 blocks; the saved ten add about two.
+    return burst > 1.2, f"{burst:.2f} blocks in the first two ticks of moving off"
+
+
+def t_auto_reconnect():
+    # Kicked: back on the server after the delay (and the server's 4 s connection throttle).
+    reset()
+    client(".set auto_reconnect delay 2", ".toggle auto_reconnect on")
+    cmd(f"kick {P} suite kick")
+    back = False
+    for _ in range(15):
+        time.sleep(1)
+        if P in cmd("list"):
+            back = True
+            break
+    time.sleep(3)
+    client(".toggle auto_reconnect off", timeout=20)
+    return back, "back on the server" if back else "not back after 15 s"
+
+
 def t_offhand():
     reset()
     cmd(f"item replace entity {P} inventory.5 with totem_of_undying")
@@ -1266,6 +1317,10 @@ TESTS = [
     ("kill_aura walking", t_kill_aura_walking),
     ("packet_mine", t_packet_mine),
     ("scaffold", t_scaffold),
+    ("no_slow items", t_no_slow_items),
+    ("no_slow webs", t_no_slow_webs),
+    ("tick_shift", t_tick_shift),
+    ("auto_reconnect", t_auto_reconnect),
     ("offhand", t_offhand),
     ("auto_armor", t_auto_armor),
     ("offhand sprinting", t_offhand_sprinting),

@@ -2,9 +2,12 @@ package dev.myriadclient.essentials.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import dev.myriadclient.essentials.modules.movement.ElytraFlight;
+import dev.myriadclient.essentials.modules.movement.NoSlow;
 import dev.myriadclient.essentials.modules.movement.Velocity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -24,5 +27,15 @@ public abstract class EntityMixin {
 	private boolean essentials$bounceSprint(boolean original) {
 		Object self = this;
 		return original || self == Minecraft.getInstance().player && ElytraFlight.holdsSprint();
+	}
+
+	/** No Slow Webs: a web or berry bush doesn't hold the local player back (it still breaks a fall, as vanilla's does). */
+	@Inject(method = "makeStuckInBlock", at = @At("HEAD"), cancellable = true)
+	private void essentials$noSlowWebs(BlockState state, Vec3 speedMultiplier, CallbackInfo ci) {
+		Object self = this;
+		if (self == Minecraft.getInstance().player && NoSlow.ignores(state)) {
+			((Entity) self).resetFallDistance();
+			ci.cancel();
+		}
 	}
 }

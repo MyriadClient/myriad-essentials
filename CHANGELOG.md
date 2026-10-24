@@ -3,6 +3,22 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## Unreleased
+
+Needs Myriad 1.1.0.
+
+- **No Slow** (Movement): full speed while eating, drinking, blocking or drawing a bow, and through cobwebs and sweet
+  berry bushes. Under Grim, one tick in three goes at full speed while you use an item, which its NoSlow check lets
+  pass (it flags two fast ticks in a row it can't explain): about twice the speed the item allows (3.0 blocks in 34
+  ticks of walking while eating, against about 1.5). Webs only off Grim: it forces their slowdown on its prediction,
+  and every way round that (claiming the web broken) draws its breaking checks, on Grim 2.3.74 at least.
+- **Tick Shift** (Movement): saves up to ten ticks while you stand still and spends them in one burst as you move off,
+  2.8 blocks in the first two ticks of walking, against about 0.2. Grim's Timer allows it: ticks that send nothing
+  build up time it lets you spend, as long as the burst goes out before the next ping is answered.
+- **Auto Reconnect** (Automation): joins the server you were on again when you're kicked or the connection drops,
+  after Delay seconds (5), and keeps trying while it can't get in. The disconnect screen shows the countdown on a
+  button that joins at once; going back to the server list stops it. Never after Auto Disconnect made you leave.
+
 ## 1.1.0
 
 Needs Myriad 1.1.0.

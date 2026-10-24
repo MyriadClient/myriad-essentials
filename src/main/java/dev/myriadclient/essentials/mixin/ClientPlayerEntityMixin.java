@@ -1,9 +1,11 @@
 package dev.myriadclient.essentials.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.myriadclient.essentials.modules.movement.ElytraFlight;
+import dev.myriadclient.essentials.modules.movement.NoSlow;
 import dev.myriadclient.essentials.modules.movement.Velocity;
 import dev.myriadclient.essentials.modules.player.WallInteract;
 import net.minecraft.client.player.LocalPlayer;
@@ -35,5 +37,11 @@ public abstract class ClientPlayerEntityMixin {
 	@ModifyReturnValue(method = "raycastHitResult", at = @At("RETURN"))
 	private HitResult essentials$wallInteract(HitResult original, float partialTicks, Entity camera) {
 		return WallInteract.retarget(original, camera, partialTicks);
+	}
+
+	/** No Slow: the item you use doesn't slow you, on the ticks it allows. */
+	@ModifyExpressionValue(method = "modifyInput", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;itemUseSpeedMultiplier()F"))
+	private float essentials$noSlowItems(float slowed) {
+		return NoSlow.itemSpeed(slowed);
 	}
 }

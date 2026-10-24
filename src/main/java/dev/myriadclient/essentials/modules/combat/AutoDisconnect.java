@@ -61,6 +61,8 @@ public class AutoDisconnect extends Module {
 		COORDS, WAYPOINT
 	}
 
+	private long leftAt;
+
 	private final SettingGroup sgHealth = settings.group("Health");
 	private final BoolSetting health = sgHealth.bool("Health").description("Leave at low health (absorption included).").defaultValue(true).build();
 	private final DoubleSetting healthThreshold = sgHealth.decimal("Threshold").defaultValue(6).range(1, 36).decimals(1).visible(health::get).build();
@@ -272,7 +274,13 @@ public class AutoDisconnect extends Module {
 		return null;
 	}
 
+	/** When this module last made you leave ({@code System.currentTimeMillis}), 0 if never: Auto Reconnect doesn't go back after it. */
+	public long leftAt() {
+		return leftAt;
+	}
+
 	private void leave(String key, String reason) {
+		leftAt = System.currentTimeMillis();
 		if (copyCoords.get()) mc.keyboardHandler.setClipboard(String.format("%d %d %d", mc.player.getBlockX(), mc.player.getBlockY(), mc.player.getBlockZ()));
 		if (afterLeaving.get() == AfterLeaving.TURN_OFF) disable();
 		else waiting.add(key);
