@@ -1,18 +1,13 @@
 package dev.myriadclient.essentials.modules.render;
 
 import dev.myriadclient.api.event.Subscribe;
-import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.event.events.PreviewEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.BoxStyle;
-import dev.myriadclient.api.render.HighlightSettings;
-import dev.myriadclient.api.render.MergedBoxes;
-import dev.myriadclient.api.render.MeshBuilder;
-import dev.myriadclient.api.render.Renderer3D;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
-import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SettingColor;
@@ -22,7 +17,6 @@ import dev.myriadclient.api.world.BlockScan;
 import dev.myriadclient.api.world.ChunkCache;
 import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -39,15 +33,12 @@ import java.util.function.BiConsumer;
 
 /**
  * Highlights the blocks you pick (spawners, beds, portals, an ore...) through walls, in each block's own colour or one
- * of your choosing, as boxes or as a shader outline around each block's shape (touching blocks share one, so a vein or
- * a portal is one shape). Chunks are searched with {@link BlockScan}, which skips sections that can't hold a match,
- * when they load and again only when they change; the boxes stay on the GPU.
+ * of your choosing, drawn in the render mode (the Render window): an outline around each block's shape in Shader mode
+ * (touching blocks of a colour share one, so a vein or a portal is one shape), a box around each in Box mode. Chunks
+ * are searched with {@link BlockScan}, which skips sections that can't hold a match, when they load and again only when
+ * they change; the boxes stay on the GPU.
  */
 public class BlockESP extends Module {
-	public enum Mode {
-		BOXES, OUTLINE
-	}
-
 	/** Past this many in one chunk the rest are skipped, so picking something common can't swamp the renderer. */
 	private static final int MAX_PER_CHUNK = 2048;
 
@@ -56,31 +47,23 @@ public class BlockESP extends Module {
 	private final IntSetting range = sgGeneral.integer("Range").description("Chunks around you.").defaultValue(8).range(1, 32).build();
 
 	private final SettingGroup sgRender = settings.group("Render");
-	private final EnumSetting<Mode> mode = sgRender.oneOf("Mode", Mode.BOXES).description("Boxes: 3D boxes. Outline: a shader outline around each block's shape.")
-		.onChanged(m -> found().setMeshesVisible(m == Mode.BOXES)).build();
 	private final BoolSetting blockColors = sgRender.bool("Block Colors").description("Draw each block in its own colour (as on a map).").defaultValue(true).build();
 	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(() -> !blockColors.get()).build();
-	private final BoolSetting merge = sgRender.bool("Merge").description("Draw touching blocks of the same colour as one outline (portals, veins, beds).")
-		.defaultValue(true).visible(() -> mode.get() == Mode.BOXES).build();
-	private final BoxStyle style = new BoxStyle(sgRender, () -> mode.get() == Mode.BOXES);
-	private final HighlightSettings outline = HighlightSettings.builder(sgRender).visible(() -> mode.get() == Mode.OUTLINE).sharing(style).build();
-
-	/**
-	 * Outline mode's colours: each chunk mesh's faces pick theirs from here by index, so one list serves every chunk.
-	 * Rebuilt with the meshes; with Block Colors off it's just the one colour, read fresh each frame.
-	 */
-	private final IntArrayList palette = new IntArrayList();
+	private final RenderSettings look = RenderSettings.builder(sgRender).build();
 
 	private final ChunkCache<List<BlockPos>> found = ChunkCache.of(this, this::scan)
 		.range(range::get)
-		.mesh(this::mesh)
+		.boxes(this::boxes, look)
 		.neighbours()
 		.build();
 
-	/** 2: how it's drawn (the mode, colours, merging and the box and outline styles) moved into one Render group. */
+	/**
+	 * 2: how it's drawn (the mode, colours, merging and the box and outline styles) moved into one Render group. 3: the
+	 * render mode is everyone's (the Render window), boxes aren't merged, and the box and outline options are one look.
+	 */
 	@Override
 	public int settingsVersion() {
-		return 2;
+		return 3;
 	}
 
 	@Override
@@ -88,6 +71,11 @@ public class BlockESP extends Module {
 		if (fromVersion == 1) {
 			for (String s : new String[]{"Mode", "Block Colors", "Color", "Merge", "Shape", "Fill Opacity", "Line Width", "Through Walls"}) saved.move("General", s, "Render", s);
 			saved.renameGroup("Outline", "Render");
+		}
+		if (fromVersion == 2) {
+			saved.remove("Render", "Mode");
+			saved.remove("Render", "Merge");
+			RenderSettings.migrate(saved, "Render", null);
 		}
 	}
 
@@ -97,33 +85,20 @@ public class BlockESP extends Module {
 		return Preview.block(blocks.get().isEmpty() ? Blocks.SPAWNER : blocks.get().iterator().next());
 	}
 
-	/** A preview's block, if it's one of those picked, in the mode's look. */
+	/** A preview's block, if it's one of those picked, as it would be in the world. */
 	@Subscribe(inGame = true)
 	private void onPreview(PreviewEvent e) {
 		BlockState state = e.block();
-		if (state == null || !blocks.get().contains(state.getBlock())) return;
-		int c = colorOf(state, BlockPos.ZERO);
-		if (mode.get() == Mode.BOXES) style.draw(e.shapes(), e.box(), c, 1);
-		else e.highlight(outline.style(), c);
+		if (state != null && blocks.get().contains(state.getBlock())) e.render(look, colorOf(state, BlockPos.ZERO));
 	}
 
 	public BlockESP() {
 		super(Tags.RENDER, "Blocks", "Highlights the blocks you pick, like spawners or beds, through walls.");
 		// A different list needs a new search; anything else only re-meshes.
 		settings.onAnyChanged(s -> {
-			palette.clear();
 			if (s == blocks) found.invalidateAll();
 			else found.remeshAll();
 		});
-	}
-
-	private ChunkCache<List<BlockPos>> found() {
-		return found;
-	}
-
-	@Override
-	protected void onEnable() {
-		found.setMeshesVisible(mode.get() == Mode.BOXES);
 	}
 
 	@Override
@@ -143,36 +118,13 @@ public class BlockESP extends Module {
 		return list.isEmpty() ? null : list;
 	}
 
-	private void mesh(List<BlockPos> list, MeshBuilder mesh) {
-		if (mode.get() == Mode.OUTLINE) {
-			// The silhouette only: merged faces, so a solid mass keeps just its outside, each in its palette colour.
-			MergedBoxes.draw(mesh, list, lookup, g -> HighlightEvent.Shapes.paletteColor(paletteIndex(g)), g -> 0, true);
-			return;
-		}
-		mesh.lineWidth(style.lineWidth.getFloat());
-		if (merge.get()) {
-			boolean lines = style.shape.get() != Renderer3D.ShapeMode.FILL, fills = style.shape.get() != Renderer3D.ShapeMode.LINES;
-			MergedBoxes.draw(mesh, list, lookup, g -> fills ? style.fill(g, 1) : 0, g -> lines ? style.line(g, 1) : 0, style.throughWalls.get());
-			return;
-		}
+	/** A chunk's blocks as boxes, each around its shape, in its colour. */
+	private void boxes(List<BlockPos> list, ChunkCache.BoxSink out) {
 		for (BlockPos pos : list) {
 			BlockState state = mc.level.getBlockState(pos);
-			style.draw(mesh, shape(state, pos).move(pos), colorOf(state, pos), 1);
+			out.box(shape(state, pos).move(pos), colorOf(state, pos));
 		}
 	}
-
-	private final MergedBoxes.Lookup lookup = new MergedBoxes.Lookup() {
-		@Override
-		public int group(BlockPos pos) {
-			BlockState state = mc.level.getBlockState(pos);
-			return blocks.get().contains(state.getBlock()) ? colorOf(state, pos) : 0;
-		}
-
-		@Override
-		public AABB shape(BlockPos pos) {
-			return BlockESP.shape(mc.level.getBlockState(pos), pos);
-		}
-	};
 
 	private static AABB shape(BlockState state, BlockPos pos) {
 		VoxelShape shape = state.getShape(mc.level, pos);
@@ -189,22 +141,10 @@ public class BlockESP extends Module {
 		return color.argb();
 	}
 
-	/** A colour's place in {@link #palette}. With Block Colors off every block uses the one colour, index 0. */
-	private int paletteIndex(int color) {
-		if (!blockColors.get()) return 0;
-		int i = palette.indexOf(color);
-		if (i >= 0) return i;
-		if (palette.size() >= 256) return 0;
-		palette.add(color);
-		return palette.size() - 1;
-	}
-
-	/** Outline mode: every chunk's mesh, kept on the GPU (chunks off screen are skipped by the renderer). */
+	/** Every chunk's blocks, kept on the GPU (chunks off screen are skipped by the renderer). */
 	@Subscribe(inGame = true)
-	private void onHighlight(HighlightEvent.Shapes e) {
-		if (mode.get() != Mode.OUTLINE) return;
-		int[] colors = blockColors.get() ? palette.toIntArray() : new int[]{color.argb()};
-		if (colors.length > 0) found.highlight(e, outline.style(), colors);
+	private void onRender(RenderEvent e) {
+		e.chunks(found);
 	}
 
 	/** Calls {@code out} with every block being shown and its colour (for Tracers). Nothing while this module is off. */

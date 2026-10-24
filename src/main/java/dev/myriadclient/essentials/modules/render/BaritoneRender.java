@@ -1,18 +1,20 @@
 package dev.myriadclient.essentials.modules.render;
 
 import dev.myriadclient.api.event.Subscribe;
-import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Ghosts;
-import dev.myriadclient.api.render.HighlightSettings;
+import dev.myriadclient.api.render.RenderMode;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.render.Renderer3D;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
+import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.Baritone;
@@ -38,7 +40,7 @@ import java.util.Set;
  * Draws where Baritone is going in place of Baritone's own lines and boxes (turned off while this is on, and back on
  * after): its path as a smooth line with rounded corners and a gradient flowing along it, the blocks it will break and
  * place on the way, and its goal as a ghost of you standing there: your skin, armour, cape or elytra and what you hold,
- * faded, outlined by the highlight shader (seen through walls by default). The blocks are highlighted the same way.
+ * faded, outlined in the render mode (seen through walls by default). The blocks are shown the same way.
  * Read through Baritone's public API, so it follows any Baritone build; the blocks to break and place are worked out
  * from the path (Baritone's own lists aren't public).
  */
@@ -72,7 +74,7 @@ public class BaritoneRender extends Module {
 		.defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(blocks::get).build();
 	private final ColorSetting placeColor = sgBlocks.color("Place").description("Gaps it will fill to walk over (bridging, pillaring).")
 		.defaultValue(SettingColor.role(SettingColor.Mode.BLUE)).visible(blocks::get).build();
-	private final HighlightSettings blockStyle = new HighlightSettings(sgBlocks, blocks::get, false);
+	private final RenderSettings blockStyle = RenderSettings.builder(sgBlocks).visible(blocks::get).throughWalls(false).build();
 
 	private final SettingGroup sgGoal = settings.group("Goal");
 	private final EnumSetting<GoalLook> goal = sgGoal.oneOf("Goal", GoalLook.GHOST)
@@ -83,7 +85,7 @@ public class BaritoneRender extends Module {
 		.defaultValue(SettingColor.accent()).visible(() -> goal.get() != GoalLook.NONE).build();
 	private final BoolSetting bob = sgGoal.bool("Float").description("The ghost hovers a little, bobbing, and its highlight pulses.").defaultValue(true)
 		.visible(() -> goal.get() == GoalLook.GHOST).build();
-	private final HighlightSettings goalStyle = new HighlightSettings(sgGoal, () -> goal.get() != GoalLook.NONE, true);
+	private final RenderSettings goalStyle = RenderSettings.builder(sgGoal).visible(() -> goal.get() != GoalLook.NONE).build();
 
 	/** The path's points this tick, rounded; and the blocks ahead to break and to place. */
 	private final TickCached<List<Vec3>> points = TickCached.of(this::roundedPath);
@@ -92,6 +94,20 @@ public class BaritoneRender extends Module {
 	private float ghostYaw = Float.NaN;
 	/** Baritone's own drawing as it was before this turned it off (null: not changed). */
 	private Object renderPathBefore, renderGoalBefore, renderBoxesBefore;
+
+	/** 2: the blocks' and the goal's highlight options became one look each, for both render modes (the Render window). */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) {
+			RenderSettings.migrate(saved, "Blocks", null);
+			RenderSettings.migrate(saved, "Goal", null);
+		}
+	}
 
 	public BaritoneRender() {
 		super(Tags.RENDER, "Baritone Render", "Draw Baritone's path, its work and its goal your way: a flowing line, marked blocks and a ghost of you.");
@@ -123,18 +139,18 @@ public class BaritoneRender extends Module {
 		if (goal.get() == GoalLook.GHOST) for (Baritone.GoalSpot spot : Baritone.goalSpots()) drawGhost(e, spot);
 	}
 
-	/** The blocks to break and place, and a Box goal, through the highlight shader. */
+	/** The blocks to break and place, and a Box goal, in the render mode. */
 	@Subscribe(inGame = true)
-	private void onHighlight(HighlightEvent.Shapes e) {
+	private void onShow(RenderEvent e) {
 		if (blocks.get()) {
 			List<BlockPos>[] w = work.get();
-			for (BlockPos p : w[0]) e.block(p, blockStyle.style(), breakColor.get().argb());
-			for (BlockPos p : w[1]) e.box(new AABB(p), blockStyle.style(), placeColor.get().argb());
+			for (BlockPos p : w[0]) e.block(p, blockStyle, breakColor.get().argb());
+			for (BlockPos p : w[1]) e.box(new AABB(p), blockStyle, placeColor.get().argb());
 		}
 		if (goal.get() == GoalLook.BOX) {
 			for (Baritone.GoalSpot spot : Baritone.goalSpots()) {
 				int y = spot.column() ? (int) columnFloor(spot.x(), spot.z()) : spot.y();
-				e.box(new AABB(new BlockPos(spot.x(), y, spot.z())), goalStyle.style(), goalColor.get().argb());
+				e.box(new AABB(new BlockPos(spot.x(), y, spot.z())), goalStyle, goalColor.get().argb());
 			}
 		}
 	}
@@ -251,7 +267,10 @@ public class BaritoneRender extends Module {
 		}
 		int color = goalColor.get().argb();
 		if (bob.get()) color = ARGB.multiplyAlpha(color, 0.7f + 0.3f * Mth.sin(time * 3f));
-		Ghosts.submit(e, state, at, opacity.getFloat(), goalStyle.style(), color);
+		// Outlined by the shader in Shader mode; in Box mode, a box around it.
+		boolean shader = RenderMode.current() == RenderMode.SHADER;
+		Ghosts.submit(e, state, at, opacity.getFloat(), shader ? goalStyle.style() : null, color);
+		if (!shader) goalStyle.box(e.shapes(), mc.player.getDimensions(Pose.STANDING).makeBoundingBox(at), color, 1);
 	}
 
 	/**

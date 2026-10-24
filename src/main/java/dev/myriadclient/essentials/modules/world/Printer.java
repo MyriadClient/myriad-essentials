@@ -5,7 +5,7 @@ import dev.myriadclient.api.build.Blueprint;
 import dev.myriadclient.api.build.Build;
 import dev.myriadclient.api.build.Target;
 import dev.myriadclient.api.event.Subscribe;
-import dev.myriadclient.api.event.events.Render3DEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.job.Job;
 import dev.myriadclient.api.job.MaterialSource;
@@ -14,13 +14,14 @@ import dev.myriadclient.api.job.Steps;
 import dev.myriadclient.api.job.Why;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.BoxStyle;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.service.Building;
 import dev.myriadclient.api.service.BuildingSettings;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
+import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.Baritone;
 import dev.myriadclient.api.util.TickCached;
@@ -86,7 +87,7 @@ public class Printer extends Module {
 	private final SettingGroup sgRender = settings.group("Render");
 	private final BoolSetting showPlan = sgRender.bool("Show Plan").description("Outline what's about to be placed, what's waiting, and what's stuck.")
 		.defaultValue(true).build();
-	private final BoxStyle style = new BoxStyle(sgRender, showPlan::get);
+	private final RenderSettings look = RenderSettings.builder(sgRender).visible(showPlan::get).build();
 
 	/** Ticks the job waits on a reason before a remedy runs (and between runs while it's still stuck on it). */
 	private static final int REMEDY_TICKS = 20;
@@ -111,6 +112,17 @@ public class Printer extends Module {
 	private boolean warnedNoBaritone;
 	/** The build behind the job, found once a tick: the plan drawn every frame and the count in the module list read it. */
 	private final TickCached<@Nullable Build> build = TickCached.of(this::findBuild);
+
+	/** 2: the plan's box options became one look for both render modes (the Render window). */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) RenderSettings.migrate(saved, "Render", null);
+	}
 
 	public Printer() {
 		super(Tags.WORLD, "Printer", "Builds Litematica schematics around you.");
@@ -396,8 +408,8 @@ public class Printer extends Module {
 		return left == 0 ? null : Long.toString(left);
 	}
 
-	@Subscribe
-	private void onRender(Render3DEvent e) {
-		if (showPlan.get()) BuildPlanRenderer.draw(e, build(), style);
+	@Subscribe(inGame = true)
+	private void onRender(RenderEvent e) {
+		if (showPlan.get()) BuildPlanRenderer.draw(e, build(), look);
 	}
 }

@@ -4,20 +4,18 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.combat.TargetSettings;
 import dev.myriadclient.api.combat.Targets;
 import dev.myriadclient.api.event.Subscribe;
-import dev.myriadclient.api.event.events.Render3DEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.hook.Hook;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.Renderer3D;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.service.RotationSettings;
 import dev.myriadclient.api.service.Rotations;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.SettingColor;
-import dev.myriadclient.api.util.ColorUtil;
-import dev.myriadclient.api.util.Entities;
 import dev.myriadclient.api.util.Interactions;
 import dev.myriadclient.api.util.ItemInfo;
 import dev.myriadclient.api.util.MathUtil;
@@ -88,6 +86,7 @@ public class KillAura extends Module {
 	private final SettingGroup sgRender = settings.group("Render");
 	private final BoolSetting render = sgRender.bool("Show Target").description("Outline the target.").defaultValue(true).build();
 	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(render::get).build();
+	private final RenderSettings look = RenderSettings.builder(sgRender).visible(render::get).throughWalls(false).build();
 
 	/** Switch: blocks beyond reach a target may be when the weapon is taken in hand, so its charge is full on arrival. */
 	private static final double PRE_CHARGE = 8;
@@ -241,10 +240,9 @@ public class KillAura extends Module {
 		return damage * mods.compute(Attributes.ATTACK_SPEED, 4, EquipmentSlot.MAINHAND);
 	}
 
-	@Subscribe
-	private void onRender(Render3DEvent e) {
-		if (!render.get() || target == null || !inGame()) return;
-		int c = color.argb();
-		Renderer3D.box(Entities.lerpedBox(target, e.tickDelta()), ColorUtil.withAlpha(c, 40), c, Renderer3D.ShapeMode.BOTH, false);
+	/** The target, in the render mode. */
+	@Subscribe(inGame = true)
+	private void onRender(RenderEvent e) {
+		if (render.get() && target != null) e.entity(target, look, color.argb());
 	}
 }

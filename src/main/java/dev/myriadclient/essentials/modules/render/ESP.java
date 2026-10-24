@@ -1,24 +1,21 @@
 package dev.myriadclient.essentials.modules.render;
 
-import com.mojang.blaze3d.vertex.PoseStack;
+import com.google.gson.JsonPrimitive;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.EntityRenderEvent;
-import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.event.events.PreviewEvent;
 import dev.myriadclient.api.event.events.Render2DEvent;
-import dev.myriadclient.api.event.events.Render3DEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.BoxStyle;
 import dev.myriadclient.api.render.Canvas;
 import dev.myriadclient.api.render.EntityGroups.Group;
 import dev.myriadclient.api.render.EntityGroups;
-import dev.myriadclient.api.render.HighlightSettings;
 import dev.myriadclient.api.render.ModelShapes;
 import dev.myriadclient.api.render.Projection;
+import dev.myriadclient.api.render.RenderMode;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.render.RenderStates;
-import dev.myriadclient.api.render.Renderer3D;
-import dev.myriadclient.api.render.ShapeBuilder;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
@@ -31,7 +28,6 @@ import dev.myriadclient.api.setting.SettingGroup;
 import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import net.minecraft.client.model.Model;
-import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -39,24 +35,36 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
 
 /**
  * Highlights entities through walls, by group (players, friends, monsters, animals, crystals, items, pearls, vehicles,
- * …) or by entity type, each group in its own theme colour:
+ * …) or by entity type, each group in its own theme colour. Drawn in the render mode (the Render window): in Shader
+ * mode an outline around each entity's exact shape (armour and held items included), with its glow, fill and gradient;
+ * in Box mode one of three styles:
  * <ul>
- * <li>Hitbox: a 3D box.</li>
- * <li>Box 2D: a screen-space rectangle, optionally with a health bar.</li>
+ * <li>3D: the hitbox.</li>
+ * <li>2D: a rectangle on screen, optionally with a health bar.</li>
  * <li>Model: a wireframe and fill of the entity's model; anything without a model falls back to its box.</li>
- * <li>Outline: a shader outline around the entity's exact silhouette (armour and held items included), with an
- * optional glow, a solid or dotted fill, and a gradient.</li>
  * </ul>
- * Storage draws containers with the same style options.
  */
 public class ESP extends Module {
-	public enum Mode {
-		HITBOX, BOX_2D, MODEL, OUTLINE
+	/** How entities are drawn in Box mode. */
+	public enum BoxStyle {
+		THREE_D("3D"), TWO_D("2D"), MODEL("Model");
+
+		private final String label;
+
+		BoxStyle(String label) {
+			this.label = label;
+		}
+
+		@Override
+		public String toString() {
+			return label;
+		}
 	}
 
 	private static final long FADE_MS = 200;
@@ -65,11 +73,13 @@ public class ESP extends Module {
 	private final EntityGroups targets = new EntityGroups(settings, Set.of(Group.PLAYERS, Group.FRIENDS, Group.MONSTERS, Group.CRYSTALS, Group.PEARLS));
 
 	private final SettingGroup sgRender = settings.group("Render");
-	private final EnumSetting<Mode> mode = sgRender.oneOf("Mode", Mode.HITBOX).description("Hitbox: 3D boxes. Box 2D: screen rectangles. Model: the model's wireframe. Outline: a shader outline around the exact shape.").build();
+	private final EnumSetting<BoxStyle> boxStyle = sgRender.oneOf("Box Style", BoxStyle.THREE_D)
+		.description("In Box mode: 3D hitboxes, 2D rectangles on screen, or the model's wireframe.")
+		.visible(() -> RenderMode.current() == RenderMode.BOX).build();
 	private final BoolSetting fade = sgRender.bool("Fade In").description("Fade entities in as they appear.").defaultValue(true).build();
-	private final BoolSetting healthBar = sgRender.bool("Health Bar").description("A health bar beside each box.").visible(() -> mode.get() == Mode.BOX_2D).build();
-	private final BoxStyle style = new BoxStyle(sgRender, () -> mode.get() != Mode.OUTLINE);
-	private final HighlightSettings outline = HighlightSettings.builder(sgRender).visible(() -> mode.get() == Mode.OUTLINE).sharing(style).build();
+	private final BoolSetting healthBar = sgRender.bool("Health Bar").description("A health bar beside each rectangle.")
+		.visible(() -> style() == BoxStyle.TWO_D).build();
+	private final RenderSettings look = RenderSettings.builder(sgRender).build();
 
 	/** When each entity id was first drawn, for the fade-in; ids not drawn this frame are dropped. */
 	private final Int2LongOpenHashMap appeared = new Int2LongOpenHashMap();
@@ -85,10 +95,13 @@ public class ESP extends Module {
 		return Preview.entity(EntityTypes.ZOMBIE);
 	}
 
-	/** 2: how it's drawn (the mode, fade, health bar and the box and outline styles) moved into one Render group. */
+	/**
+	 * 2: how it's drawn (the mode, fade, health bar and the box and outline styles) moved into one Render group. 3: the
+	 * render mode is everyone's (the Render window); Mode became the Box Style, and the box and outline options one look.
+	 */
 	@Override
 	public int settingsVersion() {
-		return 2;
+		return 3;
 	}
 
 	@Override
@@ -97,11 +110,25 @@ public class ESP extends Module {
 			for (String s : new String[]{"Mode", "Fade In", "Health Bar", "Shape", "Fill Opacity", "Line Width", "Through Walls"}) saved.move("General", s, "Render", s);
 			saved.renameGroup("Outline", "Render");
 		}
+		if (fromVersion == 2) {
+			saved.map("Render", "Mode", v -> new JsonPrimitive(switch (v.getAsString()) {
+				case "BOX_2D" -> BoxStyle.TWO_D.name();
+				case "MODEL" -> BoxStyle.MODEL.name();
+				default -> BoxStyle.THREE_D.name();
+			}));
+			saved.rename("Render", "Mode", "Box Style");
+			RenderSettings.migrate(saved, "Render", null);
+		}
 	}
 
 	@Override
 	protected void onEnable() {
 		appeared.clear();
+	}
+
+	/** The Box mode style, or null in Shader mode. */
+	private @Nullable BoxStyle style() {
+		return RenderMode.current() == RenderMode.BOX ? boxStyle.get() : null;
 	}
 
 	/** The colour to draw {@code e} in, or 0 to skip it. */
@@ -125,97 +152,69 @@ public class ESP extends Module {
 		return since == 0 ? 0 : Mth.clamp((System.currentTimeMillis() - since) / (float) FADE_MS, 0, 1);
 	}
 
-	private void forgetUnseen() {
-		appeared.keySet().retainAll(seen);
-		seen.clear();
-	}
-
-	/** Model mode: as an entity's model is submitted, its wireframe and fill go with it. */
+	/** Every entity to show, in the render mode; 2D rectangles and models are drawn as the frame goes on. */
 	@Subscribe(inGame = true)
-	@SuppressWarnings("unchecked")
-	private void onModel(EntityRenderEvent.Model event) {
-		if (mode.get() != Mode.MODEL) return;
-		LivingEntityRenderState state = event.state();
-		Model<?> model = event.model();
-		PoseStack poseStack = event.pose();
-		SubmitNodeCollector submits = event.submits();
-		Entity e = RenderStates.entity(state);
-		if (e == null) return;
-		int c = colorFor(e);
-		if (c == 0) return;
-		float f = fadeOf(e);
-		Model<LivingEntityRenderState> m = (Model<LivingEntityRenderState>) model;
-		int fill = style.fill(c, f);
-		if (ColorUtil.alpha(fill) > 0 && style.shape.get() != Renderer3D.ShapeMode.LINES) {
-			ModelShapes.fill(submits, poseStack, m, state, fill, style.throughWalls.get());
-		}
-		if (style.shape.get() != Renderer3D.ShapeMode.FILL) {
-			ModelShapes.wireframe(submits, poseStack, m, state, style.line(c, f), style.lineWidth.getFloat(), style.throughWalls.get());
-		}
-	}
-
-	/** Hitbox mode on a preview's entity; Outline mode outlines it through {@link #onHighlight}, as in the world. */
-	@Subscribe(inGame = true)
-	private void onPreview(PreviewEvent e) {
-		if (mode.get() != Mode.HITBOX || e.entity() == null) return;
-		int c = colorFor(e.entity());
-		if (c != 0) style.draw(e.shapes(), e.box(), c, 1);
-	}
-
-	/** Outline mode: each entity as it's prepared for drawing. */
-	@Subscribe(inGame = true)
-	private void onHighlight(HighlightEvent.Entity e) {
-		if (mode.get() != Mode.OUTLINE) return;
-		Entity entity = e.entity();
-		int c = colorFor(entity);
-		if (c == 0) return;
-		float f = fadeFor(entity, System.currentTimeMillis());
-		e.highlight(outline.style(), ColorUtil.withAlpha(c, (int) (ColorUtil.alpha(c) * f)));
-	}
-
-	@Subscribe
-	private void onRender3D(Render3DEvent e) {
-		if (!inGame() || mode.get() == Mode.BOX_2D) return;
-		// Outline mode highlights entities as they're drawn (onHighlight); only the fade bookkeeping is left.
-		if (mode.get() == Mode.OUTLINE) {
-			forgetUnseen();
-			return;
-		}
-		ShapeBuilder shapes = e.shapes();
+	private void onRender(RenderEvent e) {
+		BoxStyle style = style();
 		long now = System.currentTimeMillis();
 		for (Entity entity : mc.level.entitiesForRendering()) {
 			int c = colorFor(entity);
 			if (c == 0) continue;
 			float f = fadeFor(entity, now);
-			// Model mode: models draw themselves (submitModel); anything without one falls back to its box.
-			if (mode.get() == Mode.MODEL && entity instanceof LivingEntity) continue;
-			style.draw(shapes, Entities.lerpedBox(entity, e.tickDelta()), c, f);
+			if (style == BoxStyle.TWO_D || style == BoxStyle.MODEL && entity instanceof LivingEntity) continue;
+			e.entity(entity, look, ColorUtil.withAlpha(c, (int) (ColorUtil.alpha(c) * f)));
 		}
-		forgetUnseen();
+		appeared.keySet().retainAll(seen);
+		seen.clear();
 	}
 
-	@Subscribe
+	/** A preview's entity, as it would be in the world. */
+	@Subscribe(inGame = true)
+	private void onPreview(PreviewEvent e) {
+		if (e.entity() == null) return;
+		int c = colorFor(e.entity());
+		if (c != 0) e.render(look, c);
+	}
+
+	/** Box mode's Model style: as an entity's model is submitted, its wireframe and fill go with it. */
+	@Subscribe(inGame = true)
+	@SuppressWarnings("unchecked")
+	private void onModel(EntityRenderEvent.Model event) {
+		if (style() != BoxStyle.MODEL) return;
+		LivingEntityRenderState state = event.state();
+		Entity e = RenderStates.entity(state);
+		if (e == null) return;
+		int c = colorFor(e);
+		if (c == 0) return;
+		float f = fadeOf(e);
+		Model<LivingEntityRenderState> m = (Model<LivingEntityRenderState>) event.model();
+		int fill = look.boxFill(c, f), line = look.boxLine(c, f);
+		if (fill != 0) ModelShapes.fill(event.submits(), event.pose(), m, state, fill, look.throughWalls());
+		if (line != 0) ModelShapes.wireframe(event.submits(), event.pose(), m, state, line, look.lineWidth.getFloat(), look.throughWalls());
+	}
+
+	/** Box mode's 2D style: a rectangle around each entity on screen. */
+	@Subscribe(inGame = true)
 	private void onRender2D(Render2DEvent e) {
-		if (!inGame() || mode.get() != Mode.BOX_2D) return;
+		if (style() != BoxStyle.TWO_D) return;
 		Canvas c = e.canvas();
-		long now = System.currentTimeMillis();
 		for (Entity entity : mc.level.entitiesForRendering()) {
 			int color = colorFor(entity);
 			if (color == 0) continue;
 			float[] r = project(Entities.lerpedBox(entity, e.tickDelta()));
 			if (r == null) continue;
-			drawBox2D(c, entity, r, color, fadeFor(entity, now));
+			drawBox2D(c, entity, r, color, fadeOf(entity));
 		}
-		forgetUnseen();
 	}
 
 	private void drawBox2D(Canvas c, Entity entity, float[] r, int color, float f) {
 		float x = r[0], y = r[1], w = r[2] - r[0], h = r[3] - r[1];
-		float width = style.lineWidth.getFloat();
-		if (style.shape.get() != Renderer3D.ShapeMode.LINES) c.rect(x, y, w, h, style.fill(color, f));
-		if (style.shape.get() != Renderer3D.ShapeMode.FILL) {
+		float width = look.lineWidth.getFloat();
+		int fill = look.boxFill(color, f), line = look.boxLine(color, f);
+		if (fill != 0) c.rect(x, y, w, h, fill);
+		if (line != 0) {
 			c.outline(x - 0.5f, y - 0.5f, w + 1, h + 1, 0, width + 1, ColorUtil.withAlpha(0xFF000000, (int) (ColorUtil.alpha(color) * f / 2)));
-			c.outline(x, y, w, h, 0, width, style.line(color, f));
+			c.outline(x, y, w, h, 0, width, line);
 		}
 		if (healthBar.get() && entity instanceof LivingEntity living) {
 			float hp = Mth.clamp(living.getHealth() / living.getMaxHealth(), 0, 1);

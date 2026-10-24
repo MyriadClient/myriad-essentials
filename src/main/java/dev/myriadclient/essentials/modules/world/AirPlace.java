@@ -3,15 +3,19 @@ package dev.myriadclient.essentials.modules.world;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.InteractEvent;
-import dev.myriadclient.api.event.events.Render3DEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.Renderer3D;
+import dev.myriadclient.api.render.HighlightStyle;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.service.Placement;
+import dev.myriadclient.api.setting.BoolSetting;
+import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.SettingColor;
+import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.Reach;
 import dev.myriadclient.essentials.modules.render.BlockHighlight;
 import net.minecraft.core.BlockPos;
@@ -30,6 +34,12 @@ import net.minecraft.world.phys.Vec3;
 public class AirPlace extends Module {
 	private final DoubleSetting distance = sgGeneral.decimal("Distance").description("How far in front of you the block goes.")
 		.defaultValue(3).range(1, 6).decimals(1).build();
+	private final SettingGroup sgRender = settings.group("Render");
+	private final BoolSetting showTarget = sgRender.bool("Show Target").description("Where the block will go (Block Highlight shows it instead while it's on).")
+		.defaultValue(true).build();
+	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(showTarget::get).build();
+	private final RenderSettings look = RenderSettings.builder(sgRender).visible(showTarget::get)
+		.defaults(HighlightStyle.OUTLINE.withFill(HighlightStyle.Fill.NONE)).throughWalls(false).build();
 
 	/** How far back along the look each try steps when the space is out of reach. */
 	private static final double STEP = 0.2;
@@ -89,12 +99,10 @@ public class AirPlace extends Module {
 		Myriad.placement().place(this, pos, mc.player.getInventory().getSelectedSlot(), options());
 	}
 
-	@Subscribe
-	private void onRender(Render3DEvent e) {
+	/** Where the block will go, unless Block Highlight shows it in its own look. */
+	@Subscribe(inGame = true)
+	private void onRender(RenderEvent e) {
 		BlockPos pos = target;
-		// Block Highlight draws it in its own look.
-		if (pos == null || Modules.active(BlockHighlight.class) != null) return;
-		int color = SettingColor.role(SettingColor.Mode.ACCENT).argb();
-		Renderer3D.box(new AABB(pos), 0, color, Renderer3D.ShapeMode.LINES, false);
+		if (pos != null && showTarget.get() && Modules.active(BlockHighlight.class) == null) e.box(new AABB(pos), look, color.argb());
 	}
 }

@@ -6,11 +6,12 @@ import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.HighlightSettings;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.IntSetting;
+import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.ui.widget.Preview;
@@ -49,17 +50,16 @@ public class ViewModel extends Module {
 	public final DoubleSetting scale = sgScale.decimal("Scale").defaultValue(1).range(0.1, 3).build();
 	public final DoubleSetting offhandScale = sgScale.decimal("Offhand Scale").defaultValue(1).range(0.1, 3).build();
 
-	private final SettingGroup sgHandHighlight = settings.group("Hand Highlight");
-	private final BoolSetting handHighlight = sgHandHighlight.bool("Enabled").description("Highlight your bare hand (vanilla only shows it while your main hand is empty).")
+	private final SettingGroup sgRender = settings.group("Render");
+	private final BoolSetting handHighlight = sgRender.bool("Hand").description("Highlight your bare hand (vanilla only shows it while your main hand is empty).")
 		.onChanged(v -> listenForHighlights()).build();
-	private final ColorSetting handColor = sgHandHighlight.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(handHighlight::get).build();
-	private final HighlightSettings handStyle = HighlightSettings.builder(sgHandHighlight).visible(handHighlight::get).noThroughWalls().build();
-
-	private final SettingGroup sgItemHighlight = settings.group("Item Highlight");
-	private final BoolSetting itemHighlight = sgItemHighlight.bool("Enabled").description("Highlight the items in your hands.")
+	private final ColorSetting handColor = sgRender.color("Hand Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(handHighlight::get).build();
+	/** Hands are only ever drawn by the shader: they have no box. */
+	private final RenderSettings handStyle = RenderSettings.builder(sgRender).named("Hand").visible(handHighlight::get).noThroughWalls().alwaysShader().build();
+	private final BoolSetting itemHighlight = sgRender.bool("Item").description("Highlight the items in your hands.")
 		.onChanged(v -> listenForHighlights()).build();
-	private final ColorSetting itemColor = sgItemHighlight.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(itemHighlight::get).build();
-	private final HighlightSettings itemStyle = HighlightSettings.builder(sgItemHighlight).visible(itemHighlight::get).noThroughWalls().build();
+	private final ColorSetting itemColor = sgRender.color("Item Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(itemHighlight::get).build();
+	private final RenderSettings itemStyle = RenderSettings.builder(sgRender).named("Item").visible(itemHighlight::get).noThroughWalls().alwaysShader().build();
 
 	/**
 	 * Listens for hand highlights only while one is on: while anything listens for highlights, Myriad draws vanilla's
@@ -67,6 +67,25 @@ public class ViewModel extends Module {
 	 */
 	private final HandHighlights highlights = new HandHighlights();
 	private boolean listening;
+
+	/** 2: the hand's and items' highlights moved into one Render group, as its Hand and Item looks. */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) {
+			for (String[] part : new String[][]{{"Hand Highlight", "Hand"}, {"Item Highlight", "Item"}}) {
+				saved.move(part[0], "Enabled", "Render", part[1]);
+				for (String s : new String[]{"Color", "Outline Width", "Glow", "Fill", "Fill Opacity", "Dot Spacing", "Dot Size", "Gradient", "Gradient Color"}) {
+					saved.move(part[0], s, "Render", part[1] + " " + s);
+				}
+				RenderSettings.migrate(saved, "Render", part[1]);
+			}
+		}
+	}
 
 	public ViewModel() {
 		super(Tags.RENDER, "View Model", "Move, rotate, scale, hide or highlight your first-person hands.");

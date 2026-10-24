@@ -1,23 +1,13 @@
 package dev.myriadclient.essentials.modules.render;
 
 import dev.myriadclient.api.event.Subscribe;
-import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.event.events.PreviewEvent;
-import dev.myriadclient.api.event.events.PacketEvent;
-import dev.myriadclient.api.event.events.Render3DEvent;
-import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.event.events.WorldEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.BoxStyle;
-import dev.myriadclient.api.render.HighlightSettings;
-import dev.myriadclient.api.render.MergedBoxes;
-import dev.myriadclient.api.render.MeshBuilder;
-import dev.myriadclient.api.render.Renderer3D;
-import dev.myriadclient.api.render.ShapeBuilder;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
-import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
@@ -28,8 +18,6 @@ import dev.myriadclient.api.util.Entities;
 import dev.myriadclient.api.world.ChunkCache;
 import dev.myriadclient.api.setting.SavedSettings;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ClientboundBlockEventPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.animal.equine.AbstractChestedHorse;
 import net.minecraft.world.entity.vehicle.boat.ChestBoat;
@@ -40,8 +28,6 @@ import net.minecraft.world.entity.vehicle.minecart.MinecartHopper;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.EnderChestBlock;
-import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
@@ -56,50 +42,28 @@ import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
 import net.minecraft.world.level.block.entity.TrappedChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BiConsumer;
 
 /**
  * Highlights storage: chests, trapped and ender chests, barrels, shulker boxes, hoppers, dispensers and droppers,
  * furnaces and other containers, plus storage you can't place (chest and hopper minecarts, chest boats and rafts,
  * donkeys, mules and llamas carrying chests). Each kind can be turned off and has its own colour; double chests are one
- * box, and shulker boxes can take their dye colour.
- * <ul>
- * <li>Lids: a chest or shulker box that opens is drawn as it animates, lid and all, then goes back to its box.</li>
- * <li>Merge: touching containers of the same colour are drawn as one shape that fits their hitboxes, so a wall of
- * chests is one outline; a chest opening in it keeps its body in the shape and only the lid moves.</li>
- * <li>Outline mode: a shader outline (glow, solid or dotted fill, gradient) instead of boxes; touching containers
- * always share one outline, and storage entities are outlined by their exact shape.</li>
- * </ul>
+ * box, and shulker boxes can take their dye colour. Drawn in the render mode (the Render window): in Shader mode an
+ * outline around each container (touching ones of a colour share it) and around storage entities' exact shape; in Box
+ * mode a box around each.
+ * <p>
  * Blocks are found per chunk with a {@link ChunkCache} (scanned when a chunk loads and again only when a block in it
- * changes) and their boxes stay on the GPU, so settings only re-mesh. Only containers whose lids are moving, and
- * entities, are drawn each frame. Tracers draws lines to everything this shows (its Storage option).
+ * changes) and their boxes stay on the GPU, so settings only re-mesh; only entities are handed over each frame. Tracers
+ * draws lines to everything this shows (its Storage option).
  */
 public class Storage extends Module {
-	public enum Mode {
-		BOXES, OUTLINE
-	}
-
-	/** Chest model, in sixteenths of a block: the body is 10 tall, the lid sits from 9 to 14 and hinges at the back. */
-	private static final double BODY_TOP = 10 / 16.0, LID_BOTTOM = 9 / 16.0, LID_HEIGHT = 5 / 16.0;
-	/** Shulker box model: the base is the back half; the lid, 12/16 deep from 4/16, rises half a block and twists 270°. */
-	private static final double SHULKER_BASE = 8 / 16.0, SHULKER_LID_FROM = 4 / 16.0, SHULKER_RISE = 0.5;
-	/** How long after an open or close event a lid is drawn live, at least (the animation then has to settle). */
-	private static final long LID_MS = 1000;
-
 	private final IntSetting range = sgGeneral.integer("Range").description("Chunks around you.").defaultValue(8).range(1, 32).build();
 
 	private final SettingGroup sgBlocks = settings.group("Blocks");
@@ -123,40 +87,30 @@ public class Storage extends Module {
 	private final Kind chestAnimals = kind(sgEntities, "Chest Animals", false, SettingColor.Mode.GREEN);
 
 	private final SettingGroup sgRender = settings.group("Render");
-	private final BoolSetting lids = sgRender.bool("Lids").description("Follow chest and shulker box lids as they open.").defaultValue(true).build();
-	private final EnumSetting<Mode> mode = sgRender.oneOf("Mode", Mode.BOXES).description("Boxes: 3D boxes. Outline: a shader outline around each container.").build();
-	private final BoolSetting merge = sgRender.bool("Merge").description("Draw touching containers of the same colour as one outline.")
-		.visible(() -> mode.get() == Mode.BOXES).build();
-	private final BoxStyle style = new BoxStyle(sgRender, () -> mode.get() == Mode.BOXES);
-	private final HighlightSettings outline = HighlightSettings.builder(sgRender).visible(() -> mode.get() == Mode.OUTLINE).sharing(style).build();
+	private final RenderSettings look = RenderSettings.builder(sgRender).build();
 
 	/** Every storage block per chunk, whether or not its kind is shown: toggling a kind only re-meshes. */
 	private final ChunkCache<List<Found>> found = ChunkCache.of(this, this::scan)
 		.range(range::get)
-		.mesh(this::mesh)
+		.boxes(this::boxes, look)
 		.neighbours()
 		.build();
-
-	/** Containers whose lids are moving, by the position they're drawn from, and when they last opened or closed. */
-	private final Map<BlockPos, Long> animating = new HashMap<>();
-	/** Open/close events from the network thread, handled on the next tick. */
-	private final Queue<BlockPos> lidEvents = new ConcurrentLinkedQueue<>();
 
 	private record Kind(BoolSetting enabled, ColorSetting color) {
 	}
 
-	private enum Lid {
-		NONE, CHEST, SHULKER
+	/** {@code tint} is a shulker box's dye, or 0. */
+	private record Found(AABB box, Kind kind, int tint) {
 	}
 
-	/** {@code pos} is the block it's drawn from (a double chest's left half); {@code tint} a shulker box's dye, or 0. */
-	private record Found(BlockPos pos, AABB box, Kind kind, int tint, Lid lid) {
-	}
-
-	/** 2: how it's drawn (lids, the mode, merging and the box and outline styles) moved into one Render group. */
+	/**
+	 * 2: how it's drawn (lids, the mode, merging and the box and outline styles) moved into one Render group. 3: the
+	 * render mode is everyone's (the Render window), boxes are plain (no lids, no merging), and the box and outline
+	 * options one look.
+	 */
 	@Override
 	public int settingsVersion() {
-		return 2;
+		return 3;
 	}
 
 	@Override
@@ -165,10 +119,15 @@ public class Storage extends Module {
 			for (String s : new String[]{"Lids", "Mode", "Merge", "Shape", "Fill Opacity", "Line Width", "Through Walls"}) saved.move("General", s, "Render", s);
 			saved.renameGroup("Outline", "Render");
 		}
+		if (fromVersion == 2) {
+			for (String s : new String[]{"Lids", "Mode", "Merge"}) saved.remove("Render", s);
+			RenderSettings.migrate(saved, "Render", null);
+		}
 	}
 
 	public Storage() {
 		super(Tags.RENDER, "Storage", "Highlights chests, shulker boxes and other storage through walls.");
+		// A kind turned on or off, or a colour: the boxes are made again from what was found.
 		settings.onAnyChanged(s -> found.remeshAll());
 	}
 
@@ -178,43 +137,28 @@ public class Storage extends Module {
 		return Preview.block(Blocks.CHEST);
 	}
 
-	/** A preview's container (a block, or a chest minecart, boat or pack animal) in the mode's look. */
+	/** A preview's container (a block, or a chest minecart, boat or pack animal), as it would be in the world. */
 	@Subscribe(inGame = true)
 	private void onPreview(PreviewEvent e) {
 		Kind k;
 		int color;
-		AABB box = e.box();
 		if (e.block() != null && e.block().getBlock() instanceof EntityBlock block) {
 			BlockEntity be = block.newBlockEntity(BlockPos.ZERO, e.block());
 			k = be == null ? null : kindOf(be);
 			if (k == null) return;
-			int tint = tintOf(be);
-			color = k == shulkers && !dyedShulkers.get() || tint == 0 ? k.color.argb() : tint;
-			if (!(block instanceof ShulkerBoxBlock)) {
-				VoxelShape shape = e.block().getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
-				if (!shape.isEmpty()) box = shape.bounds();
-			}
+			color = colorOf(k, tintOf(be));
 		} else if (e.entity() != null) {
 			k = kindOf(e.entity());
 			if (k == null) return;
 			color = k.color.argb();
 		} else return;
-		if (!k.enabled.get()) return;
-		// An entity is outlined through onHighlightEntity, as in the world.
-		if (mode.get() == Mode.BOXES) style.draw(e.shapes(), box, color, 1);
-		else if (e.block() != null) e.highlight(outline.style(), color);
+		if (k.enabled.get()) e.render(look, color);
 	}
 
 	private Kind kind(SettingGroup group, String name, boolean on, SettingColor.Mode color) {
 		BoolSetting enabled = group.bool(name).defaultValue(on).build();
 		ColorSetting c = group.color(name + " Color").defaultValue(SettingColor.role(color)).visible(enabled::get).build();
 		return new Kind(enabled, c);
-	}
-
-	@Override
-	protected void onDisable() {
-		animating.clear();
-		lidEvents.clear();
 	}
 
 	@Override
@@ -241,6 +185,16 @@ public class Storage extends Module {
 		}
 	}
 
+	/** The containers kept for every chunk, and the storage entities around. */
+	@Subscribe(inGame = true)
+	private void onRender(RenderEvent e) {
+		e.chunks(found);
+		for (Entity entity : mc.level.entitiesForRendering()) {
+			Kind k = kindOf(entity);
+			if (k != null && k.enabled.get()) e.entity(entity, look, k.color.argb());
+		}
+	}
+
 	// ---- per chunk --------------------------------------------------------------------------------------------------
 
 	private List<Found> scan(LevelChunk chunk) {
@@ -251,48 +205,22 @@ public class Storage extends Module {
 			AABB box = boxOf(be);
 			if (box == null) continue;
 			if (list == null) list = new ArrayList<>();
-			Lid lid = be instanceof ChestBlockEntity || be instanceof EnderChestBlockEntity ? Lid.CHEST : be instanceof ShulkerBoxBlockEntity ? Lid.SHULKER : Lid.NONE;
-			list.add(new Found(be.getBlockPos().immutable(), box, k, tintOf(be), lid));
+			list.add(new Found(box, k, tintOf(be)));
 		}
 		return list;
 	}
 
-	private void mesh(List<Found> list, MeshBuilder mesh) {
-		if (mode.get() == Mode.OUTLINE) return;
-		mesh.lineWidth(style.lineWidth.getFloat());
-		if (merge.get()) {
-			List<BlockPos> cells = new ArrayList<>();
-			for (Found f : list) if (f.kind.enabled.get()) for (BlockPos cell : cells(f)) cells.add(cell.immutable());
-			boolean lines = style.shape.get() != Renderer3D.ShapeMode.FILL, fills = style.shape.get() != Renderer3D.ShapeMode.LINES;
-			MergedBoxes.draw(mesh, cells, mergeLookup, g -> fills ? style.fill(g, 1) : 0, g -> lines ? style.line(g, 1) : 0, style.throughWalls.get());
-			return;
-		}
-		for (Found f : list) if (f.kind.enabled.get()) style.draw(mesh, meshBox(f), color(f), 1);
+	/** A chunk's containers of the kinds shown, as boxes in their colours. */
+	private void boxes(List<Found> list, ChunkCache.BoxSink out) {
+		for (Found f : list) if (f.kind.enabled.get()) out.box(f.box, color(f));
 	}
 
-	/** What goes in the mesh: while a lid moves, a chest keeps its body there and a shulker box its base. */
-	private AABB meshBox(Found f) {
-		if (f.lid == Lid.NONE || !animating.containsKey(f.pos)) return f.box;
-		if (f.lid == Lid.SHULKER) return shulkerBase(shulkerFacing(f.pos)).move(f.pos);
-		return new AABB(f.box.minX, f.box.minY, f.box.minZ, f.box.maxX, Math.min(f.box.maxY, f.box.minY + BODY_TOP), f.box.maxZ);
-	}
-
-	private Direction shulkerFacing(BlockPos pos) {
-		BlockState state = mc.level.getBlockState(pos);
-		return state.hasProperty(ShulkerBoxBlock.FACING) ? state.getValue(ShulkerBoxBlock.FACING) : Direction.UP;
-	}
-
-	/** A shulker box's base within its block: the half at its back. */
-	private static AABB shulkerBase(Direction facing) {
-		double[] min = {0, 0, 0}, max = {1, 1, 1};
-		int i = facing.getAxis().ordinal();
-		if (facing.getAxisDirection() == Direction.AxisDirection.POSITIVE) max[i] = SHULKER_BASE;
-		else min[i] = 1 - SHULKER_BASE;
-		return new AABB(min[0], min[1], min[2], max[0], max[1], max[2]);
+	private int colorOf(Kind k, int tint) {
+		return k == shulkers && !dyedShulkers.get() || tint == 0 ? k.color.argb() : tint;
 	}
 
 	private int color(Found f) {
-		return f.kind == shulkers && !dyedShulkers.get() ? f.kind.color.argb() : f.tint != 0 ? f.tint : f.kind.color.argb();
+		return colorOf(f.kind, f.tint);
 	}
 
 	private Kind kindOf(BlockEntity be) {
@@ -339,237 +267,9 @@ public class Storage extends Module {
 	}
 
 	private AABB shapeBox(BlockState state, BlockPos pos) {
-		// A shulker box's shape grows while it's open; its box is the closed cube (an opening lid is drawn live).
+		// A shulker box's shape grows while it's open: its box is the closed cube.
 		if (state.getBlock() instanceof ShulkerBoxBlock) return new AABB(pos);
 		VoxelShape shape = state.getShape(mc.level, pos);
 		return shape.isEmpty() ? new AABB(pos) : shape.bounds().move(pos);
-	}
-
-	/** The position a container is drawn from: a double chest's right half maps to its left half. */
-	private BlockPos drawnFrom(BlockPos pos) {
-		BlockState state = mc.level.getBlockState(pos);
-		if (state.hasProperty(ChestBlock.TYPE) && state.getValue(ChestBlock.TYPE) == ChestType.RIGHT) return pos.relative(ChestBlock.getConnectedDirection(state));
-		return pos;
-	}
-
-	// ---- merging ----------------------------------------------------------------------------------------------------
-
-	/** The colour the container at {@code pos} is drawn in, or 0 if none is drawn there. */
-	private int colorAt(BlockPos pos) {
-		BlockEntity be = mc.level.getBlockEntity(pos);
-		Kind k = be == null ? null : kindOf(be);
-		if (k == null || !k.enabled.get()) return 0;
-		int tint = tintOf(be);
-		return k == shulkers && !dyedShulkers.get() ? k.color.argb() : tint != 0 ? tint : k.color.argb();
-	}
-
-	/** The blocks a container covers (both halves of a double chest). */
-	private static Iterable<BlockPos> cells(Found f) {
-		return BlockPos.betweenClosed(BlockPos.containing(f.box.minX, f.box.minY, f.box.minZ), BlockPos.containing(f.box.maxX - 1e-4, f.box.maxY - 1e-4, f.box.maxZ - 1e-4));
-	}
-
-	/**
-	 * What Merge joins: containers of the same colour, each in its own shape. While a lid moves, a shulker box counts as
-	 * its base and a chest as its body.
-	 */
-	private final MergedBoxes.Lookup mergeLookup = new MergedBoxes.Lookup() {
-		@Override
-		public int group(BlockPos pos) {
-			return colorAt(pos);
-		}
-
-		@Override
-		public AABB shape(BlockPos pos) {
-			BlockState state = mc.level.getBlockState(pos);
-			if (state.getBlock() instanceof ShulkerBoxBlock) return animating.containsKey(pos) ? shulkerBase(shulkerFacing(pos)) : null;
-			VoxelShape shape = state.getShape(mc.level, pos);
-			AABB own = shape.isEmpty() ? new AABB(0, 0, 0, 1, 1, 1) : shape.bounds();
-			BlockEntity be = mc.level.getBlockEntity(pos);
-			if ((be instanceof ChestBlockEntity || be instanceof EnderChestBlockEntity) && animating.containsKey(drawnFrom(pos))) {
-				own = new AABB(own.minX, own.minY, own.minZ, own.maxX, Math.min(own.maxY, BODY_TOP), own.maxZ);
-			}
-			return own;
-		}
-	};
-
-	// ---- lids -------------------------------------------------------------------------------------------------------
-
-	/** Chests and shulker boxes tell the client when they open and close: start drawing those live. */
-	@Subscribe(packets = ClientboundBlockEventPacket.class)
-	private void onPacket(PacketEvent.Receive e) {
-		if (!lids.get() || !(e.packet() instanceof ClientboundBlockEventPacket p) || p.getB0() != 1) return;
-		if (p.getBlock() instanceof ChestBlock || p.getBlock() instanceof EnderChestBlock || p.getBlock() instanceof ShulkerBoxBlock) lidEvents.add(p.getPos());
-	}
-
-	@Subscribe
-	private void onWorld(WorldEvent e) {
-		animating.clear();
-		lidEvents.clear();
-	}
-
-	@Subscribe(inGame = true)
-	private void onTick(TickEvent.Post e) {
-		long now = System.currentTimeMillis();
-		for (BlockPos pos; (pos = lidEvents.poll()) != null; ) {
-			BlockPos from = drawnFrom(pos);
-			// Out of the mesh and drawn live until the lid settles.
-			if (animating.put(from, now) == null) remesh(from);
-		}
-		for (Iterator<Map.Entry<BlockPos, Long>> it = animating.entrySet().iterator(); it.hasNext(); ) {
-			Map.Entry<BlockPos, Long> en = it.next();
-			if (now - en.getValue() < LID_MS || openness(en.getKey(), 1) > 0) continue;
-			it.remove();
-			remesh(en.getKey());
-		}
-	}
-
-	/** Re-meshes the chunk of {@code pos}, and the chunks beside it, which a merged shape may reach into. */
-	private void remesh(BlockPos pos) {
-		found.invalidate(pos);
-		if (!merge.get()) return;
-		for (Direction d : Direction.Plane.HORIZONTAL) {
-			BlockPos n = pos.relative(d);
-			if ((n.getX() >> 4) != (pos.getX() >> 4) || (n.getZ() >> 4) != (pos.getZ() >> 4)) found.invalidate(n);
-		}
-	}
-
-	/** How far open (0-1) the chest or shulker box at {@code pos} is; a double chest takes its more open half. */
-	private float openness(BlockPos pos, float tickDelta) {
-		BlockEntity be = mc.level.getBlockEntity(pos);
-		if (be instanceof ShulkerBoxBlockEntity box) return box.getProgress(tickDelta);
-		float open = be instanceof ChestBlockEntity chest ? chest.getOpenNess(tickDelta) : be instanceof EnderChestBlockEntity ender ? ender.getOpenNess(tickDelta) : 0;
-		BlockState state = mc.level.getBlockState(pos);
-		if (be instanceof ChestBlockEntity && state.hasProperty(ChestBlock.TYPE) && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE
-			&& mc.level.getBlockEntity(pos.relative(ChestBlock.getConnectedDirection(state))) instanceof ChestBlockEntity other) {
-			open = Math.max(open, other.getOpenNess(tickDelta));
-		}
-		return open;
-	}
-
-	/** Draws what the mesh leaves out while a lid moves: a chest's lid, or a shulker box's rising, twisting lid. */
-	private void drawLive(ShapeBuilder shapes, Found f, float tickDelta) {
-		int color = color(f);
-		BlockState state = mc.level.getBlockState(f.pos);
-		if (f.lid == Lid.SHULKER) {
-			drawShulkerLid(shapes, f.pos, shulkerFacing(f.pos), openness(f.pos, tickDelta), color);
-			return;
-		}
-		if (f.lid != Lid.CHEST) return;
-		Direction facing = state.hasProperty(BlockStateProperties.HORIZONTAL_FACING) ? state.getValue(BlockStateProperties.HORIZONTAL_FACING) : Direction.SOUTH;
-		float open = openness(f.pos, tickDelta);
-		// Vanilla's easing for the lid swing.
-		open = 1 - (1 - open) * (1 - open) * (1 - open);
-		drawLid(shapes, f.box, facing, open * Math.PI / 2, color);
-	}
-
-	/** A shulker box's lid, risen and twisted by {@code progress} (0-1) along {@code facing}, as the model does. */
-	private void drawShulkerLid(ShapeBuilder shapes, BlockPos pos, Direction facing, float progress, int color) {
-		Vec3 n = Vec3.atLowerCornerOf(facing.getUnitVec3i());
-		// Two axes across the facing, and the middle of the box's back face.
-		Vec3 u = facing.getAxis() == Direction.Axis.X ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
-		Vec3 v = n.cross(u);
-		Vec3 back = Vec3.atCenterOf(pos).subtract(n.scale(0.5));
-		double rise = SHULKER_RISE * progress, angle = Math.toRadians(270 * progress), cos = Math.cos(angle), sin = Math.sin(angle);
-		Vec3[] c = new Vec3[8];
-		for (int i = 0; i < 8; i++) {
-			double x = (i & 1) == 0 ? -0.5 : 0.5, y = (i & 2) == 0 ? -0.5 : 0.5;
-			double h = ((i & 4) == 0 ? SHULKER_LID_FROM : 1) + rise;
-			c[i] = back.add(n.scale(h)).add(u.scale(x * cos - y * sin)).add(v.scale(x * sin + y * cos));
-		}
-		orientedBox(shapes, c, color);
-	}
-
-	/** The lid of a chest occupying {@code b}, swung up by {@code angle} about the hinge along its back edge. */
-	private void drawLid(ShapeBuilder shapes, AABB b, Direction facing, double angle, int color) {
-		boolean alongX = facing.getAxis() == Direction.Axis.Z;
-		double lo = alongX ? b.minX : b.minZ, hi = alongX ? b.maxX : b.maxZ;
-		int front = facing.getAxisDirection().getStep();
-		double back = front > 0 ? (alongX ? b.minZ : b.minX) : (alongX ? b.maxZ : b.maxX);
-		double depth = alongX ? b.maxZ - b.minZ : b.maxX - b.minX;
-		double hingeY = b.minY + LID_BOTTOM, cos = Math.cos(angle), sin = Math.sin(angle);
-		Vec3[] c = new Vec3[8];
-		for (int i = 0; i < 8; i++) {
-			double side = (i & 1) == 0 ? lo : hi, d = (i & 2) == 0 ? 0 : depth, h = (i & 4) == 0 ? 0 : LID_HEIGHT;
-			double up = h * cos + d * sin, dep = d * cos - h * sin;
-			double across = back + front * dep;
-			c[i] = alongX ? new Vec3(side, hingeY + up, across) : new Vec3(across, hingeY + up, side);
-		}
-		orientedBox(shapes, c, color);
-	}
-
-	/** A box from its 8 corners, indexed by bits (side, depth, height), in this module's style. */
-	private void orientedBox(ShapeBuilder shapes, Vec3[] c, int color) {
-		int fill = style.fill(color, 1), line = style.line(color, 1);
-		boolean walls = style.throughWalls.get();
-		if (style.shape.get() != Renderer3D.ShapeMode.LINES) {
-			int[][] faces = {{0, 1, 3, 2}, {4, 5, 7, 6}, {0, 1, 5, 4}, {2, 3, 7, 6}, {0, 2, 6, 4}, {1, 3, 7, 5}};
-			for (int[] q : faces) shapes.quad(c[q[0]], c[q[1]], c[q[2]], c[q[3]], fill, walls);
-		}
-		if (style.shape.get() != Renderer3D.ShapeMode.FILL) {
-			shapes.lineWidth(style.lineWidth.getFloat());
-			// Each edge joins two corners that differ in one bit.
-			for (int i = 0; i < 8; i++) {
-				for (int bit = 1; bit < 8; bit <<= 1) if ((i & bit) == 0) shapes.line(c[i], c[i | bit], line, walls);
-			}
-		}
-	}
-
-	// ---- per frame --------------------------------------------------------------------------------------------------
-
-	/**
-	 * Outline mode: every container shown (the shapes off screen are skipped by the renderer), except the block Block
-	 * Highlight is on, which shows its look instead (the other half of a double chest still shows this one).
-	 */
-	@Subscribe(inGame = true)
-	private void onHighlightShapes(HighlightEvent.Shapes e) {
-		if (mode.get() != Mode.OUTLINE) return;
-		var style = outline.style();
-		BlockPos highlighted = BlockHighlight.highlighted();
-		AABB skip = highlighted == null ? null : new AABB(highlighted);
-		found.forEach(list -> {
-			for (Found f : list) {
-				if (!f.kind.enabled.get()) continue;
-				AABB box = skip != null && f.box.intersects(skip) ? outside(f.box, skip) : f.box;
-				if (box != null) e.box(box, style, color(f));
-			}
-		});
-	}
-
-	/** The part of {@code box} past {@code block} along the one side it reaches out of it (a double chest's other half), or null. */
-	private static AABB outside(AABB box, AABB block) {
-		if (box.minX < block.minX - 1e-6) return box.setMaxX(block.minX);
-		if (box.maxX > block.maxX + 1e-6) return box.setMinX(block.maxX);
-		if (box.minZ < block.minZ - 1e-6) return box.setMaxZ(block.minZ);
-		if (box.maxZ > block.maxZ + 1e-6) return box.setMinZ(block.maxZ);
-		if (box.minY < block.minY - 1e-6) return box.setMaxY(block.minY);
-		if (box.maxY > block.maxY + 1e-6) return box.setMinY(block.maxY);
-		return null;
-	}
-
-	/** Outline mode: storage entities (chest minecarts and boats, pack animals) by their exact shape. */
-	@Subscribe(inGame = true)
-	private void onHighlightEntity(HighlightEvent.Entity e) {
-		if (mode.get() != Mode.OUTLINE) return;
-		Kind k = kindOf(e.entity());
-		if (k != null && k.enabled.get()) e.highlight(outline.style(), k.color.argb());
-	}
-
-	@Subscribe(inGame = true)
-	private void onRender3D(Render3DEvent e) {
-		ShapeBuilder shapes = e.shapes();
-		boolean boxes = mode.get() == Mode.BOXES;
-		if (boxes) {
-			for (BlockPos pos : animating.keySet()) {
-				List<Found> list = found.get(pos);
-				if (list == null) continue;
-				for (Found f : list) if (f.pos.equals(pos) && f.kind.enabled.get()) drawLive(shapes, f, e.tickDelta());
-			}
-		}
-		for (Entity entity : mc.level.entitiesForRendering()) {
-			Kind k = kindOf(entity);
-			if (k == null || !k.enabled.get()) continue;
-			AABB box = Entities.lerpedBox(entity, e.tickDelta());
-			if (boxes) style.draw(shapes, box, k.color.argb(), 1);
-		}
 	}
 }

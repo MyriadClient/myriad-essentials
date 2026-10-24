@@ -7,17 +7,18 @@ import dev.myriadclient.api.build.Target;
 import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.InteractEvent;
-import dev.myriadclient.api.event.events.Render3DEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.BoxStyle;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.service.Breaking;
 import dev.myriadclient.api.service.Building;
 import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.service.PlacementSettings;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
+import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.essentials.util.BuildPlanRenderer;
 import net.minecraft.core.BlockPos;
@@ -55,7 +56,7 @@ public class PortalBuilder extends Module {
 
 	private final SettingGroup sgRender = settings.group("Render");
 	private final BoolSetting showPlan = sgRender.bool("Show Plan").description("Outline the frame while it's built.").defaultValue(true).build();
-	private final BoxStyle style = new BoxStyle(sgRender, showPlan::get);
+	private final RenderSettings look = RenderSettings.builder(sgRender).visible(showPlan::get).build();
 
 	/** Most blocks placed a tick. */
 	private static final int PER_TICK = 3;
@@ -79,6 +80,17 @@ public class PortalBuilder extends Module {
 
 	public enum Trigger {
 		CLICK, ENABLE
+	}
+
+	/** 2: the plan's box options became one look for both render modes (the Render window). */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion == 1) RenderSettings.migrate(saved, "Render", null);
 	}
 
 	public PortalBuilder() {
@@ -238,8 +250,8 @@ public class PortalBuilder extends Module {
 		}
 	}
 
-	@Subscribe
-	private void onRender(Render3DEvent e) {
-		if (showPlan.get()) BuildPlanRenderer.draw(e, build, style);
+	@Subscribe(inGame = true)
+	private void onRender(RenderEvent e) {
+		if (showPlan.get()) BuildPlanRenderer.draw(e, build, look);
 	}
 }

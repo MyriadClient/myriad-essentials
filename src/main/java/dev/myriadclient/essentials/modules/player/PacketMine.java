@@ -6,13 +6,14 @@ import com.google.gson.JsonPrimitive;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.BlockBreakEvent;
-import dev.myriadclient.api.event.events.HighlightEvent;
 import dev.myriadclient.api.event.events.PacketEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.HighlightSettings;
 import dev.myriadclient.api.render.HighlightStyle;
+import dev.myriadclient.api.render.RenderLook;
+import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.service.Breaking;
 import dev.myriadclient.api.service.BreakingSettings;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -58,7 +59,9 @@ public class PacketMine extends Module {
 	/** Opacities of the queue and the block Auto Rebreak watches by default. */
 	private static final int QUEUE_ALPHA = 110, REBREAK_ALPHA = 140;
 	/** Queued blocks: faint and dotted, so each one in a line shows (touching ones share an outline) without competing with the block being mined. */
-	private static final HighlightStyle QUEUE_LOOK = HighlightStyle.OUTLINE.withOutlineWidth(1).withFill(HighlightStyle.Fill.DOTS).withFillOpacity(0.6f);
+	private static final RenderLook QUEUE_LOOK = RenderLook.of(HighlightStyle.OUTLINE.withOutlineWidth(1).withFill(HighlightStyle.Fill.DOTS).withFillOpacity(0.6f), 1);
+	/** The block Auto Rebreak watches: just outlined. */
+	private static final RenderLook REBREAK_LOOK = RenderLook.of(HighlightStyle.OUTLINE);
 
 	private final SettingGroup sgRender = settings.group("Render");
 	private final ColorSetting startColor = sgRender.color("Start Color").description("The block being mined as it starts breaking; its opacity fades the whole look (fill, outline and glow).")
@@ -69,9 +72,9 @@ public class PacketMine extends Module {
 		.defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, QUEUE_ALPHA)).build();
 	private final ColorSetting rebreakColor = sgRender.color("Rebreak Color").description("The block Auto Rebreak watches, outlined; its opacity fades the whole look.")
 		.defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, REBREAK_ALPHA)).visible(autoRebreak::get).build();
-	/** The block being mined: by default no outline, just a fill that thickens as it breaks (see {@link #onHighlight}). */
-	private final HighlightSettings miningLook = HighlightSettings.builder(sgRender)
-		.defaults(HighlightStyle.OUTLINE.withOutlineWidth(0).withFill(HighlightStyle.Fill.SOLID).withFillOpacity(1)).build();
+	/** The block being mined: by default no outline, just a fill that thickens as it breaks (see {@link #onRender}). */
+	private final RenderSettings miningLook = RenderSettings.builder(sgRender)
+		.defaults(HighlightStyle.OUTLINE.withOutlineWidth(0).withFill(HighlightStyle.Fill.SOLID).withFillOpacity(1)).lineWidth(0).build();
 
 	/** Positions this module asked to break that haven't finished. */
 	private final List<BlockPos> mining = new ArrayList<>();
@@ -86,11 +89,12 @@ public class PacketMine extends Module {
 	/**
 	 * 2: the Fast switch became the standard breaking Mode. 3: the block being mined got its own Start and End colours.
 	 * 4: the queue and the block Auto Rebreak watches got groups of their own, in place of General's Color. 5: the colours
-	 * and the mined block's look moved into one Render group; the queue's and the rebreak block's looks are fixed.
+	 * and the mined block's look moved into one Render group; the queue's and the rebreak block's looks are fixed. 6: the
+	 * mined block's look is one for both render modes (the Render window).
 	 */
 	@Override
 	public int settingsVersion() {
-		return 5;
+		return 6;
 	}
 
 	@Override
@@ -121,6 +125,7 @@ public class PacketMine extends Module {
 			saved.json().remove("queue");
 			saved.json().remove("auto_rebreak");
 		}
+		if (fromVersion == 5) RenderSettings.migrate(saved, "Render", null);
 	}
 
 	/** A saved colour ({@code {"color": "#AARRGGBB", "mode": ...}}, or just the hex) with its opacity changed by {@code alpha}. */
@@ -208,18 +213,17 @@ public class PacketMine extends Module {
 	}
 
 	/**
-	 * Shader outlines, drawn over the blocks rather than on their faces (a box there loses to the block's own faces):
-	 * the queue in Queue's look (touching blocks share an outline), the block being mined in Mining's look, blending
-	 * from Start to End Color as it breaks and staying at End until the server says it's gone, and the block Auto
-	 * Rebreak watches in its group's look.
+	 * The queue, dotted (touching blocks share an outline in Shader mode); the block being mined in the Render look,
+	 * blending from Start to End Color as it breaks and staying at End until the server says it's gone; and the block
+	 * Auto Rebreak watches, outlined.
 	 */
 	@Subscribe(inGame = true)
-	private void onHighlight(HighlightEvent.Shapes e) {
+	private void onRender(RenderEvent e) {
 		for (BlockPos pos : mining) {
 			float progress = Myriad.breaking().progress(pos);
 			if (progress == 0) e.block(pos, QUEUE_LOOK, queueColor.argb());
-			else e.block(pos, miningLook.style(), ColorUtil.lerp(startColor.argb(), endColor.argb(), progress), 0.002);
+			else e.block(pos, miningLook, ColorUtil.lerp(startColor.argb(), endColor.argb(), progress));
 		}
-		if (autoRebreak.get() && last != null && !mining.contains(last)) e.block(last, HighlightStyle.OUTLINE, rebreakColor.argb());
+		if (autoRebreak.get() && last != null && !mining.contains(last)) e.block(last, REBREAK_LOOK, rebreakColor.argb());
 	}
 }

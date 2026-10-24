@@ -7,6 +7,16 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 Needs Myriad 0.11.0.
 
+- **Every module draws in Myriad's render mode** (Shader or Box, picked once in the Render window): ESP, Storage,
+  Blocks, Block Highlight, Packet Mine, Kill Aura, Air Place, Printer, Portal Builder and Baritone Render. Their own
+  Mode options are gone, and each module's look is in its **Render** options, which show those for the mode that's on.
+  Saved looks carry over (a box's *Lines* shape becomes no fill, *Fill* no edges; dots keep their spacing and size).
+- **ESP**: *Box Style* (3D, 2D, Model) for Box mode, with Fade In and the 2D Health Bar. **Storage** and **Blocks** are
+  simpler: no lids, no merging, no mode; one box (or one outline) per container (a double chest is one) or block, by
+  its shape. **Block Highlight** is one colour and a look. **Air Place** gets a Render group (Show Target, Color).
+  **View Model**'s hand and item highlights moved into its Render group (Hand, Item, each with its colour and look),
+  and show in either mode.
+
 - **Previews in the settings of the modules that draw**: ESP (a zombie), Blocks (the first block picked), Block
   Highlight (a block), Storage (a chest) and View Model (your hands and held items, moving as you change its settings).
   Drag to turn, right-drag to move, scroll to zoom, double-click to put back.
