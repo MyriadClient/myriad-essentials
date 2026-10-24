@@ -267,18 +267,6 @@ def t_no_slow_webs_after_tap():
     return 0.3 < walked < 2.5, f"walked {walked:.2f} blocks through cobwebs (slowed)"
 
 
-def t_tick_shift():
-    # Standing still saves ticks; moving off spends them in one frame.
-    reset()
-    client(".set tick_shift ticks 10", ".toggle tick_shift on", "wait 30")
-    x0 = position()[0]
-    client("hold forward 20", "wait 2")
-    burst = position()[0] - x0
-    client("wait 20", ".toggle tick_shift off")
-    # Two ticks from standing walk about 0.2 blocks; the saved ten add about two.
-    return burst > 1.2, f"{burst:.2f} blocks in the first two ticks of moving off"
-
-
 def t_auto_reconnect():
     # Kicked: back on the server after the delay (and the server's 4 s connection throttle).
     reset()
@@ -1338,7 +1326,6 @@ TESTS = [
     ("no_slow items", t_no_slow_items),
     ("no_slow webs", t_no_slow_webs),
     ("no_slow webs after a tap", t_no_slow_webs_after_tap),
-    ("tick_shift", t_tick_shift),
     ("auto_reconnect", t_auto_reconnect),
     ("offhand", t_offhand),
     ("auto_armor", t_auto_armor),

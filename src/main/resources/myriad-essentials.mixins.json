@@ -30,7 +30,6 @@
 		"LightmapMixin",
 		"LivingEntityMixin",
 		"LivingEntityRendererMixin",
-		"MinecraftMixin",
 		"MultiPlayerGameModeAccessor",
 		"PlayerEntityMixin",
 		"ToastManagerMixin",

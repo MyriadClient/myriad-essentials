@@ -94,7 +94,7 @@ public class AutoPortal extends Module {
 	}
 
 	public AutoPortal() {
-		super(Tags.WORLD, "Auto Portal", "Builds a Nether portal where you right-click with obsidian, or in front of you when turned on.");
+		super(Tags.AUTOMATION, "Auto Portal", "Builds a Nether portal where you right-click with obsidian, or in front of you when turned on.");
 		formerNames("Portal Builder");
 	}
 
