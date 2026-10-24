@@ -6,6 +6,7 @@ import dev.myriadclient.api.event.events.MouseButtonEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
+import dev.myriadclient.api.service.AntiCheat;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
@@ -169,8 +170,8 @@ public class MiddleClick extends Module {
 		});
 	}
 
-	/** The swing vanilla sends with a use, without the hand moving on screen. */
+	/** The swing vanilla sends with a use, without the hand moving on screen; none where the server wants none (2b2t). */
 	private void swing(InteractionHand hand) {
-		if (mc.getConnection() != null) mc.getConnection().send(new ServerboundSwingPacket(hand));
+		if (mc.getConnection() != null && AntiCheat.inEffect().checksSwings()) mc.getConnection().send(new ServerboundSwingPacket(hand));
 	}
 }

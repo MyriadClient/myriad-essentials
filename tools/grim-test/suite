@@ -472,20 +472,20 @@ def printer_pass(keys, rotate, air, stand=None, lenient=False, hotbar=PRINT_HOTB
         # Grim reads permissions when you join and when it reloads.
         cmd(f"deop {P}", "grim reload")
     mark()
+    # PRINT_LOG=1: the client logs every packet of the pass (.packets log, in run/myriad/packets); PRINT_LOG=all keeps
+    # the received packets the log leaves out as noise (attribute updates, entity moves).
+    log = [".packets log on" + (" all" if os.environ.get("PRINT_LOG") == "all" else "")] if os.environ.get("PRINT_LOG") else []
     # Past the row and a little beyond, then time for what's still in reach, then off: what it moved goes back.
     if stand is None:
-        # PRINT_LOG=1: the client logs every packet of the pass (.packets log, in run/myriad/packets); PRINT_LOG=all keeps
-        # the received packets the log leaves out as noise (attribute updates, entity moves).
-        log = [".packets log on" + (" all" if os.environ.get("PRINT_LOG") == "all" else "")] if os.environ.get("PRINT_LOG") else []
         moving = [f"hold {keys} {ticks}", f"wait {ticks + 10}"] if keys else [f"wait {ticks}"]
         client(*log, ".toggle printer on", *moving, "wait 60", ".toggle printer off", *([".packets log off"] if log else []), "wait 60",
             ".printscene clear", timeout=90 + ticks // 20)
     else:
         # Standing still at each of these x in turn, long enough for everything in reach.
-        steps = [".toggle printer on"]
+        steps = [*log, ".toggle printer on"]
         for sx in stand:
             steps += [f"/tp {P} {x0 + sx + 0.5} {y} {z - 1.5} -90 20", f"wait {stop_ticks}"]
-        client(*steps, ".toggle printer off", "wait 60", ".printscene clear", timeout=120)
+        client(*steps, ".toggle printer off", *([".packets log off"] if log else []), "wait 60", ".printscene clear", timeout=120)
     if lenient:
         cmd(f"op {P}", "grim reload")
         # The flags it takes leave Grim's RotationPlace checking every later placement by the look at the click, for

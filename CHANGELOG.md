@@ -3,6 +3,13 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## Unreleased
+
+Needs Myriad 1.2.0.
+
+- **Middle Click** sends no swing with a pearl, rocket or bottle on 2b2t (Myriad's 2b2t profile, which wants none),
+  and the item goes back out of your hand in the same tick there.
+
 ## 1.2.0
 
 Needs Myriad 1.1.1, whose item uses go out in their own tick when joined as 1.17 to 1.20.5.
