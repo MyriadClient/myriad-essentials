@@ -3,6 +3,13 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.0.0
+
+Needs Myriad 1.0.0.
+
+- **On Myriad 1.0**, whose API now holds for every 1.x release: Essentials used none of what 1.0 removed, so its
+  modules are as in 0.11.0.
+
 ## 0.11.0
 
 Needs Myriad 0.11.0.
