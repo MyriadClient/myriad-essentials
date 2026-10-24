@@ -83,7 +83,7 @@ public class PacketMine extends Module {
 	private int swungTick = -1;
 
 	public PacketMine() {
-		super(Tags.PLAYER, "Packet Mine", "Mines the blocks you hit for you, with your hand free.");
+		super(Tags.WORLD, "Packet Mine", "Mines the blocks you hit for you, with your hand free.");
 	}
 
 	/**

@@ -22,7 +22,7 @@ import java.util.List;
  * Grim (2b2t) sets it back from the first tick, so there Type lists only Recast and Altitude, and Control chosen
  * elsewhere waits. Preserve is shared by the types (see {@link ElytraMode}). Two modules of their own go with it,
  * often in one control panel: {@link ElytraSwap} keeps the elytra from wearing out, the way the server allows, and
- * {@link LockRotation} holds the heading for Altitude and Control. Snap rounds the way each type flies (Recast's lane,
+ * {@link RotationLock} holds the heading for Altitude and Control. Snap rounds the way each type flies (Recast's lane,
  * a locked heading) to 45° or 90°, kept for each type. Only the chosen type's own settings show.
  */
 public class ElytraFly extends Module {
@@ -62,7 +62,7 @@ public class ElytraFly extends Module {
 	private final EnumSetting<Snap> snap = sgGeneral.add(new EnumSetting<>("Snap",
 		"Round the way you fly to the nearest multiple of this: 45° for highways and their diagonals, 90° for the axes, Off for "
 			+ "exactly the way you faced. Recast: its lane, fixed when you turn it on. Altitude and Control: the heading "
-			+ "Lock Rotation holds. Kept for each type.", Snap.DEGREES_45, () -> true) {
+			+ "Rotation Lock holds. Kept for each type.", Snap.DEGREES_45, () -> true) {
 		@Override
 		public boolean isSerializable() {
 			return false;
@@ -116,7 +116,7 @@ public class ElytraFly extends Module {
 			boolean noDurability = saved.get("General", "No Durability").map(JsonElement::getAsBoolean).orElse(true);
 			ElytraSwap.adoptFormerSetting(noDurability, null);
 			if (saved.get("General", "Lock Heading").map(JsonElement::getAsBoolean).orElse(false)) {
-				LockRotation lock = Modules.get(LockRotation.class);
+				RotationLock lock = Modules.get(RotationLock.class);
 				if (lock != null) lock.setEnabledSilently(true);
 			}
 			saved.remove("General", "No Durability");

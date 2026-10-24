@@ -12,7 +12,7 @@ import java.util.function.Function;
 /**
  * A type that is settings over one of core's flights ({@link Altitude}, {@link ElytraControl}): core flies it, with No
  * Durability as {@link ElytraSwap} says, Preserve, the catch, slowing for chunks and riding out setbacks; the type
- * steers it with the camera or {@link LockRotation}'s heading each tick.
+ * steers it with the camera or {@link RotationLock}'s heading each tick.
  */
 abstract class FlightMode extends ElytraMode {
 	protected final Flight flight;

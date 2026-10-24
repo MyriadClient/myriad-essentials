@@ -21,13 +21,13 @@ import net.minecraft.util.Mth;
  * {@link #HEADING} hook, so an addon can change it for one flight (snap it to the nearest axis, follow a path):
  *
  * <pre>{@code
- * ctx.hook(LockRotation.HEADING)
+ * ctx.hook(RotationLock.HEADING)
  *     .named("Control snaps to axes")
  *     .when(Match.caller("myriad-essentials:control"))
  *     .handle(call -> Math.round(call.input().locked() / 45f) * 45f);
  * }</pre>
  */
-public class LockRotation extends Module {
+public class RotationLock extends Module {
 	public enum LockAt {
 		/** When each glide starts: take off facing the way to go. */
 		TAKEOFF,
@@ -41,7 +41,7 @@ public class LockRotation extends Module {
 
 	/** The yaw a flight flies while a heading is locked (default: the one locked). The caller is the flight. */
 	public static final Hook<Heading, Float> HEADING = Hook.of("myriad-essentials:locked_heading", "Locked heading",
-		"The yaw a flight flies while Lock Rotation holds its heading.");
+		"The yaw a flight flies while Rotation Lock holds its heading.");
 
 	private final EnumSetting<LockAt> lockAt = sgGeneral.oneOf("Lock At", LockAt.TAKEOFF)
 		.description("Takeoff: lock the way you face as each glide starts. Turned On: lock the way you face when it's turned on.").build();
@@ -49,16 +49,17 @@ public class LockRotation extends Module {
 	/** The yaw locked, or NaN while nothing is. */
 	private float locked = Float.NaN;
 
-	public LockRotation() {
-		super(Tags.MOVEMENT, "Lock Rotation", "Keep flying the way you faced, whatever the camera does.");
+	public RotationLock() {
+		super(Tags.MOVEMENT, "Rotation Lock", "Keep flying the way you faced, whatever the camera does.");
+		formerNames("Lock Rotation");
 	}
 
 	/**
-	 * The yaw {@code flight} should fly: the locked heading (through {@link #HEADING}) while Lock Rotation is on and
+	 * The yaw {@code flight} should fly: the locked heading (through {@link #HEADING}) while Rotation Lock is on and
 	 * holds one, otherwise {@code camera}.
 	 */
 	public static float headingFor(Object flight, float camera) {
-		LockRotation lock = Modules.active(LockRotation.class);
+		RotationLock lock = Modules.active(RotationLock.class);
 		if (lock == null || Float.isNaN(lock.locked)) return camera;
 		Heading asked = new Heading(lock.locked, camera);
 		if (!HEADING.hooked()) return asked.locked();
@@ -68,7 +69,7 @@ public class LockRotation extends Module {
 
 	/** Whether a heading is locked right now. */
 	public static boolean holding() {
-		LockRotation lock = Modules.active(LockRotation.class);
+		RotationLock lock = Modules.active(RotationLock.class);
 		return lock != null && !Float.isNaN(lock.locked);
 	}
 

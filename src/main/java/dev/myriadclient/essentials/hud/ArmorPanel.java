@@ -17,19 +17,25 @@ import net.minecraft.world.item.Items;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Your armour, helmet first, with durability as a bar and/or percentage. */
+/**
+ * What you hold and wear: your main hand and off hand, then your armour, helmet first, each with its durability as the
+ * uses left, a percentage or a bar. Stacks in your hands show their count.
+ */
 public final class ArmorPanel extends HudPanel {
 	public enum Layout {
 		HORIZONTAL, VERTICAL
 	}
 
-	private static final EquipmentSlot[] SLOTS = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+	private static final EquipmentSlot[] ARMOR = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
 	private final EnumSetting<Layout> layout = sgGeneral.oneOf("Layout", Layout.HORIZONTAL).build();
-	private final EnumSetting<ItemHud.Durability> durability = sgGeneral.oneOf("Durability", ItemHud.Durability.BAR).build();
-	private final BoolSetting hideUndamaged = sgGeneral.bool("Hide Undamaged").description("No durability on armour that hasn't taken any.").defaultValue(true)
+	private final BoolSetting mainHand = sgGeneral.bool("Main Hand").description("Show what's in your main hand, first.").defaultValue(true).build();
+	private final BoolSetting offHand = sgGeneral.bool("Off Hand").description("Show what's in your off hand, after the main hand.").defaultValue(true).build();
+	private final EnumSetting<ItemHud.Durability> durability = sgGeneral.oneOf("Durability", ItemHud.Durability.NUMBER)
+		.description("Number: the uses left. Percent, a bar, both, or none.").build();
+	private final BoolSetting hideUndamaged = sgGeneral.bool("Hide Undamaged").description("No durability on gear that hasn't taken any.").defaultValue(true)
 		.visible(() -> durability.get() != ItemHud.Durability.NONE).build();
-	private final DoubleSetting textScale = sgGeneral.decimal("Text Scale").description("Size of the percentage, relative to the HUD text.").defaultValue(0.8)
+	private final DoubleSetting textScale = sgGeneral.decimal("Text Scale").description("Size of the durability, relative to the HUD text.").defaultValue(0.8)
 		.range(0.5, 1.5).decimals(2).visible(() -> ItemHud.showsPercent(durability.get())).build();
 	private final BoolSetting skipEmpty = sgGeneral.bool("Skip Empty").description("Close up gaps left by empty slots.").build();
 	private final BoolSetting avoidAir = sgGeneral.bool("Avoid Air Bar").description("Move up while the air bubbles are showing, like vanilla HUD rows.").defaultValue(true).build();
@@ -40,22 +46,31 @@ public final class ArmorPanel extends HudPanel {
 	}
 
 	private List<ItemStack> stacks() {
-		List<ItemStack> list = new ArrayList<>(4);
+		List<ItemStack> list = new ArrayList<>(6);
 		if (mc.player == null) {
 			// Preview while editing the HUD from the title screen.
+			if (mainHand.get()) list.add(Items.DIAMOND_SWORD.getDefaultInstance());
+			if (offHand.get()) list.add(Items.TOTEM_OF_UNDYING.getDefaultInstance());
 			list.add(Items.DIAMOND_HELMET.getDefaultInstance());
 			list.add(Items.DIAMOND_CHESTPLATE.getDefaultInstance());
 			list.add(Items.DIAMOND_LEGGINGS.getDefaultInstance());
 			list.add(Items.DIAMOND_BOOTS.getDefaultInstance());
 			return list;
 		}
-		for (EquipmentSlot slot : SLOTS) {
-			// What the slot shows: a masked swap (No Durability's chestplate swaps) doesn't flicker it.
-			ItemStack s = Myriad.inventory().shown(Slots.FEET + slot.getIndex());
-			if (s.isEmpty() && skipEmpty.get()) continue;
-			list.add(s);
-		}
+		// What each slot shows: a masked swap (a silent slot switch, No Durability's chestplate swaps) doesn't flicker it.
+		if (mainHand.get()) add(list, Myriad.inventory().shown(mc.player.getInventory().getSelectedSlot()));
+		if (offHand.get()) add(list, Myriad.inventory().shown(Slots.OFF_HAND));
+		for (EquipmentSlot slot : ARMOR) add(list, Myriad.inventory().shown(Slots.FEET + slot.getIndex()));
 		return list;
+	}
+
+	private void add(List<ItemStack> list, ItemStack stack) {
+		if (!stack.isEmpty() || !skipEmpty.get()) list.add(stack);
+	}
+
+	/** Slots shown when none are skipped: the hands switched on, and the four armour slots. */
+	private int slots() {
+		return (mainHand.get() ? 1 : 0) + (offHand.get() ? 1 : 0) + ARMOR.length;
 	}
 
 	private float slot() {
@@ -72,7 +87,7 @@ public final class ArmorPanel extends HudPanel {
 
 	@Override
 	public Rect preferredSize(Canvas c) {
-		int n = Math.max(1, skipEmpty.get() ? stacks().size() : 4);
+		int n = Math.max(1, skipEmpty.get() ? stacks().size() : slots());
 		float slot = slot(), ph = percentHeight(c);
 		return layout.get() == Layout.HORIZONTAL ? new Rect(0, 0, slot * n, slot + ph) : new Rect(0, 0, slot, (slot + ph) * n);
 	}
@@ -89,11 +104,12 @@ public final class ArmorPanel extends HudPanel {
 			float x = layout.get() == Layout.HORIZONTAL ? i * slot : 0;
 			float y = (layout.get() == Layout.HORIZONTAL ? 0 : i * (slot + ph)) + yShift;
 			float ix = x + pad, iy = y + ph + pad;
-			c.item(stack, ix, iy, size, false);
+			// A stack in a hand (blocks, crystals, totems) shows its count; gear its durability, below.
+			c.item(stack, ix, iy, size, !stack.isDamageableItem());
 			if (!stack.isDamageableItem() || durability.get() == ItemHud.Durability.NONE) continue;
 			if (hideUndamaged.get() && !stack.isDamaged()) continue;
 			if (durability.get() == ItemHud.Durability.BAR || durability.get() == ItemHud.Durability.BOTH) ItemHud.bar(c, stack, ix, iy, size);
-			if (ItemHud.showsPercent(durability.get())) ItemHud.percentText(c, stack, ix, y, size, textSize(c), shadow.get());
+			if (ItemHud.showsPercent(durability.get())) ItemHud.durabilityText(c, durability.get(), stack, ix, y, size, textSize(c), shadow.get());
 		}
 	}
 }

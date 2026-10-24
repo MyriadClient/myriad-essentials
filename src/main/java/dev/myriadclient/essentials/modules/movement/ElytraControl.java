@@ -8,7 +8,7 @@ import dev.myriadclient.api.setting.DoubleSetting;
 
 /**
  * Elytra Fly's Control: flies the elytra like a creative flight. While you glide, the keys move you and nothing else
- * does: forward, back and the sides go along the camera's heading at Speed (or, while {@link LockRotation} holds one,
+ * does: forward, back and the sides go along the camera's heading at Speed (or, while {@link RotationLock} holds one,
  * the locked heading; {@link AutoWalk} holds forward for you), jump climbs and sneak descends at Vertical Speed, and
  * with neither you hold your height, sinking at Sink. The server sees you look the way you fly, level; the camera looks
  * where you like.

@@ -29,6 +29,7 @@
 		"LightmapMixin",
 		"LivingEntityMixin",
 		"LivingEntityRendererMixin",
+		"MultiPlayerGameModeAccessor",
 		"PlayerEntityMixin",
 		"ToastManagerMixin",
 		"WorldRendererMixin"

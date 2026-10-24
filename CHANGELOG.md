@@ -3,6 +3,27 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.1.0
+
+Needs Myriad 1.1.0.
+
+- **The windows are named after their tags again**: Combat, Movement (was Travel), World (was Building & Mining),
+  Player (was Inventory), Render (was Visuals), and a new **Automation** window and tag for Auto Eat, Auto Tool, Auto
+  Walk, Auto Mend, Auto Sort and the Printer. Each module carries the tag of its window (Velocity is Combat; Packet
+  Mine, Reach and Wall Interact are World). The renamed windows open fresh, placed beside your others; move them once.
+- **Renamed**: Lock Rotation is **Rotation Lock**, Portal Builder **Auto Portal**, ESP **Entity ESP**, Storage
+  **Storage ESP**, Blocks **Block ESP**, Stack Replenish **Replenish**. Their settings, keybinds and on/off state carry
+  over; commands take the new names (`.toggle auto_portal`).
+- **Baritone Render is part of the Baritone module**: its **Custom Render** switch (in Render, after Baritone's own
+  options) draws the path, the blocks it will break and place, and the goal your way while the module is on, with the
+  Path, Blocks and Goal options showing while it's on. Baritone Render's own settings don't carry over.
+- **Freecam and Free Look turn each other off**: on together, they fought over the camera.
+- **Armor shows your hands too**: the main hand and the off hand before the armour (each can be switched off), stacks
+  with their count, and durability as the uses left by default (Number), beside Percent, Bar, Both and None.
+- **Looking At is a wide strip**: the name on top and the details beside each other on one row, and while the block
+  you look at is being broken (by your hand or a module, Packet Mine say) a bar fills along the bottom, its percentage
+  shows by the name and the border's gradient turns. **Break Progress** switches it off.
+
 ## 1.0.0
 
 Needs Myriad 1.0.0.

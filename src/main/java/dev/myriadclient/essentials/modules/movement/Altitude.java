@@ -9,7 +9,7 @@ import org.jetbrains.annotations.Nullable;
  * Crosses open country without fireworks, "pitch 40" style. It dives until you're fast, pulls up hard, then eases back to
  * level: pulling up gives back more height than the speed it costs, so the cycle holds the altitude you started gliding
  * at (it dives harder when you're above it and climbs more when you're below). Start high, since the first dive from a
- * slow glide drops you 50 or so blocks. Steer with the camera, or turn on Lock Rotation to keep flying the way you faced
+ * slow glide drops you 50 or so blocks. Steer with the camera, or turn on Rotation Lock to keep flying the way you faced
  * when the glide started (Snap rounds it to 45° or 90°); the flight's pitch (and a locked heading) only goes to the
  * server and the flight physics, so you can look around freely. With No Durability each glide start waits for the
  * server to have the elytra on; without it the elytra wears, and once it's down to what

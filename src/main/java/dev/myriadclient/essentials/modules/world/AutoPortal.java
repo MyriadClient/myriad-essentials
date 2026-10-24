@@ -41,7 +41,7 @@ import java.util.function.Predicate;
  * the module off again once it's lit, for a tap bind.
  * The frame is the smallest that lights (2 wide, 3 tall inside); anything in the way inside is broken first.
  */
-public class PortalBuilder extends Module {
+public class AutoPortal extends Module {
 	private final EnumSetting<Trigger> trigger = sgGeneral.oneOf("Trigger", Trigger.CLICK).description("Click: right-click the top of a "
 		+ "block with obsidian. Enable: turning the module on builds one where you look (or on the ground in front of you) and turns it off "
 		+ "again, for a tap bind.").build();
@@ -93,8 +93,9 @@ public class PortalBuilder extends Module {
 		if (fromVersion == 1) RenderSettings.migrate(saved, "Render", null);
 	}
 
-	public PortalBuilder() {
-		super(Tags.WORLD, "Portal Builder", "Builds a Nether portal where you right-click with obsidian, or in front of you when turned on.");
+	public AutoPortal() {
+		super(Tags.WORLD, "Auto Portal", "Builds a Nether portal where you right-click with obsidian, or in front of you when turned on.");
+		formerNames("Portal Builder");
 	}
 
 	@Override

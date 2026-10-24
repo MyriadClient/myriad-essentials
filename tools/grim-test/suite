@@ -258,20 +258,20 @@ def t_auto_armor_sprinting():
     return all(w.startswith("minecraft:diamond_") for w in worn), "worn: " + ", ".join(w.removeprefix("minecraft:") or "-" for w in worn)
 
 
-def t_stack_replenish_walking():
+def t_replenish_walking():
     reset()
     cmd(f"item replace entity {P} hotbar.0 with cobblestone 1", f"item replace entity {P} inventory.0 with cobblestone 64")
-    client("hold forward 40", "wait 2", ".toggle stack_replenish on", "wait 38", ".toggle stack_replenish off")
+    client("hold forward 40", "wait 2", ".toggle replenish on", "wait 38", ".toggle replenish off")
     return count(0) > 1, f"hotbar stack now {count(0)}"
 
 
-def t_stack_replenish_sprinting():
+def t_replenish_sprinting():
     # Two low stacks while sprinting: both topped up in one go, the click got past Grim's sprint check in the same tick
     # (stop and start around it), so the sprint never breaks.
     reset()
     cmd(f"item replace entity {P} hotbar.0 with cobblestone 1", f"item replace entity {P} inventory.0 with cobblestone 64",
         f"item replace entity {P} hotbar.1 with dirt 2", f"item replace entity {P} inventory.1 with dirt 64")
-    client("hold forward,sprint 40", "wait 5", ".toggle stack_replenish on", "wait 35", ".toggle stack_replenish off")
+    client("hold forward,sprint 40", "wait 5", ".toggle replenish on", "wait 35", ".toggle replenish off")
     x = position()[0]
     # Sprinting covers about 5.6 blocks a second: 2 s of it, less the run-up.
     return count(0) == 64 and count(1) == 64 and x > 1010, f"hotbar stacks now {count(0)} and {count(1)}, ran to x={x:.1f}"
@@ -325,10 +325,10 @@ def t_auto_eat_choice():
         f"hungry ate {8 - count(19)} carrots from the inventory, {8 - count(1)} golden apples")
 
 
-def t_stack_replenish():
+def t_replenish():
     reset()
     cmd(f"item replace entity {P} hotbar.0 with cobblestone 1", f"item replace entity {P} inventory.0 with cobblestone 64")
-    client(".toggle stack_replenish on", "wait 30", ".toggle stack_replenish off")
+    client(".toggle replenish on", "wait 30", ".toggle replenish off")
     return count(0) > 1, f"hotbar stack now {count(0)}"
 
 
@@ -482,6 +482,8 @@ def t_printer_restock():
     ok, text = printer_pass(None, rotate=True, air=False, stand=[6, 9, 20], stop_ticks=80, omit=("glass",),
                             settings=[".set printer restock true", ".set printer from_shulker_boxes false", ".set printer from_containers true"],
                             setup=[f"setblock {x0 + 9} {y} {z - 3} chest", f"item replace block {x0 + 9} {y} {z - 3} container.0 with glass 32"])
+    # Without Litematica nothing was built: what's there is an earlier run's, so there's nothing to count.
+    if text.startswith("skipped"): return ok, text
     left = chest_items(x0 + 9, y, z - 3).get(0, ("", 0))[1]
     glass = [i for i, b in enumerate(PRINT_ROW) if b == "glass"]
     built = [i for i in glass if passed(f"if block {x0 + i} {y} {z} glass")]
@@ -511,13 +513,13 @@ def portal_pass(air):
         f"item replace entity {P} inventory.10 with obsidian 16", f"item replace entity {P} inventory.11 with flint_and_steel",
         f"tp {P} {x0 + 0.5} {y} {z + 0.5} -90 30")
     settle(x0 + 0.5, y, z + 0.5)
-    client(".set portal_builder trigger enable", ".set portal_builder rotate false", f".set portal_builder corners {str(not air).lower()}",
-        f".set portal_builder air_place {str(air).lower()}", ".set portal_builder light true", "wait 5")
+    client(".set auto_portal trigger enable", ".set auto_portal rotate false", f".set auto_portal corners {str(not air).lower()}",
+        f".set auto_portal air_place {str(air).lower()}", ".set auto_portal light true", "wait 5")
     cmd(f"deop {P}", "grim reload")
     mark()
     # On the floor block you look at, across the view: a 2 by 3 portal somewhere in front.
     log = [".packets log on"] if os.environ.get("PRINT_LOG") else []
-    client(*log, ".toggle portal_builder on", "wait 140", ".toggle portal_builder off", "wait 60", *([".packets log off"] if log else []), timeout=60)
+    client(*log, ".toggle auto_portal on", "wait 140", ".toggle auto_portal off", "wait 60", *([".packets log off"] if log else []), timeout=60)
     cmd(f"op {P}", "grim reload")
     lit = "filled 6 block" in cmd(f"fill {x0 + 1} {y} {z - 3} {x0 + 6} {y + 5} {z + 3} nether_portal replace nether_portal")
     hotbar_now = {i: item(i).removeprefix("minecraft:") for i in range(9)}
@@ -527,11 +529,11 @@ def portal_pass(air):
                                                                  f"off hand {offhand or 'empty'}")
 
 
-def t_portal_builder_full_hotbar():
+def t_auto_portal_full_hotbar():
     return portal_pass(air=False)
 
 
-def t_portal_builder_air_place():
+def t_auto_portal_air_place():
     return portal_pass(air=True)
 
 
@@ -1185,10 +1187,10 @@ def t_altitude_lock_heading():
         f"tp {P} 15000.5 300 0.5 -90 0")
     time.sleep(1.5)
     mark()
-    client(".toggle elytra_swap on", ".set elytra_fly after_landing stay", ".toggle lock_rotation on", "look -90 0", timeout=30)
+    client(".toggle elytra_swap on", ".set elytra_fly after_landing stay", ".toggle rotation_lock on", "look -90 0", timeout=30)
     client(".set elytra_fly type altitude", ".toggle elytra_fly on", "wait 40", "look 0 0", "wait 120", "look 60 30", "wait 120", "look 0 -20", "wait 120", timeout=60)
     x, y, z = position()
-    client(".toggle elytra_fly off", ".toggle lock_rotation off", timeout=30)
+    client(".toggle elytra_fly off", ".toggle rotation_lock off", timeout=30)
     return x - 15000 > 150 and abs(z) < 5 and y > 180, f"{x - 15000:.0f} blocks east, {z:.1f} sideways, y={y:.0f}"
 
 
@@ -1269,12 +1271,12 @@ TESTS = [
     ("offhand sprinting", t_offhand_sprinting),
     ("offhand hotbar sprinting", t_offhand_hotbar_sprinting),
     ("auto_armor sprinting", t_auto_armor_sprinting),
-    ("stack_replenish walking", t_stack_replenish_walking),
-    ("stack_replenish sprinting", t_stack_replenish_sprinting),
+    ("replenish walking", t_replenish_walking),
+    ("replenish sprinting", t_replenish_sprinting),
     ("auto_eat", t_auto_eat),
     ("auto_eat choice", t_auto_eat_choice),
     ("auto_disconnect", t_auto_disconnect),
-    ("stack_replenish", t_stack_replenish),
+    ("replenish", t_replenish),
     ("middle_click inventory", t_middle_click_inventory),
     ("middle_click rocket flying", t_middle_click_rocket_flying),
     ("printer standing", t_printer_standing),
@@ -1288,8 +1290,8 @@ TESTS = [
     ("printer sprinting 2b2t", t_printer_sprinting_2b2t),
     ("printer jumping 2b2t", t_printer_jumping_2b2t),
     ("printer full hotbar 2b2t", t_printer_full_hotbar_2b2t),
-    ("portal_builder full hotbar", t_portal_builder_full_hotbar),
-    ("portal_builder air place", t_portal_builder_air_place),
+    ("auto_portal full hotbar", t_auto_portal_full_hotbar),
+    ("auto_portal air place", t_auto_portal_air_place),
     ("auto_sort", t_auto_sort),
     ("auto_sort full inventory", t_auto_sort_full_inventory),
     ("auto_sort your click", t_auto_sort_your_click),
@@ -1329,15 +1331,15 @@ FLAGS_IGNORED = {"selftest (every module)"}
 # Checks a test relaxes on purpose (see printer_pass): flagged, but not failing it.
 FLAGS_RELAXED = {name: {"RotationPlace", "AirLiquidPlace", "PositionPlace"} for name in ("printer walking 2b2t", "printer sprinting 2b2t",
                                                                                         "printer jumping 2b2t", "printer full hotbar 2b2t",
-                                                                                        "portal_builder full hotbar", "portal_builder air place")}
+                                                                                        "auto_portal full hotbar", "auto_portal air place")}
 # Known to fail now and then for reasons that aren't the code under test. They run as usual; one that fails gets one
 # more try, alone, at the end, and only fails the run if it fails again. Anything else that fails is a failure.
 FLAKY = {
     "altitude preserve": "the worn elytra's wear lands on 4 now and then against a limit of 3 (1 run in 8 on core 7875627 too)",
     "altitude no durability": "fails about half the time on any version (elytra wore -2/-3: the swap and the reading race)",
-    "stack_replenish": "the first stack_replenish run right after ./clients starts them reads the hotbar before it's synced",
-    "stack_replenish walking": "as stack_replenish, and flags Simulation now and then with three clients running",
-    "stack_replenish sprinting": "as stack_replenish",
+    "replenish": "the first replenish run right after ./clients starts them reads the hotbar before it's synced",
+    "replenish walking": "as replenish, and flags Simulation now and then with three clients running",
+    "replenish sprinting": "as replenish",
     "altitude spare": "flags Simulation now and then with three clients running (load); passes alone",
     "recast walk round": "flags Simulation now and then with three clients running (load); passes alone",
     "recast back on lane": "flags Simulation now and then with three clients running (load); passes alone",
@@ -1367,7 +1369,7 @@ def run_tests(chosen):
 
 
 # Tests that need the overworld (a nether portal lights only there or in the Nether).
-OVERWORLD_ONLY = {"portal_builder full hotbar", "portal_builder air place"}
+OVERWORLD_ONLY = {"auto_portal full hotbar", "auto_portal air place"}
 
 
 def share(chosen, workers):

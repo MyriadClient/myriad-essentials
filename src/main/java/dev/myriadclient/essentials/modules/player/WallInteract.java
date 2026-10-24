@@ -30,7 +30,7 @@ public class WallInteract extends Module {
 	private final BoolSetting containers = sgGeneral.bool("Containers").description("Open chests and other containers through blocks.").build();
 
 	public WallInteract() {
-		super(Tags.PLAYER, "Wall Interact", "Hit entities and open containers through walls.");
+		super(Tags.WORLD, "Wall Interact", "Hit entities and open containers through walls.");
 	}
 
 	/** The crosshair target to use instead of vanilla's {@code original}. */

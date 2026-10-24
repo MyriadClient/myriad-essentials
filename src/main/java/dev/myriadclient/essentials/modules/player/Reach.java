@@ -21,7 +21,7 @@ public class Reach extends Module {
 		.defaultValue(3).range(1, 10).decimals(2).build();
 
 	public Reach() {
-		super(Tags.PLAYER, "Reach", "Place blocks and hit entities from further away.");
+		super(Tags.WORLD, "Reach", "Place blocks and hit entities from further away.");
 		alsoTagged(Tags.COMBAT, Tags.WORLD);
 	}
 

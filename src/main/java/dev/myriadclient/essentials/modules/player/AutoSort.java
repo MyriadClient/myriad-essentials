@@ -31,7 +31,7 @@ public class AutoSort extends Module {
 	private AbstractContainerMenu sorting;
 
 	public AutoSort() {
-		super(Tags.PLAYER, "Auto Sort", "Sorts containers as you open them.");
+		super(Tags.AUTOMATION, "Auto Sort", "Sorts containers as you open them.");
 	}
 
 	@Override

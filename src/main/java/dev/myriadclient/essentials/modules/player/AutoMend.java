@@ -48,7 +48,7 @@ public class AutoMend extends Module {
 	private boolean throwing;
 
 	public AutoMend() {
-		super(Tags.PLAYER, "Auto Mend", "Mends your gear with bottles o' enchanting.");
+		super(Tags.AUTOMATION, "Auto Mend", "Mends your gear with bottles o' enchanting.");
 	}
 
 	@Override

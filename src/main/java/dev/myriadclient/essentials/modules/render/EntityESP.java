@@ -50,7 +50,7 @@ import java.util.Set;
  * <li>Model: a wireframe and fill of the entity's model; anything without a model falls back to its box.</li>
  * </ul>
  */
-public class ESP extends Module {
+public class EntityESP extends Module {
 	/** How entities are drawn in Box mode. */
 	public enum BoxStyle {
 		THREE_D("3D"), TWO_D("2D"), MODEL("Model");
@@ -85,8 +85,9 @@ public class ESP extends Module {
 	private final Int2LongOpenHashMap appeared = new Int2LongOpenHashMap();
 	private final IntOpenHashSet seen = new IntOpenHashSet();
 
-	public ESP() {
-		super(Tags.RENDER, "ESP", "Highlights players, mobs, crystals and more through walls.");
+	public EntityESP() {
+		super(Tags.RENDER, "Entity ESP", "Highlights players, mobs, crystals and more through walls.");
+		formerNames("ESP");
 	}
 
 	/** A zombie, drawn as a monster is (see {@link #onPreview}). */

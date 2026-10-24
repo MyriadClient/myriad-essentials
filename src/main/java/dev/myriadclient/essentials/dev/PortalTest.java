@@ -7,7 +7,7 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.setting.Setting;
-import dev.myriadclient.essentials.modules.world.PortalBuilder;
+import dev.myriadclient.essentials.modules.world.AutoPortal;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Set;
 
 /**
- * Development only: {@code .portaltest [strict|2b2t]} builds a Nether portal with Portal Builder on a stone floor in
+ * Development only: {@code .portaltest [strict|2b2t]} builds a Nether portal with Auto Portal on a stone floor in
  * front of you in singleplayer and reports how many ticks it took until it was lit. {@code strict}: Rotate on, no air
  * placement; {@code 2b2t}: Rotate off, Air Place on, no corners.
  */
@@ -39,7 +39,7 @@ public final class PortalTest extends Command {
 	private boolean started, tap;
 
 	public PortalTest() {
-		super("portaltest", "Development: times Portal Builder from click to lit portal.");
+		super("portaltest", "Development: times Auto Portal from click to lit portal.");
 	}
 
 	@Override
@@ -58,9 +58,9 @@ public final class PortalTest extends Command {
 			error("Only in singleplayer.");
 			return SINGLE_SUCCESS;
 		}
-		PortalBuilder pb = Modules.get(PortalBuilder.class);
+		AutoPortal pb = Modules.get(AutoPortal.class);
 		if (pb.isEnabled()) pb.disable();
-		((Setting<PortalBuilder.Trigger>) pb.settings.get("trigger").orElseThrow()).set(tap ? PortalBuilder.Trigger.ENABLE : PortalBuilder.Trigger.CLICK);
+		((Setting<AutoPortal.Trigger>) pb.settings.get("trigger").orElseThrow()).set(tap ? AutoPortal.Trigger.ENABLE : AutoPortal.Trigger.CLICK);
 		set(pb, "rotate", strict);
 		set(pb, "air_place", !strict);
 		set(pb, "corners", strict);
@@ -98,7 +98,7 @@ public final class PortalTest extends Command {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static void set(PortalBuilder pb, String id, boolean value) {
+	private static void set(AutoPortal pb, String id, boolean value) {
 		((Setting<Boolean>) pb.settings.get(id).orElseThrow()).set(value);
 	}
 
@@ -112,21 +112,21 @@ public final class PortalTest extends Command {
 		if (ticks == 0 && !started) {
 			started = true;
 			// A tap: the bind turns it on, it builds in front of you and turns itself off.
-			if (tap) Modules.get(PortalBuilder.class).enable();
-			else Modules.get(PortalBuilder.class).build(base, Direction.SOUTH);
+			if (tap) Modules.get(AutoPortal.class).enable();
+			else Modules.get(AutoPortal.class).build(base, Direction.SOUTH);
 			return;
 		}
 		if (!started) return;
 		// A tap is over when the module has turned itself off; then there should be a portal somewhere in front.
-		if (tap && Modules.get(PortalBuilder.class).isEnabled() && ticks < 400) return;
+		if (tap && Modules.get(AutoPortal.class).isEnabled() && ticks < 400) return;
 		boolean lit = tap ? portalNear() : mc.level.getBlockState(base.above()).is(Blocks.NETHER_PORTAL);
 		if (!lit && ticks < 400) return;
 		String line = (lit ? "lit after " + ticks + " ticks (" + String.format("%.2f", ticks / 20.0) + " s)" : "not lit after 400 ticks")
 			+ "; off hand " + mc.player.getOffhandItem();
-		if (tap) line += "; module " + (Modules.get(PortalBuilder.class).isEnabled() ? "still on" : "turned itself off");
+		if (tap) line += "; module " + (Modules.get(AutoPortal.class).isEnabled() ? "still on" : "turned itself off");
 		tap = false;
 		LOG.info("[portaltest] {}", line);
-		var build = Modules.get(PortalBuilder.class).build();
+		var build = Modules.get(AutoPortal.class).build();
 		if (!lit && build != null) for (var step : build.steps()) LOG.info("[portaltest]   {} {} {}", step.pos().toShortString(), step.target(), step.status());
 		info(line);
 		Myriad.events().unsubscribe(this);

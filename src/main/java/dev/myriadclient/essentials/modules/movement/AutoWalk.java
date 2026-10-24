@@ -11,7 +11,7 @@ import dev.myriadclient.api.module.Tags;
  */
 public class AutoWalk extends Module {
 	public AutoWalk() {
-		super(Tags.MOVEMENT, "Auto Walk", "Walk forward without holding the key.");
+		super(Tags.AUTOMATION, "Auto Walk", "Walk forward without holding the key.");
 	}
 
 	@Subscribe

@@ -35,6 +35,8 @@ public class Freecam extends Module {
 
 	public Freecam() {
 		super(Tags.RENDER, "Freecam", "Detach the camera and fly it around.");
+		// Both take the camera over: on together, each fights the other for it.
+		conflictsWith(FreeLook.class);
 	}
 
 	@Override

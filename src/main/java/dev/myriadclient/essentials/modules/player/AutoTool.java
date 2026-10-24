@@ -44,7 +44,7 @@ public class AutoTool extends Module {
 	private int previousSlot = -1, holdTicks;
 
 	public AutoTool() {
-		super(Tags.PLAYER, "Auto Tool", "Switches to the best tool for what you're mining.");
+		super(Tags.AUTOMATION, "Auto Tool", "Switches to the best tool for what you're mining.");
 	}
 
 	@Override

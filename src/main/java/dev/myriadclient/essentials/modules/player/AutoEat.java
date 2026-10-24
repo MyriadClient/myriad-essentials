@@ -62,7 +62,7 @@ public class AutoEat extends Module {
 	private static final int REFUSED_TICKS = 40;
 
 	public AutoEat() {
-		super(Tags.PLAYER, "Auto Eat", "Eats when your health or hunger gets low.");
+		super(Tags.AUTOMATION, "Auto Eat", "Eats when your health or hunger gets low.");
 	}
 
 	@Override

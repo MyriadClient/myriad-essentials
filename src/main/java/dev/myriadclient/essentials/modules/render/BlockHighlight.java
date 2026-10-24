@@ -22,7 +22,7 @@ import net.minecraft.world.phys.HitResult;
 
 /**
  * Replaces vanilla's thin black outline around the block you're looking at with your own look, in the render mode (the
- * Render window): an outline around the block's shape in Shader mode (with glow, fill and gradient, like ESP's), a box
+ * Render window): an outline around the block's shape in Shader mode (with glow, fill and gradient, like Entity ESP's), a box
  * in Box mode. Always just the one block (half a double chest, one end of a bed), outlined on its own even where Blocks
  * or Storage highlight its neighbours. With nothing under the crosshair, it outlines the space Air Place would put a
  * block in (a full block).
@@ -66,7 +66,7 @@ public class BlockHighlight extends Module {
 		return Preview.block(Blocks.STONE);
 	}
 
-	/** A preview's block as if you looked at it, unless another module's look is on it already (Storage on a chest). */
+	/** A preview's block as if you looked at it, unless another module's look is on it already (Storage ESP on a chest). */
 	@Subscribe(inGame = true, priority = Priority.LOW)
 	private void onPreview(PreviewEvent e) {
 		if (e.block() != null && !e.shown()) e.render(look, color.argb());

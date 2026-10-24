@@ -65,7 +65,7 @@ public class Velocity extends Module {
 	private int owedFor;
 
 	public Velocity() {
-		super(Tags.MOVEMENT, "Velocity", "Reduces knockback and pushing.");
+		super(Tags.COMBAT, "Velocity", "Reduces knockback and pushing.");
 	}
 
 	@Override

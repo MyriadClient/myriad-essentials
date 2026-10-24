@@ -34,7 +34,7 @@ import dev.myriadclient.essentials.modules.movement.AutoWalk;
 import dev.myriadclient.essentials.modules.movement.ElytraFly;
 import dev.myriadclient.essentials.modules.movement.ElytraSwap;
 import dev.myriadclient.essentials.modules.movement.InventoryMove;
-import dev.myriadclient.essentials.modules.movement.LockRotation;
+import dev.myriadclient.essentials.modules.movement.RotationLock;
 import dev.myriadclient.essentials.modules.movement.RocketBoost;
 import dev.myriadclient.essentials.modules.movement.Velocity;
 import dev.myriadclient.essentials.modules.player.AutoEat;
@@ -45,18 +45,17 @@ import dev.myriadclient.essentials.modules.player.InventoryTweaks;
 import dev.myriadclient.essentials.modules.player.MiddleClick;
 import dev.myriadclient.essentials.modules.player.PacketMine;
 import dev.myriadclient.essentials.modules.player.Reach;
-import dev.myriadclient.essentials.modules.player.StackReplenish;
+import dev.myriadclient.essentials.modules.player.Replenish;
 import dev.myriadclient.essentials.modules.player.WallInteract;
-import dev.myriadclient.essentials.modules.render.BaritoneRender;
 import dev.myriadclient.essentials.modules.render.BlockESP;
 import dev.myriadclient.essentials.modules.render.BlockHighlight;
-import dev.myriadclient.essentials.modules.render.ESP;
+import dev.myriadclient.essentials.modules.render.EntityESP;
 import dev.myriadclient.essentials.modules.render.FreeLook;
 import dev.myriadclient.essentials.modules.render.Freecam;
 import dev.myriadclient.essentials.modules.render.FullBright;
 import dev.myriadclient.essentials.modules.render.Nametags;
 import dev.myriadclient.essentials.modules.render.NoRender;
-import dev.myriadclient.essentials.modules.render.Storage;
+import dev.myriadclient.essentials.modules.render.StorageESP;
 import dev.myriadclient.essentials.modules.render.TimeOfDay;
 import dev.myriadclient.essentials.modules.render.Tooltips;
 import dev.myriadclient.essentials.modules.render.Tracers;
@@ -64,7 +63,7 @@ import dev.myriadclient.essentials.modules.render.ViewModel;
 import dev.myriadclient.essentials.modules.render.Zoom;
 import dev.myriadclient.essentials.modules.world.AirPlace;
 import dev.myriadclient.essentials.modules.world.BaritoneSettings;
-import dev.myriadclient.essentials.modules.world.PortalBuilder;
+import dev.myriadclient.essentials.modules.world.AutoPortal;
 import dev.myriadclient.essentials.modules.world.Printer;
 import dev.myriadclient.essentials.modules.world.Scaffold;
 import net.fabricmc.loader.api.FabricLoader;
@@ -85,33 +84,31 @@ public final class Essentials implements MyriadAddon {
 	public void initialize(AddonContext ctx) {
 		// Modules the ready-made control panels below combine.
 		ElytraSwap elytraSwap = new ElytraSwap();
-		LockRotation lockRotation = new LockRotation();
+		RotationLock rotationLock = new RotationLock();
 		ElytraFly elytraFly = new ElytraFly();
 		AutoEat autoEat = new AutoEat();
 
-		// The menu's windows, by what the modules are for.
+		// The menu's windows, one per tag, each module in the window of its tag.
 		ModuleGroup combat = ctx.registerGroup("Combat", Icons.CROSSHAIRS);
-		ModuleGroup travel = ctx.registerGroup("Travel", Icons.PLANE);
-		ModuleGroup building = ctx.registerGroup("Building & Mining", Icons.CUBES);
-		ModuleGroup inventory = ctx.registerGroup("Inventory", Icons.ARCHIVE);
-		ModuleGroup visuals = ctx.registerGroup("Visuals", Icons.EYE);
+		ModuleGroup movement = ctx.registerGroup("Movement", Icons.PLANE);
+		ModuleGroup world = ctx.registerGroup("World", Icons.CUBES);
+		ModuleGroup player = ctx.registerGroup("Player", Icons.ARCHIVE);
+		ModuleGroup render = ctx.registerGroup("Render", Icons.EYE);
+		ModuleGroup automation = ctx.registerGroup("Automation", Icons.COGS);
 
 		// Building blocks other modules use (and control panels combine with them). First: they load before the modules
 		// whose former settings they take over (Elytra Fly, Auto Armor).
-		ctx.registerModules(travel, elytraSwap, lockRotation);
-		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), autoEat, new Velocity(), new AutoDisconnect());
-		ctx.registerModules(travel, elytraFly, new RocketBoost(), new AutoWalk(), new InventoryMove());
-		ctx.registerModules(building, new Scaffold(), new AirPlace(), new PacketMine(), new AutoTool(), new Reach(), new WallInteract(), new Printer(),
-			new PortalBuilder());
-		ctx.registerModules(inventory, new InventoryTweaks(), new StackReplenish(), new MiddleClick(), new AutoSort(), new AutoMend());
-		ctx.registerModules(visuals, new ESP(), new Tracers(), new Nametags(), new Storage(), new BlockESP(), new BlockHighlight(), new FullBright(),
+		ctx.registerModules(movement, elytraSwap, rotationLock);
+		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), new Velocity(), new AutoDisconnect());
+		ctx.registerModules(movement, elytraFly, new RocketBoost(), new InventoryMove());
+		ctx.registerModules(world, new Scaffold(), new AirPlace(), new PacketMine(), new Reach(), new WallInteract(), new AutoPortal());
+		ctx.registerModules(player, new InventoryTweaks(), new Replenish(), new MiddleClick());
+		ctx.registerModules(render, new EntityESP(), new Tracers(), new Nametags(), new StorageESP(), new BlockESP(), new BlockHighlight(), new FullBright(),
 			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips());
-		// Baritone's settings, made from Baritone's own list, and its path and goal drawn: only when it's installed.
+		ctx.registerModules(automation, autoEat, new AutoTool(), new AutoWalk(), new AutoMend(), new AutoSort(), new Printer());
+		// Baritone's settings, made from Baritone's own list, with its path and goal drawn: only when it's installed.
 		List<Baritone.SettingInfo> baritone = Baritone.settings();
-		if (!baritone.isEmpty()) {
-			ctx.registerModule(building, new BaritoneSettings(baritone));
-			ctx.registerModule(visuals, new BaritoneRender());
-		}
+		if (!baritone.isEmpty()) ctx.registerModule(world, new BaritoneSettings(baritone));
 
 		// Ready-made control panels: one bind turns the set on, Elytra Fly flying the type given while it's on.
 		ctx.registerControlPanel(ControlPreset.builder("Highway")
@@ -122,7 +119,7 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerControlPanel(ControlPreset.builder("Cruise")
 			.module(elytraFly, m -> m.set(elytraFly.type, ElytraFly.ALTITUDE))
 			.module(elytraSwap)
-			.module(lockRotation)
+			.module(rotationLock)
 			.module(autoEat)
 			.build());
 

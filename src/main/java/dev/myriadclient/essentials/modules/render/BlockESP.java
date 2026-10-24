@@ -93,7 +93,8 @@ public class BlockESP extends Module {
 	}
 
 	public BlockESP() {
-		super(Tags.RENDER, "Blocks", "Highlights the blocks you pick, like spawners or beds, through walls.");
+		super(Tags.RENDER, "Block ESP", "Highlights the blocks you pick, like spawners or beds, through walls.");
+		formerNames("Blocks");
 		// A different list needs a new search; anything else only re-meshes.
 		settings.onAnyChanged(s -> {
 			if (s == blocks) found.invalidateAll();

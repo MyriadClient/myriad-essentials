@@ -21,7 +21,7 @@ import java.util.Arrays;
  * inventory. Sprinting doesn't hold it up (core gets a click past Grim in the same tick); where Grim judges the keys you
  * hold (newer versions, not 2b2t), it waits for a moment you aren't pressing any.
  */
-public class StackReplenish extends Module {
+public class Replenish extends Module {
 	private final IntSetting threshold = sgGeneral.integer("Threshold").description("Refill a stack when it drops to this percent of a full one.")
 		.defaultValue(25).range(1, 99).build();
 	private final BoolSetting mainHand = sgGeneral.bool("Main Hand").description("Refill the stack you're holding.").defaultValue(true).build();
@@ -31,8 +31,9 @@ public class StackReplenish extends Module {
 	/** What each hotbar slot (and the off hand, last) held last tick, so an emptied slot can get the same item back. */
 	private final ItemStack[] last = new ItemStack[10];
 
-	public StackReplenish() {
-		super(Tags.PLAYER, "Stack Replenish", "Refills hotbar stacks from your inventory.");
+	public Replenish() {
+		super(Tags.PLAYER, "Replenish", "Refills hotbar stacks from your inventory.");
+		formerNames("Stack Replenish");
 	}
 
 	@Override

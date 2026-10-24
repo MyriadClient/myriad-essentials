@@ -63,7 +63,7 @@ import java.util.function.BiConsumer;
  * changes) and their boxes stay on the GPU, so settings only re-mesh; only entities are handed over each frame. Tracers
  * draws lines to everything this shows (its Storage option).
  */
-public class Storage extends Module {
+public class StorageESP extends Module {
 	private final IntSetting range = sgGeneral.integer("Range").description("Chunks around you.").defaultValue(8).range(1, 32).build();
 
 	private final SettingGroup sgBlocks = settings.group("Blocks");
@@ -125,8 +125,9 @@ public class Storage extends Module {
 		}
 	}
 
-	public Storage() {
-		super(Tags.RENDER, "Storage", "Highlights chests, shulker boxes and other storage through walls.");
+	public StorageESP() {
+		super(Tags.RENDER, "Storage ESP", "Highlights chests, shulker boxes and other storage through walls.");
+		formerNames("Storage");
 		// A kind turned on or off, or a colour: the boxes are made again from what was found.
 		settings.onAnyChanged(s -> found.remeshAll());
 	}

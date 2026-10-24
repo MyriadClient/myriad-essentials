@@ -125,7 +125,7 @@ public class Printer extends Module {
 	}
 
 	public Printer() {
-		super(Tags.WORLD, "Printer", "Builds Litematica schematics around you.");
+		super(Tags.AUTOMATION, "Printer", "Builds Litematica schematics around you.");
 	}
 
 	private Building.Options options() {
