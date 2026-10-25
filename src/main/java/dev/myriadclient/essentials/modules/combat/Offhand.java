@@ -13,6 +13,7 @@ import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SettingGroup;
+import dev.myriadclient.api.util.Slots;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.item.ItemStack;
@@ -121,10 +122,13 @@ public class Offhand extends Module {
 		// Already holding a totem in the main hand: that one saves you, so leave the off hand as it is.
 		if (danger && mainHandTotem.get() && TOTEM.test(mc.player.getMainHandItem())) danger = false;
 		Predicate<ItemStack> want = danger ? TOTEM : wanted();
-		if (want.test(mc.player.getOffhandItem())) return;
+		// What the off hand holds as core shows it: while an air placement's swap is unanswered the server may report the
+		// block there for a moment (its tick fell between the swaps), and swapping a totem in then would act on that.
+		ItemStack offHand = Myriad.inventory().shown(Slots.OFF_HAND);
+		if (want.test(offHand)) return;
 		int slot = find(want);
 		if (slot < 0 && want != TOTEM) {
-			if (TOTEM.test(mc.player.getOffhandItem())) return;
+			if (TOTEM.test(offHand)) return;
 			slot = find(TOTEM);
 		}
 		if (slot < 0) return;

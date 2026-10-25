@@ -21,6 +21,10 @@ Needs Myriad 1.2.0.
   chest, hopper, dispenser) you have open, from the chest's slots or yours: the chest closes for it, and when you close
   the box it's put back and the chest opens again with it back in its slot. As fast as from your hotbar: 300 ms on the
   Grim test server through 150 ms of lag.
+- **Inventory Tweaks** opens a box from inside one it put down (a shulker box in an ender chest): closing it puts it
+  back in that one, which opens again, and that one goes back when you close it.
+- **Offhand** goes by what your off hand holds as core shows it: during an air placement's swap through the off hand
+  2b2t can report the block there for a moment, and a totem was swapped in on that.
 - **Replenish** keeps track of your hotbar behind a chest's or box's screen too, not only your own: what you moved
   out of a slot there was taken for used up and put back once you closed it (an ender chest's stack Inventory Tweaks
   had given back to the main inventory, pulled straight back into the hotbar).

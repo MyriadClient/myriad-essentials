@@ -853,7 +853,7 @@ BOX_ITEMS = {0: "diamond_sword", 1: "cobblestone 32", 3: "red_shulker_box", 5: "
 def box_pass(index, ceiling=False, items=BOX_ITEMS, held=1, replenish=False, close_at=None):
     reset()
     cmd(*(f"item replace entity {P} {f'hotbar.{s}' if s < 9 else f'inventory.{s - 9}'} with {t}" for s, t in items.items()),
-        *(["fill 997 103 -3 1003 103 3 stone"] if ceiling else []))
+        *(["fill 997 104 -3 1003 104 3 stone"] if ceiling else []))
     start = [*([".toggle replenish on"] if replenish else []), f"select {held + 1}", "wait 10"]
     end = [".toggle replenish off"] if replenish else []
     stray = []
@@ -869,7 +869,8 @@ def box_pass(index, ceiling=False, items=BOX_ITEMS, held=1, replenish=False, clo
     # By the server's item test: a long entry (the pickaxe's enchantment and wear) comes back cut short of its id.
     slot = lambda s: f"hotbar.{s}" if s < 9 else f"inventory.{s - 9}"
     wrong = [s for s, t in items.items() if not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")] + [s for s, t in items.items() if t.startswith("ender_chest") and count(s) != int(t.split(' ')[1])]
-    above = m is not None and int(m.group(2)) == 102
+    # A block up from right over the tester's head, under the ceiling (a shulker box's lid right over it would push them).
+    above = m is not None and int(m.group(2)) == 103
     ok = m is not None and "openitem back" in out and not wrong and not stray and above == ceiling
     where = f"opened {'above' if above else 'beside'} the tester after {m.group(4)} ms" if m else f"didn't open ({fail.group(1) if fail else 'no answer'})"
     return ok, where + (f", slots {sorted(set(wrong))} not as they were" if wrong else ", put back") + (f", hotbar {stray} filled once closed" if stray else "")
@@ -902,19 +903,25 @@ def t_open_box_ender_chest_inventory_replenish():
     return box_pass(14, items=items, replenish=True, close_at=30)
 
 
-def chest_box_pass(item="red_shulker_box", in_chest=True, full_hotbar=False):
+def chest_box_pass(item="red_shulker_box", in_chest=True, full_hotbar=False, hotbar=None, extra=None, times=1):
     """Inventory Tweaks' right-click on a box in a chest opened by hand (in_chest: one of the chest's slots, else one of
     yours below them): it's put down and opened, the chest closed; closing the box puts it back where it was and opens
-    the chest again. full_hotbar: no free hotbar slot, so what makes room for it waits in the chest meanwhile."""
+    the chest again. full_hotbar: no free hotbar slot, so what makes room for it waits in an empty inventory slot meanwhile.
+    hotbar/extra: other hotbar layouts and inventory items (index: item). times: opened and closed that many times over,
+    the later ones at the spot just broken (a finish alone breaks it there). Never any obsidian (an ender chest broken
+    without Silk Touch)."""
     reset(pitch=35)
-    hotbar = {0: "diamond_sword", 1: "cobblestone 32", 6: "diamond_pickaxe[enchantments={silk_touch:1}]"}
+    hotbar = dict(hotbar or {0: "diamond_sword", 1: "cobblestone 32", 6: "diamond_pickaxe[enchantments={silk_touch:1}]"})
     if full_hotbar: hotbar.update({i: f"oak_planks {i + 1}" for i in range(9) if i not in hotbar})
     chest, mine = 4, 14
     cmd("setblock 1002 100 0 chest[facing=west]", *(f"item replace entity {P} hotbar.{s} with {t}" for s, t in hotbar.items()),
-        f"item replace block 1002 100 0 container.{chest} with {item}" if in_chest else f"item replace entity {P} inventory.{mine - 9} with {item}")
-    out = client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "use", "wait 10",
-                 f"cursor slot {chest if in_chest else 27 + mine - 9}", "mouse 1 click", "wait 30", timeout=60)
+        f"item replace block 1002 100 0 container.{chest} with {item}" if in_chest else f"item replace entity {P} inventory.{mine - 9} with {item}",
+        *(f"item replace entity {P} inventory.{s - 9} with {t}" for s, t in (extra or {}).items()))
     name = item.split(" ")[0]
+    client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "use", "wait 10", timeout=60)
+    for _ in range(times - 1):
+        client(f"cursor slot {chest if in_chest else 27 + mine - 9}", "mouse 1 click", "wait 30", "closescreen", "wait 200", timeout=60)
+    out = client(f"cursor slot {chest if in_chest else 27 + mine - 9}", "mouse 1 click", "wait 30", timeout=60)
     out_of_chest = chest_items(1002, 100, 0).get(chest, (None,))[0] != name if in_chest else not passed(f"if items entity {P} inventory.{mine - 9} {name}")
     out += client("status", "closescreen", "wait 200", "status", timeout=60)
     screens = re.findall(r"screen=(\S+)", out)
@@ -922,13 +929,15 @@ def chest_box_pass(item="red_shulker_box", in_chest=True, full_hotbar=False):
     slot = lambda s: f"hotbar.{s}" if s < 9 else f"inventory.{s - 9}"
     wrong = [s for s, t in hotbar.items() if not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")]
     wrong += [s for s in range(9) if s not in hotbar and count(s)]
+    wrong += [s for s, t in (extra or {}).items() if not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")]
+    obsidian = passed(f"if items entity {P} container.* obsidian") or "obsidian" in str(chest_items(1002, 100, 0))
     # An ender chest's screen is a ContainerScreen as the chest's is: the box having left the chest tells it opened.
     reopened = len(screens) == 2 and screens[1] == "ContainerScreen"
     client("key escape", "wait 5", timeout=30)
-    ok = out_of_chest and back and not wrong and reopened
+    ok = out_of_chest and back and not wrong and reopened and not obsidian
     return ok, (f"opened (screen {screens[0] if screens else '?'})" if out_of_chest else "never left its slot") + \
         (", back in its slot" if back else ", not back in its slot") + (f", hotbar {wrong} not as it was" if wrong else "") + \
-        (", the chest open again" if reopened else f", screens {screens}")
+        (", the chest open again" if reopened else f", screens {screens}") + (", OBSIDIAN: broken without Silk Touch" if obsidian else "")
 
 
 def t_open_box_in_chest():
@@ -941,6 +950,40 @@ def t_open_box_in_chest_full_hotbar():
 
 def t_open_box_ender_chest_in_chest():
     return chest_box_pass(item="ender_chest 4")
+
+
+def t_open_box_ender_chest_in_chest_full_hotbar():
+    # The only Silk Touch pickaxe is in the full hotbar: something else makes room, so it's there for the break.
+    return chest_box_pass(item="ender_chest 4", full_hotbar=True, hotbar={0: "diamond_pickaxe[enchantments={silk_touch:1}]", 1: "cobblestone 32"})
+
+
+def t_open_box_ender_chest_in_chest_twice():
+    # Twice at the same spot, the Silk Touch pickaxe in the main inventory and a plain one in the hotbar: the second
+    # break is a finish alone, which mustn't go before the Silk Touch pickaxe is in hand.
+    return chest_box_pass(item="ender_chest 4", hotbar={0: "diamond_sword", 6: "diamond_pickaxe"}, extra={20: "diamond_pickaxe[enchantments={silk_touch:1}]"}, times=2)
+
+
+def t_open_box_from_a_placed_box():
+    """A shulker box right-clicked in an ender chest Inventory Tweaks put down: it opens, and closing it puts it back in
+    the ender chest, which opens again; closing that puts the ender chest back in your hotbar. No obsidian."""
+    reset(pitch=35)
+    cmd(*(f"item replace entity {P} hotbar.{s} with {t}" for s, t in {0: "diamond_sword", 5: "ender_chest 4", 6: "diamond_pickaxe[enchantments={silk_touch:1}]"}.items()),
+        f"item replace entity {P} enderchest.0 with red_shulker_box", f"item replace entity {P} enderchest.1 with bread 7")
+    client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "key e", "wait 10",
+           "cursor slot 41", "mouse 1 click", "wait 30", "status", "cursor slot 0", "mouse 1 click", "wait 30", timeout=60)
+    nested = not passed(f"if items entity {P} enderchest.0 red_shulker_box")
+    out = client("status", "closescreen", "wait 200", "status", timeout=60)
+    screens = re.findall(r"screen=(\S+)", out)
+    back_inside = passed(f"if items entity {P} enderchest.0 red_shulker_box")
+    client("closescreen", "wait 200", timeout=60)
+    home = count(5) == 4 and passed(f"if items entity {P} hotbar.5 ender_chest")
+    obsidian = passed(f"if items entity {P} container.* obsidian")
+    reopened = len(screens) == 2 and screens[1] == "ContainerScreen"
+    client("key escape", "wait 5", timeout=30)
+    ok = nested and back_inside and reopened and home and not obsidian
+    return ok, ("opened from the ender chest" if nested else "the shulker box never left the ender chest") + \
+        (", back inside it" if back_inside else ", not back inside it") + (", the ender chest open again" if reopened else f", screens {screens}") + \
+        (", the ender chest home" if home else ", the ender chest not back in hotbar 5") + (", OBSIDIAN" if obsidian else "")
 
 
 def t_open_box_yours_with_chest_open():
@@ -1484,6 +1527,9 @@ TESTS = [
     ("open box in a chest full hotbar", t_open_box_in_chest_full_hotbar),
     ("open box ender chest in a chest", t_open_box_ender_chest_in_chest),
     ("open box yours with a chest open", t_open_box_yours_with_chest_open),
+    ("open box ender chest in a chest full hotbar", t_open_box_ender_chest_in_chest_full_hotbar),
+    ("open box ender chest in a chest twice", t_open_box_ender_chest_in_chest_twice),
+    ("open box from a placed box", t_open_box_from_a_placed_box),
     ("inventory_tweaks middle sort", t_inventory_tweaks_middle_sort),
     ("auto_sort opened by hand", t_auto_sort_opened_by_hand),
     ("inventory_tweaks middle sort held", t_inventory_tweaks_middle_sort_held),
