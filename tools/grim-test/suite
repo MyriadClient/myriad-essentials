@@ -850,20 +850,29 @@ BOX_ITEMS = {0: "diamond_sword", 1: "cobblestone 32", 3: "red_shulker_box", 5: "
              14: "blue_shulker_box"}
 
 
-def box_pass(index, ceiling=False):
+def box_pass(index, ceiling=False, items=BOX_ITEMS, held=1, replenish=False, close_at=None):
     reset()
-    cmd(*(f"item replace entity {P} {f'hotbar.{s}' if s < 9 else f'inventory.{s - 9}'} with {t}" for s, t in BOX_ITEMS.items()),
+    cmd(*(f"item replace entity {P} {f'hotbar.{s}' if s < 9 else f'inventory.{s - 9}'} with {t}" for s, t in items.items()),
         *(["fill 997 103 -3 1003 103 3 stone"] if ceiling else []))
-    out = client("wait 10", f"openitem {index} noair 20", "wait 120", timeout=60)
+    start = [*([".toggle replenish on"] if replenish else []), f"select {held + 1}", "wait 10"]
+    end = [".toggle replenish off"] if replenish else []
+    stray = []
+    if close_at:
+        # The tester closes the screen close_at ticks in, as you would, and the hotbar is looked at before the box goes back.
+        out = client(*start, f"openitem {index} noair 60", f"wait {close_at}", "closescreen", "wait 5", timeout=60)
+        stray = [h for h in range(9) if h not in items and count(h)]
+        out += client("wait 200", *end, timeout=60)
+    else:
+        out = client(*start, f"openitem {index} noair 20", "wait 160", *end, timeout=60)
     m = re.search(r"openitem open at (-?\d+), (-?\d+), (-?\d+) after (\d+) ms", out)
     fail = re.search(r"openitem failed: (.*)", out)
     # By the server's item test: a long entry (the pickaxe's enchantment and wear) comes back cut short of its id.
     slot = lambda s: f"hotbar.{s}" if s < 9 else f"inventory.{s - 9}"
-    wrong = [s for s, t in BOX_ITEMS.items() if not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")] + ([5] if count(5) != 4 else [])
+    wrong = [s for s, t in items.items() if not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")] + [s for s, t in items.items() if t.startswith("ender_chest") and count(s) != int(t.split(' ')[1])]
     above = m is not None and int(m.group(2)) == 102
-    ok = m is not None and "openitem back" in out and not wrong and above == ceiling
+    ok = m is not None and "openitem back" in out and not wrong and not stray and above == ceiling
     where = f"opened {'above' if above else 'beside'} the tester after {m.group(4)} ms" if m else f"didn't open ({fail.group(1) if fail else 'no answer'})"
-    return ok, where + (f", slots {sorted(set(wrong))} not as they were" if wrong else ", put back")
+    return ok, where + (f", slots {sorted(set(wrong))} not as they were" if wrong else ", put back") + (f", hotbar {stray} filled once closed" if stray else "")
 
 
 def t_open_box_hotbar():
@@ -876,6 +885,21 @@ def t_open_box_ender_chest_stack():
 
 def t_open_box_inventory_above():
     return box_pass(14, ceiling=True)
+
+
+def t_open_box_ender_chest_silk_touch_in_inventory():
+    # Holding a plain pickaxe, the Silk Touch one in the main inventory: the chest is broken with that one, not obsidian.
+    items = {**{s: t for s, t in BOX_ITEMS.items() if s != 6}, 6: "diamond_pickaxe", 20: "diamond_pickaxe[enchantments={silk_touch:1}]"}
+    ok, detail = box_pass(5, items=items, held=6)
+    silk = passed(f"if items entity {P} inventory.11 diamond_pickaxe[enchantments~[{{enchantments:'silk_touch'}}]]")
+    return ok and silk, detail + ("" if silk else ", the Silk Touch pickaxe isn't back in its slot")
+
+
+def t_open_box_ender_chest_inventory_replenish():
+    # A stack from the main inventory, given back to its slot through the chest's screen: Replenish, on, mustn't take
+    # the hotbar slot it was pulled into for one you emptied and fill it again when you close the screen.
+    items = {**{s: t for s, t in BOX_ITEMS.items() if s != 5}, 14: "ender_chest 4"}
+    return box_pass(14, items=items, replenish=True, close_at=30)
 
 
 def t_inventory_tweaks_middle_sort():
@@ -1409,6 +1433,8 @@ TESTS = [
     ("recast", t_elytra_recast),
     ("recast obstacles", t_elytra_recast_obstacles),
     ("recast no durability", t_elytra_recast_no_durability),
+    ("open box ender chest silk touch in the inventory", t_open_box_ender_chest_silk_touch_in_inventory),
+    ("open box ender chest from the inventory with replenish", t_open_box_ender_chest_inventory_replenish),
     ("recast low ceiling", t_elytra_recast_low_ceiling),
     ("recast diagonal", t_elytra_recast_diagonal),
     ("recast spare elytras", t_elytra_recast_spare_elytras),

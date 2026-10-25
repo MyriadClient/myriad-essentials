@@ -13,6 +13,9 @@ Needs Myriad 1.2.0.
   your head where it can, so it drops back on you, else beside you. A new Air Place setting puts it there with
   nothing to click against, through the off hand as on 2b2t (current Grim refuses it); off, it goes above your head
   only under a ceiling.
+- **Replenish** keeps track of your hotbar behind a chest's or box's screen too, not only your own: what you moved
+  out of a slot there was taken for used up and put back once you closed it (an ender chest's stack Inventory Tweaks
+  had given back to the main inventory, pulled straight back into the hotbar).
 - **Auto Tool** lets go of the weapon a fight left in your hand when you start mining something it has no tool in the
   hotbar for yet (the better one still on its way from the inventory): it mined no faster than a hand, and kept Packet
   Mine from holding its own tool, so a hopper or dropper broken just after a fight took a long while.

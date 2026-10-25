@@ -53,11 +53,11 @@ public class Replenish extends Module {
 
 	@Subscribe
 	private void onTick(TickEvent.Pre e) {
-		if (!inGame() || mc.player.containerMenu != mc.player.inventoryMenu || !mc.player.inventoryMenu.getCarried().isEmpty()) return;
+		if (!inGame() || !mc.player.containerMenu.getCarried().isEmpty()) return;
 		Inventory inv = mc.player.getInventory();
-		// With a screen open, slots empty because you're moving things: just keep track. And while a click would have
-		// to wait (remembering what each slot held, so one used up meanwhile is still refilled then).
-		boolean clicks = mc.gui.screen() == null && Myriad.inventory().safeToClick();
+		// With a screen open (a chest's too), slots empty because you're moving things: just keep track. And while a
+		// click would have to wait (remembering what each slot held, so one used up meanwhile is still refilled then).
+		boolean clicks = mc.gui.screen() == null && mc.player.containerMenu == mc.player.inventoryMenu && Myriad.inventory().safeToClick();
 		int selected = inv.getSelectedSlot();
 		for (int i = 0; i < last.length; i++) {
 			int slot = i < 9 ? i : Slots.OFF_HAND;
