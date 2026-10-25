@@ -4,10 +4,12 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.ContainerScreenEvent;
 import dev.myriadclient.api.job.Steps;
+import dev.myriadclient.api.job.Why;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.service.Containers;
+import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.SettingGroup;
@@ -52,6 +54,10 @@ public class InventoryTweaks extends Module {
 	private final BoolSetting shulkers = sgGeneral.bool("Instant Shulker").description("Right-click a shulker box in your inventory to open it.").defaultValue(true).build();
 	private final BoolSetting enderChests = sgGeneral.bool("Instant Ender Chest").description("Right-click an ender chest in your inventory to open it (needs a Silk Touch pickaxe to pick it back up).")
 		.defaultValue(true).build();
+	// Shown everywhere, as core's Air Place is: 2b2t takes it and current Grim doesn't.
+	private final BoolSetting airPlace = sgGeneral.bool("Air Place").description("Put the box above your head with nothing there to click against, "
+		+ "through the off hand. 2b2t takes it; current Grim refuses it. Off, it goes above your head only under a ceiling, else beside you.")
+		.visible(() -> shulkers.get() || enderChests.get()).build();
 
 	private final SettingGroup sgMouse = settings.group("Mouse");
 	private final BoolSetting shiftDrag = sgMouse.bool("Shift Drag").description("Hold Shift and drag with the left button to shift-click every slot you pass.")
@@ -68,6 +74,8 @@ public class InventoryTweaks extends Module {
 
 	/** How long to wait for you to close the box, in ticks: long enough to sort a whole box by hand. */
 	private static final int BROWSE_TICKS = 20 * 60 * 30;
+	/** How long the box may take to open once clicked. */
+	private static final int OPEN_TICKS = 40;
 
 	/** What the mixin gives this module of a container screen. */
 	public interface ScreenAccess {
@@ -113,9 +121,14 @@ public class InventoryTweaks extends Module {
 		if (index < 0 || index >= 36) return false;
 
 		// Put down, opened, and picked back up when you close it (or when it can't open, saying why).
-		Myriad.jobs().start(this, Steps.inItem(index, view -> Steps.untilClosed(view, BROWSE_TICKS))
-			.named(ender ? "Ender chest" : "Shulker box")
-			.onFailed(why -> warn(capitalized(why.detail().isEmpty() ? why.toString() : why.detail()))));
+		Myriad.containers().openItem(this, index, OPEN_TICKS, Placement.Options.forServer().withAirPlace(airPlace.get())).whenComplete((session, t) -> {
+			if (t != null) {
+				Why why = Why.of(t);
+				if (!why.is(Why.CANCELLED) && !why.is(Why.OWNER_OFF) && !why.is(Why.LEFT_WORLD)) warn(capitalized(why.detail().isEmpty() ? why.toString() : why.detail()));
+				return;
+			}
+			Myriad.jobs().start(this, Steps.untilClosed(session.view(), BROWSE_TICKS).finallyDo(session::finish).named(ender ? "Ender chest" : "Shulker box"));
+		});
 		return true;
 	}
 

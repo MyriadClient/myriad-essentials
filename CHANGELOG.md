@@ -9,6 +9,10 @@ Needs Myriad 1.2.0.
 
 - **Middle Click** sends no swing with a pearl, rocket or bottle on 2b2t (Myriad's 2b2t profile, which wants none),
   and the item goes back out of your hand in the same tick there.
+- **Inventory Tweaks** opens a shulker box or ender chest from your inventory a round trip sooner (core's work): above
+  your head where it can, so it drops back on you, else beside you. A new Air Place setting puts it there with
+  nothing to click against, through the off hand as on 2b2t (current Grim refuses it); off, it goes above your head
+  only under a ceiling.
 - **Auto Tool** lets go of the weapon a fight left in your hand when you start mining something it has no tool in the
   hotbar for yet (the better one still on its way from the inventory): it mined no faster than a hand, and kept Packet
   Mine from holding its own tool, so a hopper or dropper broken just after a fight took a long while.
