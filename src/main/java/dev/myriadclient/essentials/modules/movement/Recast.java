@@ -67,6 +67,12 @@ import java.util.function.Predicate;
  * notices when it's stuck, or the server keeps setting you back, and doesn't keep trying. The lane's height is kept from
  * where you first stand: off the line or below it (a fall off the highway), Baritone walks you back onto it before
  * bouncing on. When the way can't be cleared, If Blocked waits there or disconnects.
+ * <p>
+ * Ground Terrain is for land that isn't flat: it steers where you look, with no lane or lane height, and follows the
+ * ground. A step up of up to a block is hopped up, the hop rising without its dive until you're over the step's top
+ * and timed (a tick held back where needed) so it reaches the face high enough; a drop of up to two is glided down.
+ * Anything higher, something in the way at head height, water or lava, or a deeper drop stops it, landing in front:
+ * it clears nothing there, and bounces on once you look somewhere clear.
  */
 public class Recast extends GlideMode {
 	public enum Obstacles {
@@ -77,11 +83,18 @@ public class Recast extends GlideMode {
 		WAIT, DISCONNECT
 	}
 
+	public enum Ground {
+		HIGHWAY, TERRAIN
+	}
+
+	private final EnumSetting<Ground> ground = sgGeneral.oneOf("Ground", Ground.HIGHWAY)
+		.description("Highway: a lane fixed as you turn it on, kept at its height, stopping at any block or hole in it to clear it. Terrain: steers where you look and follows the ground, hopping up steps of a block, stopping at anything higher, water, or a drop of more than two.")
+		.visible(this::chosen).build();
 	private final EnumSetting<Obstacles> obstacles = sgGeneral.oneOf("Obstacles", Obstacles.CLEAR)
 		.description("Clear: Baritone takes you past (walking round, mining or placing), or without it, mines through blocks and fills holes at floor level. Stop: stop at them.")
-		.visible(this::chosen).build();
+		.visible(() -> chosen() && !terrain()).build();
 	private final EnumSetting<IfBlocked> ifBlocked = sgGeneral.oneOf("If Blocked", IfBlocked.WAIT)
-		.description("When the way can't be cleared (with Stop, anything in the lane): wait there, or disconnect.").visible(this::chosen).build();
+		.description("When the way can't be cleared (with Stop, anything in the lane): wait there, or disconnect.").visible(() -> chosen() && !terrain()).build();
 
 	private enum State {
 		IDLE, BOUNCING, BRAKING, WALKING, MINING, PATHING, WAITING, BLOCKED, UNDER, FILLING
@@ -93,6 +106,10 @@ public class Recast extends GlideMode {
 	}
 
 	private record Obstruction(Hazard hazard, double distance, List<BlockPos> blocks) {
+	}
+
+	/** On terrain: the first step up ahead, how far along and how far above the floor its top is. */
+	private record Rise(double distance, double height) {
 	}
 
 	/** Dive while vertical speed is above this, level out below it. */
@@ -134,8 +151,25 @@ public class Recast extends GlideMode {
 	private static final double PLACE_REACH = 4, HOLE_SPAN = 5;
 	/** Within this of a block, mine it rather than walk closer. */
 	private static final double MINE_REACH = 3.5;
+	/**
+	 * On terrain: the highest step hopped up (a block), the deepest drop bounced off (more would cost a fall), and the
+	 * lowest rise that needs a hop at all (walking steps up anything lower).
+	 */
+	private static final double STEP_MAX = 1.05, DROP_MAX = 2, STEP_ASSIST = 0.6;
+	/**
+	 * On terrain: how far over a step's top the climb rises before diving again; an ordinary hop's length and the ticks
+	 * a climbing hop stays over a block's height, about; and what a sprint jump adds to your speed, and a hop over it.
+	 */
+	private static final double CLIMB_MARGIN = 0.15, JUMP_PUSH = 0.2, HOP_GAIN = 0.19;
+	private static final int HOP_TICKS = 10, CLIMB_TICKS = 11;
+	/** On terrain, once stopped, how much clear ahead (where you look) starts the bounce again. */
+	private static final double TERRAIN_RESUME = LOOK_AHEAD + 8;
 
 	private State state = State.IDLE;
+	/** On terrain: the step up ahead (see {@link #scanTerrain}), and how far you've come, for telling when you're stuck. */
+	private @Nullable Rise rise;
+	private double travelled;
+	private @Nullable Vec3 lastPos;
 
 	private boolean wantJump, wantForward, wantSneak;
 	/** The lane's height, where you first stood (NaN until then). */
@@ -212,6 +246,9 @@ public class Recast extends GlideMode {
 		pauseTicks = progressCount = sinceStart = 0;
 		hopStarted = false;
 		lane = Float.NaN;
+		rise = null;
+		lastPos = null;
+		travelled = 0;
 		setbacks.clear();
 		stopMining();
 	}
@@ -226,7 +263,7 @@ public class Recast extends GlideMode {
 			case PATHING -> "Baritone";
 			case WAITING -> "Loading";
 			case BLOCKED -> "Blocked";
-			case BOUNCING -> pauseTicks > 0 ? "Flagged" : String.format("%.0f°", lane);
+			case BOUNCING -> pauseTicks > 0 ? "Flagged" : terrain() ? "Terrain" : String.format("%.0f°", lane);
 			case IDLE -> null;
 		};
 	}
@@ -320,13 +357,16 @@ public class Recast extends GlideMode {
 			groundY = mc.player.getY();
 			if (Double.isNaN(laneY)) laneY = groundY;
 		}
+		Vec3 pos = mc.player.position();
+		if (lastPos != null) travelled += Math.hypot(pos.x - lastPos.x, pos.z - lastPos.z);
+		lastPos = pos;
 
-		double range = state == State.BOUNCING ? lookAhead() : Math.max(lookAhead(), RESUME_LOOK_AHEAD);
+		double range = state == State.BOUNCING ? lookAhead() : Math.max(lookAhead(), terrain() ? TERRAIN_RESUME : RESUME_LOOK_AHEAD);
 		Obstruction ahead;
 		if (forcedBlock) ahead = new Obstruction(Hazard.STUCK, 0, List.of());
 		// Well off the highway or below it (a setback, the way round something, a fall): back onto it first.
-		else if (mc.player.onGround() && offLane()) ahead = new Obstruction(Hazard.OFF_LANE, 0, List.of());
-		else ahead = scanAhead(range);
+		else if (!terrain() && mc.player.onGround() && offLane()) ahead = new Obstruction(Hazard.OFF_LANE, 0, List.of());
+		else ahead = terrain() ? scanTerrain(range) : scanAhead(range);
 		if (ahead != null) {
 			handleObstacle(ahead);
 			return;
@@ -350,6 +390,12 @@ public class Recast extends GlideMode {
 			return;
 		}
 		if (trackStuck()) return;
+		if (holdBackForStep()) {
+			// No jump this tick: the glide let go, you slide a little slower and a little nearer (see holdBackForStep).
+			spoofing = holdGlide = false;
+			letGo();
+			return;
+		}
 		bounce();
 	}
 
@@ -371,7 +417,7 @@ public class Recast extends GlideMode {
 	/** One tick of the bounce itself. */
 	private void bounce() {
 		Myriad.elytra().glideHold().arm(this);
-		spoof(steeredYaw(), mc.player.getDeltaMovement().y > DIVE_UNTIL_Y ? 90 : 4);
+		spoof(steeredYaw(), mc.player.getDeltaMovement().y > DIVE_UNTIL_Y && !climbing() ? 90 : 4);
 		// Vanilla waits 10 ticks between held jumps; jump the tick you touch down.
 		Interactions.setJumpCooldown(0);
 		boolean ground = mc.player.onGround();
@@ -473,6 +519,17 @@ public class Recast extends GlideMode {
 				return;
 			}
 		}
+		if (terrain()) {
+			// On terrain it only stops: you look another way, and it bounces on once that's clear.
+			stand();
+			forcedBlock = false;
+			state = ahead.hazard() == Hazard.UNLOADED ? State.WAITING : State.BLOCKED;
+			if (state == State.BLOCKED && !warned) {
+				status((ahead.hazard() == Hazard.HOLE ? "A drop or water ahead" : "Something in the way") + ": stopped, look another way to go on", true);
+			}
+			warned = state == State.BLOCKED;
+			return;
+		}
 		boolean clear = obstacles.get() == Obstacles.CLEAR;
 		// Baritone takes you past when it's installed; mining and filling here only without it.
 		boolean baritone = clear && Baritone.isAvailable();
@@ -528,7 +585,7 @@ public class Recast extends GlideMode {
 		var p = mc.player;
 		// Still flying while the elytra's open, the tick you land too: along the lane, not where the camera looks.
 		if (!p.onGround() || elytraOpen()) {
-			spoof(lane, 90);
+			spoof(heading(), 90);
 			return false;
 		}
 		spoofing = false;
@@ -689,7 +746,7 @@ public class Recast extends GlideMode {
 			progressCount = 0;
 			return false;
 		}
-		double along = along(mc.player.position());
+		double along = terrain() ? travelled : along(mc.player.position());
 		int slot = progressCount % STUCK_TICKS;
 		boolean stuck = progressCount >= STUCK_TICKS && along - progress[slot] < STUCK_PROGRESS;
 		progress[slot] = along;
@@ -904,9 +961,17 @@ public class Recast extends GlideMode {
 
 	// ---- the lane --------------------------------------------------------------------------------------------------
 
-	/** The way the lane runs. */
+	/** The way the lane runs: on terrain, where you look. */
 	private Vec3 laneDir() {
-		return Vec3.directionFromRotation(0, lane);
+		return Vec3.directionFromRotation(0, heading());
+	}
+
+	private float heading() {
+		return terrain() ? mc.player.getYRot() : lane;
+	}
+
+	private boolean terrain() {
+		return ground.get() == Ground.TERRAIN;
 	}
 
 	/**
@@ -947,6 +1012,7 @@ public class Recast extends GlideMode {
 	 * brings you back without overshooting (the sideways speed you already have counts against it).
 	 */
 	private float steeredYaw() {
+		if (terrain()) return mc.player.getYRot();
 		Vec3 dir = laneDir(), v = mc.player.getDeltaMovement();
 		double off = offLine(mc.player.position());
 		double sideways = v.x * -dir.z + v.z * dir.x, forwards = Math.max(0.5, v.x * dir.x + v.z * dir.z);
@@ -1020,6 +1086,96 @@ public class Recast extends GlideMode {
 			}
 		}
 		return ceiling;
+	}
+
+	/**
+	 * On terrain, the first thing within {@code range} where you look that a hop can't take: the ground there more than a
+	 * block above what came before it, or something in the way above it up to a standing player's height (a wall, a
+	 * tree, an overhang), the ground more than {@link #DROP_MAX} below (a fall would hurt), water or lava, or chunks that
+	 * haven't loaded. Followed from one sample to the next, a little narrower than your hitbox, so a slope of steps is
+	 * climbed one at a time. Notes the first step up worth a hop in {@link #rise}. Null if it's clear.
+	 */
+	private Obstruction scanTerrain(double range) {
+		rise = null;
+		Vec3 dir = laneDir();
+		AABB box = mc.player.getBoundingBox();
+		double floor = floorY(), top = floor;
+		for (double d = SWEEP_STEP; d <= range; d += SWEEP_STEP) {
+			Vec3 at = dir.scale(d);
+			if (!loaded(mc.player.position().add(at))) return new Obstruction(Hazard.UNLOADED, d, List.of());
+			AABB column = new AABB(box.minX + 0.2, top, box.minZ + 0.2, box.maxX - 0.2, top, box.maxZ - 0.2).move(at.x, 0, at.z);
+			double ground = groundIn(column, top - DROP_MAX, top + STEP_MAX);
+			if (Double.isNaN(ground) || fluidIn(column, ground)) return new Obstruction(Hazard.HOLE, d, List.of());
+			List<BlockPos> hits = new ArrayList<>();
+			if (blocksIn(new AABB(column.minX, ground + 0.05, column.minZ, column.maxX, ground + STAND_HEIGHT, column.maxZ), hits)) {
+				return new Obstruction(Hazard.BLOCKS, d, hits);
+			}
+			if (rise == null && ground - floor >= STEP_ASSIST) rise = new Rise(d, ground - floor);
+			top = ground;
+		}
+		return null;
+	}
+
+	/** The highest top of anything to stand on under {@code column}'s footprint, from {@code low} to {@code high}; NaN if none. */
+	private double groundIn(AABB column, double low, double high) {
+		double best = Double.NaN;
+		for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(column.minX, low - 1, column.minZ), BlockPos.containing(column.maxX, high, column.maxZ))) {
+			BlockState state = mc.level.getBlockState(pos);
+			if (state.isAir()) continue;
+			for (AABB part : state.getCollisionShape(mc.level, pos).toAabbs()) {
+				AABB b = part.move(pos);
+				if (b.maxX <= column.minX || b.minX >= column.maxX || b.maxZ <= column.minZ || b.minZ >= column.maxZ) continue;
+				if (b.maxY < low || b.maxY > high + 1e-6) continue;
+				if (Double.isNaN(best) || b.maxY > best) best = b.maxY;
+			}
+		}
+		return best;
+	}
+
+	/** Water or lava standing on the ground at {@code ground} under {@code column}. */
+	private boolean fluidIn(AABB column, double ground) {
+		for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(column.minX, ground, column.minZ), BlockPos.containing(column.maxX, ground + 0.9, column.maxZ))) {
+			if (!mc.level.getFluidState(pos).isEmpty()) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * On terrain, rising over the step ahead: it's within this hop's reach, and you're not yet over its top. The hop then
+	 * rises without the dive (which turns height into speed) until you are: above the step's top from its third tick or
+	 * so to its eleventh.
+	 */
+	private boolean climbing() {
+		if (!terrain() || rise == null) return false;
+		Vec3 v = mc.player.getDeltaMovement();
+		return rise.distance() <= Math.hypot(v.x, v.z) * CLIMB_TICKS + 1 && mc.player.getY() < floorY() + rise.height() + CLIMB_MARGIN;
+	}
+
+	/**
+	 * On terrain, standing, whether to let a tick go by without jumping because of the step ahead. A jump now has to be
+	 * high enough by the time it reaches the step's face: it rises about 0.42, 0.75, 1.0 and 1.17 blocks in its first
+	 * four ticks while you cover a tick's travel each (with the sprint jump's push), and the face can be most of a sample
+	 * nearer than where it was found. Too close, it waits, sliding slower, until it can go up; slow enough, a jump goes up
+	 * the face. And when the step is beyond a climb's reach, an ordinary hop now (about ten ticks, gaining a little speed)
+	 * mustn't land too close to climb it from: then too it lets a tick go by, landing the next hop further on.
+	 */
+	private boolean holdBackForStep() {
+		if (!terrain() || rise == null || !mc.player.onGround()) return false;
+		Vec3 v = mc.player.getDeltaMovement();
+		double speed = Math.hypot(v.x, v.z);
+		if (speed < 0.15) return false;
+		double d = rise.distance();
+		if (!climbable(d, speed)) return true;
+		if (d <= (speed + JUMP_PUSH) * CLIMB_TICKS) return false;
+		double landed = d - (speed + JUMP_PUSH) * HOP_TICKS;
+		return landed > 0 && landed <= (speed + HOP_GAIN + JUMP_PUSH) * CLIMB_TICKS && !climbable(landed, speed + HOP_GAIN);
+	}
+
+	/** Whether a jump now at {@code speed} rises over the step {@code distance} ahead before reaching it. */
+	private boolean climbable(double distance, double speed) {
+		double h = rise.height();
+		int ticks = h <= 0.42 ? 1 : h <= 0.75 ? 2 : h <= 1.0 ? 3 : 4;
+		return distance - 0.7 >= (speed + JUMP_PUSH) * ticks;
 	}
 
 	/** Whether anything in {@code box} is in the way (see {@link #obstructs}); each such block is added to {@code hits}. */

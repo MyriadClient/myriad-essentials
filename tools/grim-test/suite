@@ -1161,6 +1161,18 @@ def t_elytra_recast_fill_hole():
     return filled >= 2 and above == 0 and x > 4150 and y > 200.5, f"{filled}/6 hole blocks filled, {above} placed above the floor, x={x:.0f}, y={y:.1f}"
 
 
+def t_elytra_recast_terrain():
+    # Ground Terrain on a strip that climbs a block twice, drops two and climbs again, then a wall: the steps are hopped
+    # up (the hop rises without its dive), the drop glided down, and it stops in front of the wall, unhurt.
+    recast_highway("fill 4040 201 -1 4400 201 1 obsidian", "fill 4070 202 -1 4400 202 1 obsidian", "fill 4110 201 -1 4400 202 1 air",
+                   "fill 4150 201 -1 4400 201 1 obsidian", "fill 4250 202 -1 4250 204 1 obsidian")
+    client(".set elytra_fly ground terrain", ".set elytra_fly type recast", "wait 10", ".toggle elytra_fly on", "wait 300", ".toggle elytra_fly off",
+        "wait 20", ".set elytra_fly ground highway", timeout=90)
+    x, y, _ = position()
+    hp = health()
+    return 4200 < x < 4250 and abs(y - 202) < 0.1 and hp >= 20, f"stopped at x={x:.0f} (wall at 4250), y={y:.1f}, health {hp:.1f}"
+
+
 def t_elytra_recast_disconnect():
     # Stop with If Blocked Disconnect: a chest in the lane logs you out (then the tester joins again).
     recast_highway("setblock 4100 201 0 ender_chest")
@@ -1421,6 +1433,8 @@ TESTS = [
     ("open box from the hotbar", t_open_box_hotbar),
     ("open box ender chest from a stack", t_open_box_ender_chest_stack),
     ("open box from the inventory above you", t_open_box_inventory_above),
+    ("open box ender chest silk touch in the inventory", t_open_box_ender_chest_silk_touch_in_inventory),
+    ("open box ender chest from the inventory with replenish", t_open_box_ender_chest_inventory_replenish),
     ("inventory_tweaks middle sort", t_inventory_tweaks_middle_sort),
     ("auto_sort opened by hand", t_auto_sort_opened_by_hand),
     ("inventory_tweaks middle sort held", t_inventory_tweaks_middle_sort_held),
@@ -1433,8 +1447,6 @@ TESTS = [
     ("recast", t_elytra_recast),
     ("recast obstacles", t_elytra_recast_obstacles),
     ("recast no durability", t_elytra_recast_no_durability),
-    ("open box ender chest silk touch in the inventory", t_open_box_ender_chest_silk_touch_in_inventory),
-    ("open box ender chest from the inventory with replenish", t_open_box_ender_chest_inventory_replenish),
     ("recast low ceiling", t_elytra_recast_low_ceiling),
     ("recast diagonal", t_elytra_recast_diagonal),
     ("recast spare elytras", t_elytra_recast_spare_elytras),
@@ -1443,6 +1455,7 @@ TESTS = [
     ("recast walk round", t_elytra_recast_walk_round),
     ("recast back on lane", t_elytra_recast_back_on_lane),
     ("recast disconnect", t_elytra_recast_disconnect),
+    ("recast terrain", t_elytra_recast_terrain),
     ("no durability elytra", t_elytra_no_durability),
     ("no durability elytra landing", t_elytra_no_durability_landing),
     ("altitude wearing out", t_elytra_wearing_out),

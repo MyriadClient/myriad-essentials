@@ -13,6 +13,10 @@ Needs Myriad 1.2.0.
   your head where it can, so it drops back on you, else beside you. A new Air Place setting puts it there with
   nothing to click against, through the off hand as on 2b2t (current Grim refuses it); off, it goes above your head
   only under a ceiling.
+- **Elytra Fly**'s Recast has a Ground setting. Highway is the lane as before; Terrain is for land that isn't flat:
+  it steers where you look and follows the ground, hopping up steps of a block (the hop rises without its dive until
+  you're over the step, held back a tick where it would reach the face too low), gliding down drops of up to two, and
+  landing in front of anything higher, water, or a deeper drop, bouncing on once you look somewhere clear.
 - **Replenish** keeps track of your hotbar behind a chest's or box's screen too, not only your own: what you moved
   out of a slot there was taken for used up and put back once you closed it (an ender chest's stack Inventory Tweaks
   had given back to the main inventory, pulled straight back into the hotbar).
