@@ -4,7 +4,6 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.ContainerEvent;
 import dev.myriadclient.api.module.Module;
-import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.service.Containers;
 import net.minecraft.world.level.block.Blocks;
@@ -28,10 +27,8 @@ public class RemoteEnderChest extends Module {
 
 	@Subscribe
 	private void onOpened(ContainerEvent.Opened e) {
-		if (!inGame() || !enderChest(e.view())) return;
-		InventoryTweaks tweaks = Modules.get(InventoryTweaks.class);
-		if (tweaks != null && tweaks.placed(e.view().pos())) return;
-		Myriad.containers().hold(e.view());
+		// One Inventory Tweaks put down isn't held (core refuses it): it goes back when you close it.
+		if (inGame() && enderChest(e.view())) Myriad.containers().hold(e.view());
 	}
 
 	private boolean enderChest(Containers.View view) {

@@ -3,7 +3,6 @@ package dev.myriadclient.essentials.modules.player;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.ContainerScreenEvent;
-import dev.myriadclient.api.job.Steps;
 import dev.myriadclient.api.job.Why;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
@@ -13,12 +12,10 @@ import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.SettingGroup;
-import dev.myriadclient.api.util.Client;
 import dev.myriadclient.api.util.ItemInfo;
 import dev.myriadclient.essentials.util.Layouts;
 import dev.myriadclient.essentials.util.Menus;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
-import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -29,14 +26,12 @@ import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Blocks;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -78,14 +73,8 @@ public class InventoryTweaks extends Module {
 	private final EnumSetting<Layouts.Order> sortOrder = sgMouse.oneOf("Sort Order", Layouts.Order.ITEM).description("Item: the game's own "
 		+ "order, close to the creative tabs. Name: A to Z. Count: what you have most of first.").visible(middleSort::get).build();
 
-	/** How long to wait for you to close the box, in ticks: long enough to sort a whole box by hand. */
-	private static final int BROWSE_TICKS = 20 * 60 * 30;
 	/** How long the box may take to open once clicked. */
 	private static final int OPEN_TICKS = 40;
-	/** The boxes this put down and opened, each with the one it was opened from (null from your inventory or a chest). */
-	private final Map<Containers.ItemSession, Containers.ItemSession> parents = new IdentityHashMap<>();
-	/** Boxes another box was opened from: they go back after it, opened again, rather than when their screen closes. */
-	private final Set<Containers.ItemSession> suspended = Collections.newSetFromMap(new IdentityHashMap<>());
 
 	/** What the mixin gives this module of a container screen. */
 	public interface ScreenAccess {
@@ -110,10 +99,6 @@ public class InventoryTweaks extends Module {
 
 	@Override
 	protected void onDisable() {
-		// Boxes waiting on one opened from them go back too (the others go with their jobs).
-		for (Containers.ItemSession s : List.copyOf(suspended)) s.finish();
-		suspended.clear();
-		parents.clear();
 		release();
 	}
 
@@ -131,9 +116,7 @@ public class InventoryTweaks extends Module {
 		boolean inventory = menu == mc.player.inventoryMenu;
 		Containers.View from = inventory ? null : Myriad.containers().current().filter(v -> v.pos() != null && v.handler() == menu).orElse(null);
 		if (inventory ? slot.container != mc.player.getInventory() : from == null || !storage(menu)) return false;
-		// One of the boxes this opened: another opened from it puts it back open, rather than putting it away.
-		Containers.ItemSession parent = from == null ? null : standing(from);
-		if (Myriad.jobs().isBusy(this) && parent == null) return false;
+		if (Myriad.jobs().isBusy(this)) return false;
 		ItemStack stack = slot.getItem();
 		boolean shulker = shulkers.get() && ItemInfo.isShulkerBox(stack);
 		boolean ender = enderChests.get() && stack.is(Items.ENDER_CHEST);
@@ -141,61 +124,20 @@ public class InventoryTweaks extends Module {
 		int index = slot.getContainerSlot();
 		if (inventory && (index < 0 || index >= 36)) return false;
 
-		// Put down, opened, and picked back up when you close it (or when it can't open, saying why).
+		// Put down and opened, and picked back up once you close a screen yourself (core keeps it standing while you switch
+		// between containers on the swap bar), or when it can't open, saying why.
 		Placement.Options options = Placement.Options.forServer().withAirPlace(airPlace.get());
 		CompletableFuture<Containers.ItemSession> opening = inventory ? Myriad.containers().openItem(this, index, OPEN_TICKS, options)
 			: Myriad.containers().openItem(this, from, slot.index, OPEN_TICKS, options);
-		if (parent != null) suspended.add(parent);
 		opening.whenComplete((session, t) -> {
 			if (t != null) {
 				Why why = Why.of(t);
 				if (!why.is(Why.CANCELLED) && !why.is(Why.OWNER_OFF) && !why.is(Why.LEFT_WORLD)) warn(capitalized(why.detail().isEmpty() ? why.toString() : why.detail()));
-				if (parent != null) resume(parent);
 				return;
 			}
-			parents.put(session, parent);
-			browse(session, session.view());
+			session.finishWhenClosed();
 		});
 		return true;
-	}
-
-	/** Whether a box this put down stands at {@code pos}. */
-	public boolean placed(BlockPos pos) {
-		for (Containers.ItemSession s : parents.keySet()) if (pos.equals(s.where())) return true;
-		return false;
-	}
-
-	/** The box this put down whose screen {@code view} is, if any. */
-	private Containers.@Nullable ItemSession standing(Containers.View view) {
-		for (Containers.ItemSession s : parents.keySet()) if (view.pos().equals(s.where()) && !suspended.contains(s)) return s;
-		return null;
-	}
-
-	/** While {@code view} (the box's screen) is open; then it goes back, and the box it was opened from, if any, opens again. */
-	private void browse(Containers.ItemSession session, Containers.View view) {
-		String name = Client.level().getBlockState(session.where()).is(Blocks.ENDER_CHEST) ? "Ender chest" : "Shulker box";
-		Myriad.jobs().start(this, Steps.untilClosed(view, BROWSE_TICKS).finallyDo(() -> {
-			// Another box was opened from it: it goes back after that one, which opens it again.
-			if (suspended.contains(session)) return;
-			Containers.ItemSession parent = parents.remove(session);
-			session.finish().whenComplete((v, t) -> {
-				if (parent != null) resume(parent);
-			});
-		}).named(name));
-	}
-
-	/** Back to a box another was opened from, now that one is back: its screen again if it's open (the put-back opens it), else it goes back too. */
-	private void resume(Containers.ItemSession session) {
-		suspended.remove(session);
-		Containers.View now = Myriad.containers().current().filter(v -> session.where().equals(v.pos())).orElse(null);
-		if (now != null && isEnabled()) {
-			browse(session, now);
-			return;
-		}
-		Containers.ItemSession parent = parents.remove(session);
-		session.finish().whenComplete((v, t) -> {
-			if (parent != null) resume(parent);
-		});
 	}
 
 	/** Plain storage, whose slots a box can be in and go back to. */

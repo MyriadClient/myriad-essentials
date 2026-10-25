@@ -21,6 +21,9 @@ Needs Myriad 1.2.0.
   chest, hopper, dispenser) you have open, from the chest's slots or yours: the chest closes for it, and when you close
   the box it's put back and the chest opens again with it back in its slot. As fast as from your hotbar: 300 ms on the
   Grim test server through 150 ms of lag.
+- **Inventory Tweaks**' boxes stand until you close a screen yourself (core's swap bar switches between them, the
+  container you opened and your inventory), then go back together; they no longer go back the moment another container
+  opens over them.
 - **Remote Ender Chest**, new: an ender chest you open stays open on the server after you close it, and your
   inventory key shows it again at once, with no packets, from as far as the server allows (vanilla closes it once you're
   out of reach; 2b2t doesn't). Your inventory's clicks go through it meanwhile; opening another container lets it go.
