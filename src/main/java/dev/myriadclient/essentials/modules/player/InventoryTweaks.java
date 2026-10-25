@@ -18,6 +18,7 @@ import dev.myriadclient.api.util.ItemInfo;
 import dev.myriadclient.essentials.util.Layouts;
 import dev.myriadclient.essentials.util.Menus;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -156,6 +157,12 @@ public class InventoryTweaks extends Module {
 			browse(session, session.view());
 		});
 		return true;
+	}
+
+	/** Whether a box this put down stands at {@code pos}. */
+	public boolean placed(BlockPos pos) {
+		for (Containers.ItemSession s : parents.keySet()) if (pos.equals(s.where())) return true;
+		return false;
 	}
 
 	/** The box this put down whose screen {@code view} is, if any. */

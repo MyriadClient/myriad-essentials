@@ -990,6 +990,48 @@ def t_open_box_yours_with_chest_open():
     return chest_box_pass(in_chest=False)
 
 
+def remote_echest_setup():
+    """An ender chest beside the tester, a stack of diamonds in their ender chest's first slot, Remote Ender Chest on: it's
+    opened by hand and closed with Escape, which keeps it open on the server."""
+    reset(pitch=35)
+    cmd("setblock 1002 100 0 ender_chest[facing=west]", f"item replace entity {P} enderchest.0 with diamond 7", f"item replace entity {P} hotbar.3 with stick 5")
+    return client(".toggle remote_ender_chest on", "wait 5", "use", "wait 15", "status", "key escape", "wait 10", "status", timeout=60)
+
+
+def screens(out):
+    return re.findall(r"screen=(\S+)", out)
+
+
+def t_remote_ender_chest():
+    # Opened again with the inventory key, no click on the block, and its diamonds taken into hotbar slot 1: the server
+    # took the clicks in the ender chest it still had open.
+    out = remote_echest_setup()
+    out += client("key e", "wait 10", "status", "cursor slot 0", "mouse 0 click", "cursor slot 54", "mouse 0 click", "wait 10", "key escape", "wait 5",
+                  ".toggle remote_ender_chest off", "wait 5", timeout=60)
+    sc = screens(out)
+    taken = passed(f"if items entity {P} hotbar.0 diamond") and not passed(f"if items entity {P} enderchest.0 diamond")
+    ok = sc[:3] == ["ContainerScreen", "none", "ContainerScreen"] and taken
+    return ok, f"screens {sc[:3]}, " + ("diamonds taken from the ender chest" if taken else "the diamonds didn't move on the server")
+
+
+def t_remote_ender_chest_moves():
+    # With its screen gone, your inventory's clicks go through it: a move (core's, as modules make them) lands on the server.
+    out = remote_echest_setup()
+    out += client("move 3 20", "wait 10", ".toggle remote_ender_chest off", "wait 5", timeout=60)
+    moved = passed(f"if items entity {P} inventory.11 stick") and not passed(f"if items entity {P} hotbar.3 stick")
+    return moved, "the move went through the held ender chest" if moved else "the move didn't reach the server"
+
+
+def t_remote_ender_chest_out_of_reach():
+    # Out of reach, a vanilla server closes it: then the inventory key opens your own inventory again.
+    out = remote_echest_setup()
+    cmd(f"tp {P} 1020.5 100 0.5")
+    out += client("wait 20", "key e", "wait 10", "status", "key escape", "wait 5", ".toggle remote_ender_chest off", "wait 5", timeout=60)
+    sc = screens(out)
+    ok = len(sc) >= 3 and sc[2] == "InventoryScreen"
+    return ok, f"screens {sc[:3]}"
+
+
 def t_inventory_tweaks_middle_sort():
     return sort_pass(middle=True)
 
@@ -1530,6 +1572,9 @@ TESTS = [
     ("open box ender chest in a chest full hotbar", t_open_box_ender_chest_in_chest_full_hotbar),
     ("open box ender chest in a chest twice", t_open_box_ender_chest_in_chest_twice),
     ("open box from a placed box", t_open_box_from_a_placed_box),
+    ("remote ender chest", t_remote_ender_chest),
+    ("remote ender chest moves", t_remote_ender_chest_moves),
+    ("remote ender chest out of reach", t_remote_ender_chest_out_of_reach),
     ("inventory_tweaks middle sort", t_inventory_tweaks_middle_sort),
     ("auto_sort opened by hand", t_auto_sort_opened_by_hand),
     ("inventory_tweaks middle sort held", t_inventory_tweaks_middle_sort_held),

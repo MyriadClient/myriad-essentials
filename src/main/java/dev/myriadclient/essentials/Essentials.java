@@ -47,6 +47,7 @@ import dev.myriadclient.essentials.modules.player.InventoryTweaks;
 import dev.myriadclient.essentials.modules.player.MiddleClick;
 import dev.myriadclient.essentials.modules.player.PacketMine;
 import dev.myriadclient.essentials.modules.player.Reach;
+import dev.myriadclient.essentials.modules.player.RemoteEnderChest;
 import dev.myriadclient.essentials.modules.player.Replenish;
 import dev.myriadclient.essentials.modules.player.WallInteract;
 import dev.myriadclient.essentials.modules.render.BlockESP;
@@ -104,7 +105,7 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), new Velocity(), new AutoDisconnect());
 		ctx.registerModules(movement, elytraFly, new RocketBoost(), new InventoryMove(), new NoSlow());
 		ctx.registerModules(world, new Scaffold(), new AirPlace(), new PacketMine(), new Reach(), new WallInteract());
-		ctx.registerModules(player, new InventoryTweaks(), new Replenish(), new MiddleClick(), new AutoReconnect());
+		ctx.registerModules(player, new InventoryTweaks(), new Replenish(), new MiddleClick(), new AutoReconnect(), new RemoteEnderChest());
 		ctx.registerModules(render, new EntityESP(), new Tracers(), new Nametags(), new StorageESP(), new BlockESP(), new BlockHighlight(), new FullBright(),
 			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips());
 		ctx.registerModules(automation, autoEat, new AutoTool(), new AutoWalk(), new AutoMend(), new AutoSort(), new Printer(), new AutoPortal());
