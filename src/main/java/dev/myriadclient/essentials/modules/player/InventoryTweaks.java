@@ -37,9 +37,11 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Right-click a shulker box (or ender chest) in your inventory to open it on the spot: it's placed beside you, opened,
- * and broken and picked back up when you close it. Ender chests need a Silk Touch pickaxe in the hotbar, or breaking
- * them would only drop obsidian.
+ * Right-click a shulker box (or ender chest) in your inventory, or in a chest (barrel, shulker box, ender chest, hopper,
+ * dispenser) you have open, to open it on the spot: it's placed above you or beside you, opened, and broken and picked
+ * back up when you close it, back in its slot; from a chest, that chest opens again with it back inside, so closing
+ * the box takes you back to the chest. Ender chests need a Silk Touch pickaxe, or breaking them would only drop
+ * obsidian.
  * <p>
  * And the mouse in any inventory screen: Shift-drag shift-clicks every slot you pass, a left drag that starts on a slot
  * of the item you're carrying gathers every matching slot it passes into your stack, and the wheel moves one item at a
@@ -51,8 +53,8 @@ import java.util.concurrent.CompletableFuture;
  * a multi-click move is never left half done. Applied by this addon's ContainerScreenMixin.
  */
 public class InventoryTweaks extends Module {
-	private final BoolSetting shulkers = sgGeneral.bool("Instant Shulker").description("Right-click a shulker box in your inventory to open it.").defaultValue(true).build();
-	private final BoolSetting enderChests = sgGeneral.bool("Instant Ender Chest").description("Right-click an ender chest in your inventory to open it (needs a Silk Touch pickaxe to pick it back up).")
+	private final BoolSetting shulkers = sgGeneral.bool("Instant Shulker").description("Right-click a shulker box in your inventory, or in a chest you have open, to open it.").defaultValue(true).build();
+	private final BoolSetting enderChests = sgGeneral.bool("Instant Ender Chest").description("Right-click an ender chest in your inventory, or in a chest you have open, to open it (needs a Silk Touch pickaxe to pick it back up).")
 		.defaultValue(true).build();
 	// Shown everywhere, as core's Air Place is: 2b2t takes it and current Grim doesn't.
 	private final BoolSetting airPlace = sgGeneral.bool("Air Place").description("Put the box above your head with nothing there to click against, "
@@ -111,17 +113,24 @@ public class InventoryTweaks extends Module {
 	/** Each slot click in an inventory screen. Returns true to swallow the click. */
 	private boolean onSlotClick(Slot slot, int button, ContainerInput input) {
 		if (Myriad.jobs().isBusy(this) || input != ContainerInput.PICKUP || button != 1 || slot == null || !slot.hasItem() || !inGame()) return false;
-		if (mc.player.containerMenu != mc.player.inventoryMenu || mc.player.isCreative() || slot.container != mc.player.getInventory()) return false;
-		if (!mc.player.inventoryMenu.getCarried().isEmpty()) return false;
+		AbstractContainerMenu menu = mc.player.containerMenu;
+		if (mc.player.isCreative() || !menu.getCarried().isEmpty()) return false;
+		// Your own inventory's slots, or a storage container's (opened from a block, to be opened again once it's back).
+		boolean inventory = menu == mc.player.inventoryMenu;
+		Containers.View from = inventory ? null : Myriad.containers().current().filter(v -> v.pos() != null && v.handler() == menu).orElse(null);
+		if (inventory ? slot.container != mc.player.getInventory() : from == null || !storage(menu)) return false;
 		ItemStack stack = slot.getItem();
 		boolean shulker = shulkers.get() && ItemInfo.isShulkerBox(stack);
 		boolean ender = enderChests.get() && stack.is(Items.ENDER_CHEST);
 		if (!shulker && !ender) return false;
 		int index = slot.getContainerSlot();
-		if (index < 0 || index >= 36) return false;
+		if (inventory && (index < 0 || index >= 36)) return false;
 
 		// Put down, opened, and picked back up when you close it (or when it can't open, saying why).
-		Myriad.containers().openItem(this, index, OPEN_TICKS, Placement.Options.forServer().withAirPlace(airPlace.get())).whenComplete((session, t) -> {
+		Placement.Options options = Placement.Options.forServer().withAirPlace(airPlace.get());
+		CompletableFuture<Containers.ItemSession> opening = inventory ? Myriad.containers().openItem(this, index, OPEN_TICKS, options)
+			: Myriad.containers().openItem(this, from, slot.index, OPEN_TICKS, options);
+		opening.whenComplete((session, t) -> {
 			if (t != null) {
 				Why why = Why.of(t);
 				if (!why.is(Why.CANCELLED) && !why.is(Why.OWNER_OFF) && !why.is(Why.LEFT_WORLD)) warn(capitalized(why.detail().isEmpty() ? why.toString() : why.detail()));
@@ -130,6 +139,11 @@ public class InventoryTweaks extends Module {
 			Myriad.jobs().start(this, Steps.untilClosed(session.view(), BROWSE_TICKS).finallyDo(session::finish).named(ender ? "Ender chest" : "Shulker box"));
 		});
 		return true;
+	}
+
+	/** Plain storage, whose slots a box can be in and go back to. */
+	private static boolean storage(AbstractContainerMenu menu) {
+		return menu instanceof ChestMenu || menu instanceof ShulkerBoxMenu || menu instanceof HopperMenu || menu instanceof DispenserMenu;
 	}
 
 	private static String capitalized(String s) {

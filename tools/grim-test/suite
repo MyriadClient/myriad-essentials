@@ -902,6 +902,51 @@ def t_open_box_ender_chest_inventory_replenish():
     return box_pass(14, items=items, replenish=True, close_at=30)
 
 
+def chest_box_pass(item="red_shulker_box", in_chest=True, full_hotbar=False):
+    """Inventory Tweaks' right-click on a box in a chest opened by hand (in_chest: one of the chest's slots, else one of
+    yours below them): it's put down and opened, the chest closed; closing the box puts it back where it was and opens
+    the chest again. full_hotbar: no free hotbar slot, so what makes room for it waits in the chest meanwhile."""
+    reset(pitch=35)
+    hotbar = {0: "diamond_sword", 1: "cobblestone 32", 6: "diamond_pickaxe[enchantments={silk_touch:1}]"}
+    if full_hotbar: hotbar.update({i: f"oak_planks {i + 1}" for i in range(9) if i not in hotbar})
+    chest, mine = 4, 14
+    cmd("setblock 1002 100 0 chest[facing=west]", *(f"item replace entity {P} hotbar.{s} with {t}" for s, t in hotbar.items()),
+        f"item replace block 1002 100 0 container.{chest} with {item}" if in_chest else f"item replace entity {P} inventory.{mine - 9} with {item}")
+    out = client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "use", "wait 10",
+                 f"cursor slot {chest if in_chest else 27 + mine - 9}", "mouse 1 click", "wait 30", timeout=60)
+    name = item.split(" ")[0]
+    out_of_chest = chest_items(1002, 100, 0).get(chest, (None,))[0] != name if in_chest else not passed(f"if items entity {P} inventory.{mine - 9} {name}")
+    out += client("status", "closescreen", "wait 200", "status", timeout=60)
+    screens = re.findall(r"screen=(\S+)", out)
+    back = chest_items(1002, 100, 0).get(chest, (None,))[0] == name if in_chest else passed(f"if items entity {P} inventory.{mine - 9} {name}")
+    slot = lambda s: f"hotbar.{s}" if s < 9 else f"inventory.{s - 9}"
+    wrong = [s for s, t in hotbar.items() if not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")]
+    wrong += [s for s in range(9) if s not in hotbar and count(s)]
+    # An ender chest's screen is a ContainerScreen as the chest's is: the box having left the chest tells it opened.
+    reopened = len(screens) == 2 and screens[1] == "ContainerScreen"
+    client("key escape", "wait 5", timeout=30)
+    ok = out_of_chest and back and not wrong and reopened
+    return ok, (f"opened (screen {screens[0] if screens else '?'})" if out_of_chest else "never left its slot") + \
+        (", back in its slot" if back else ", not back in its slot") + (f", hotbar {wrong} not as it was" if wrong else "") + \
+        (", the chest open again" if reopened else f", screens {screens}")
+
+
+def t_open_box_in_chest():
+    return chest_box_pass()
+
+
+def t_open_box_in_chest_full_hotbar():
+    return chest_box_pass(full_hotbar=True)
+
+
+def t_open_box_ender_chest_in_chest():
+    return chest_box_pass(item="ender_chest 4")
+
+
+def t_open_box_yours_with_chest_open():
+    return chest_box_pass(in_chest=False)
+
+
 def t_inventory_tweaks_middle_sort():
     return sort_pass(middle=True)
 
@@ -1435,6 +1480,10 @@ TESTS = [
     ("open box from the inventory above you", t_open_box_inventory_above),
     ("open box ender chest silk touch in the inventory", t_open_box_ender_chest_silk_touch_in_inventory),
     ("open box ender chest from the inventory with replenish", t_open_box_ender_chest_inventory_replenish),
+    ("open box in a chest", t_open_box_in_chest),
+    ("open box in a chest full hotbar", t_open_box_in_chest_full_hotbar),
+    ("open box ender chest in a chest", t_open_box_ender_chest_in_chest),
+    ("open box yours with a chest open", t_open_box_yours_with_chest_open),
     ("inventory_tweaks middle sort", t_inventory_tweaks_middle_sort),
     ("auto_sort opened by hand", t_auto_sort_opened_by_hand),
     ("inventory_tweaks middle sort held", t_inventory_tweaks_middle_sort_held),

@@ -17,6 +17,10 @@ Needs Myriad 1.2.0.
   it steers where you look and follows the ground, hopping up steps of a block (the hop rises without its dive until
   you're over the step, held back a tick where it would reach the face too low), gliding down drops of up to two, and
   landing in front of anything higher, water, or a deeper drop, bouncing on once you look somewhere clear.
+- **Inventory Tweaks** opens a shulker box or ender chest you right-click in a chest (a barrel, shulker box, ender
+  chest, hopper, dispenser) you have open, from the chest's slots or yours: the chest closes for it, and when you close
+  the box it's put back and the chest opens again with it back in its slot. As fast as from your hotbar: 300 ms on the
+  Grim test server through 150 ms of lag.
 - **Replenish** keeps track of your hotbar behind a chest's or box's screen too, not only your own: what you moved
   out of a slot there was taken for used up and put back once you closed it (an ender chest's stack Inventory Tweaks
   had given back to the main inventory, pulled straight back into the hotbar).
