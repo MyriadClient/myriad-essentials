@@ -18,6 +18,7 @@ import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.ItemInfo;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.client.renderer.state.MapRenderState;
 import net.minecraft.core.component.DataComponents;
@@ -207,7 +208,7 @@ public class Tooltips extends Module {
 
 		if (locked == null && hoveredStack != null && maps.get() && renderMap(ctx, hoveredStack, mouseX, mouseY)) return true;
 
-		String title;
+		String title, hint = "";
 		List<ItemStack> items;
 		int ax, ay;
 		if (locked != null) {
@@ -220,6 +221,7 @@ public class Tooltips extends Module {
 			items = previewOf(hoveredStack);
 			if (items == null) return false;
 			title = hoveredStack.getHoverName().getString();
+			hint = hintOf(hoveredStack, title);
 			ax = mouseX;
 			ay = mouseY;
 		}
@@ -228,7 +230,8 @@ public class Tooltips extends Module {
 		ItemStack under = hoveredItem(items, p[0], p[1], mouseX, mouseY);
 		// A layer of its own above the inventory, like a vanilla tooltip.
 		ctx.nextStratum();
-		Myriad.ui().draw(ctx, c -> drawPanel(c, title, items, p[0], p[1]));
+		String shown = hint;
+		Myriad.ui().draw(ctx, c -> drawPanel(c, title, shown, items, p[0], p[1]));
 		if (under != null) ctx.setTooltipForNextFrame(mc.font, under, mouseX, mouseY);
 		return true;
 	}
@@ -241,7 +244,7 @@ public class Tooltips extends Module {
 		int[] p = position(mouseX, mouseY, MAP_WIDTH, MAP_HEIGHT);
 		String title = stack.getHoverName().getString();
 		ctx.nextStratum();
-		Myriad.ui().draw(ctx, c -> drawFrame(c, title, p[0], p[1], MAP_WIDTH, MAP_HEIGHT));
+		Myriad.ui().draw(ctx, c -> drawFrame(c, title, hintOf(stack, title), p[0], p[1], MAP_WIDTH, MAP_HEIGHT));
 		// The map on a layer above the panel, as the cartography table draws it.
 		ctx.nextStratum();
 		mc.getMapRenderer().extractRenderState(id, data, mapState);
@@ -271,21 +274,36 @@ public class Tooltips extends Module {
 		return s.isEmpty() ? null : s;
 	}
 
-	/** A themed panel with a title, like a window. */
-	private static void drawFrame(Canvas c, String name, float x, float y, int width, int height) {
+	/**
+	 * What other modules add after the name on the tooltip's first line (Inventory Tweaks' "(Right Click Place)" with Mod
+	 * held), which the panel in its place shows too.
+	 */
+	private String hintOf(ItemStack stack, String name) {
+		List<Component> lines = Screen.getTooltipFromItem(mc, stack);
+		String first = lines.isEmpty() ? "" : lines.getFirst().getString();
+		return first.startsWith(name) ? first.substring(name.length()).strip() : "";
+	}
+
+	/** A themed panel with a title, like a window, and dimmed at the title's end what other modules add to it ({@code hint}). */
+	private static void drawFrame(Canvas c, String name, String hint, float x, float y, int width, int height) {
 		ThemeSettings theme = Myriad.ui().theme();
 		float r = theme.rounding.get();
 		if (theme.shadow.get()) c.shadow(x, y, width, height, r, theme.shadowRange.get(), theme.shadowColor.argb());
 		c.backdrop(x, y, width, height, r, 1);
 		c.roundRect(x, y, width, height, r, ColorUtil.withAlpha(theme.windowBackground.argb(), Math.max(200, ColorUtil.alpha(theme.windowBackground.argb()))));
 		c.gradientOutline(x, y, width, height, r, Math.max(1, theme.borderSize.get()), theme.activeBorderFrom.argb(), theme.activeBorderTo.argb(), theme.borderAngle.get().floatValue());
-		String title = c.ellipsize(FontFamily.SANS_BOLD, c.defaultFontSize(), name, width - 14);
-		c.text(FontFamily.SANS_BOLD, c.defaultFontSize(), title, x + 7, y + (HEADER - c.textHeight()) / 2 + 1, theme.text.argb());
+		float ty = y + (HEADER - c.textHeight()) / 2 + 1, hintWidth = 0;
+		if (!hint.isEmpty()) {
+			hintWidth = c.textWidth(FontFamily.SANS, c.defaultFontSize(), hint) + 6;
+			c.text(FontFamily.SANS, c.defaultFontSize(), hint, x + width - 7 - hintWidth + 6, ty, theme.textDim.argb());
+		}
+		String title = c.ellipsize(FontFamily.SANS_BOLD, c.defaultFontSize(), name, width - 14 - hintWidth);
+		c.text(FontFamily.SANS_BOLD, c.defaultFontSize(), title, x + 7, ty, theme.text.argb());
 	}
 
-	private static void drawPanel(Canvas c, String name, List<ItemStack> items, float x, float y) {
+	private static void drawPanel(Canvas c, String name, String hint, List<ItemStack> items, float x, float y) {
 		ThemeSettings theme = Myriad.ui().theme();
-		drawFrame(c, name, x, y, WIDTH, HEIGHT);
+		drawFrame(c, name, hint, x, y, WIDTH, HEIGHT);
 		float gx = x + 7, gy = y + HEADER;
 		int cell = ColorUtil.withAlpha(theme.surface.argb(), 110);
 		for (int i = 0; i < 27; i++) {

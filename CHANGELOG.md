@@ -7,6 +7,9 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 Needs Myriad 1.2.0.
 
+- **Tooltips**' shulker box, ender chest and map previews show what other modules add to the item's name, dimmed at the
+  title's end: Inventory Tweaks' "(Right Click Place)" with Mod held, which the preview in the tooltip's place hid
+  (an ender chest showed it only until you'd opened yours, when its preview starts).
 - **Nametags** remembers who threw each ender pearl, by the pearl, per server (saved in pearl-owners.json): the
   client knows a pearl's thrower only while they're loaded near you, so a pearl in a stasis chamber lost its name once
   they'd gone; now it keeps it, after you leave and come back too. Pearls unseen for a month are forgotten.
