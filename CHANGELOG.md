@@ -3,13 +3,15 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
-## Unreleased
+## 1.3.1
 
+Needs Myriad 1.2.0.
+
+- **Free Look**'s camera goes through blocks: vanilla's shortening pulled it in at every block near you, so looking
+  around while you bounce or fly low kept running into them.
 - **Elytra Fly**'s Recast has hooks for addons: `Recast.HOP` (each tick of a bounce: the pitch it flies, whether it
   jumps, and whether each glide starts on the hop's last tick in the air, swapping nothing) and `Recast.PASS_THROUGH`
   (blocks it doesn't count as in its way).
-- **Free Look**'s camera goes through blocks: vanilla's shortening pulled it in at every block near you, so looking
-  around while you bounce or fly low kept running into them.
 
 ## 1.3.0
 
