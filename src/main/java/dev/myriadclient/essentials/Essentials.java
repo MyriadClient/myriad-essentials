@@ -12,6 +12,7 @@ import dev.myriadclient.essentials.dev.PrintScene;
 import dev.myriadclient.essentials.dev.PrintTest;
 import dev.myriadclient.essentials.hud.ArmorPanel;
 import dev.myriadclient.essentials.hud.BindsPanel;
+import dev.myriadclient.essentials.hud.BiomePanel;
 import dev.myriadclient.essentials.hud.ChestCountPanel;
 import dev.myriadclient.essentials.hud.CoordinatesPanel;
 import dev.myriadclient.essentials.hud.DirectionPanel;
@@ -141,6 +142,7 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerHud("Looking At", "", LookingAtPanel::new, TOP, 0, 6);
 		ctx.registerHud("Coordinates", "", CoordinatesPanel::new, BOTTOM_LEFT, 0, 0);
 		ctx.registerHud("Armor", "", ArmorPanel::new);
+		ctx.registerHud("Biome", "", BiomePanel::new);
 		ctx.registerHud("Binds", "", BindsPanel::new);
 		ctx.registerHud("Chest Count", "", ChestCountPanel::new);
 		ctx.registerHud("Direction", "", DirectionPanel::new);

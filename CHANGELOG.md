@@ -7,6 +7,8 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 Needs Myriad 1.2.0.
 
+- **Coordinates** groups the digits in thousands (8,290,779), a new Commas setting, on by default.
+- **Biome**, a new HUD element: the biome you're standing in, by the game's name for it.
 - **Middle Click** sends no swing with a pearl, rocket or bottle on 2b2t (Myriad's 2b2t profile, which wants none),
   and the item goes back out of your hand in the same tick there.
 - **Inventory Tweaks** opens a shulker box or ender chest from your inventory a round trip sooner (core's work): above
