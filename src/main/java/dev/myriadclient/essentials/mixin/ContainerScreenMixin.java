@@ -45,7 +45,7 @@ public abstract class ContainerScreenMixin implements InventoryTweaks.ScreenAcce
 			cir.setReturnValue(true);
 			return;
 		}
-		InventoryTweaks.press(this, slot, event.button(), event.hasShiftDown());
+		InventoryTweaks.press(this, slot, event.button(), event.hasShiftDown(), event.modifiers());
 	}
 
 	@Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)

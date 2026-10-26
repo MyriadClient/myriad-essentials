@@ -17,17 +17,23 @@ Needs Myriad 1.2.0.
   it steers where you look and follows the ground, hopping up steps of a block (the hop rises without its dive until
   you're over the step, held back a tick where it would reach the face too low), gliding down drops of up to two, and
   landing in front of anything higher, water, or a deeper drop, bouncing on once you look somewhere clear.
-- **Inventory Tweaks** opens a shulker box or ender chest you right-click in a chest (a barrel, shulker box, ender
-  chest, hopper, dispenser) you have open, from the chest's slots or yours: the chest closes for it, and when you close
-  the box it's put back and the chest opens again with it back in its slot. As fast as from your hotbar: 300 ms on the
-  Grim test server through 150 ms of lag.
+- **Inventory Tweaks** puts down a shulker box or ender chest you Mod + right-click (Myriad's Mod key, Alt by default)
+  in your inventory or in a chest (a barrel, shulker box, ender chest, hopper, dispenser) you have open: from your
+  inventory with nothing else on core's swap bar it opens too; otherwise it only gets a tab there, the screen you're
+  in staying up, so several can be put down in a row and opened from the bar. A plain right-click is vanilla's again
+  (half a stack). Held, Mod adds "(Right Click Place)" to a box's tooltip.
 - **Inventory Tweaks**' boxes stand until you close a screen yourself (core's swap bar switches between them, the
-  container you opened and your inventory), then go back together; they no longer go back the moment another container
-  opens over them.
-- **Remote Ender Chest**, new: an ender chest you open stays open on the server after you close it, and your
-  inventory key shows it again at once, with no packets, from as far as the server allows (vanilla closes it once you're
-  out of reach; 2b2t doesn't). Your inventory's clicks go through it meanwhile; opening another container lets it go.
-  Ender chests Inventory Tweaks puts down still go back when you close them.
+  container you opened, the nearest ender chest and your inventory), then go back together, as many at a time as your
+  inventory has room for: one from a chest into its first free slot there (any will do), one from your inventory
+  wherever it lands. The swap bar shows whenever Inventory Tweaks is on, over themed screens or not.
+- **Inventory Tweaks**' Remote Ender Chest, on by default (it was a module of its own for a while): an ender chest
+  you open stays open on the server after you close it, from anywhere (core opens it once more over itself, after
+  which the server never checks your distance), and your inventory key shows it again at once. One Inventory Tweaks
+  puts down from your inventory is picked back up and stays open. Your inventory's tab on the swap bar leaves it open;
+  a right-click on its tab lets it go.
+- **Inventory Tweaks**' No Way Back: what a box from your remote ender chest far away does with no other ender chest
+  in reach (any will do, and is used first): Refuse (the default) leaves it there, Ender Chest puts one down from your
+  inventory to put it back through and picks it up again, Inventory lets it come back into your inventory.
 - **Inventory Tweaks** opens a box from inside one it put down (a shulker box in an ender chest): closing it puts it
   back in that one, which opens again, and that one goes back when you close it.
 - **Offhand** goes by what your off hand holds as core shows it: during an air placement's swap through the off hand

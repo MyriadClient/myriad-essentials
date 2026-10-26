@@ -868,7 +868,11 @@ def box_pass(index, ceiling=False, items=BOX_ITEMS, held=1, replenish=False, clo
     fail = re.search(r"openitem failed: (.*)", out)
     # By the server's item test: a long entry (the pickaxe's enchantment and wear) comes back cut short of its id.
     slot = lambda s: f"hotbar.{s}" if s < 9 else f"inventory.{s - 9}"
-    wrong = [s for s, t in items.items() if not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")] + [s for s, t in items.items() if t.startswith("ender_chest") and count(s) != int(t.split(' ')[1])]
+    # The box itself back anywhere in the inventory (it stays where it lands); everything else as it was.
+    name = items[index].split(' ')[0].split('[')[0]
+    wrong = [s for s, t in items.items() if s != index and not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")]
+    wrong += [s for s, t in items.items() if s != index and t.startswith("ender_chest") and count(s) != int(t.split(' ')[1])]
+    if not passed(f"if items entity {P} container.* {name}"): wrong.append(index)
     # A block up from right over the tester's head, under the ceiling (a shulker box's lid right over it would push them).
     above = m is not None and int(m.group(2)) == 103
     ok = m is not None and "openitem back" in out and not wrong and not stray and above == ceiling
@@ -904,9 +908,9 @@ def t_open_box_ender_chest_inventory_replenish():
 
 
 def chest_box_pass(item="red_shulker_box", in_chest=True, full_hotbar=False, hotbar=None, extra=None, times=1):
-    """Inventory Tweaks' right-click on a box in a chest opened by hand (in_chest: one of the chest's slots, else one of
-    yours below them): it's put down and opened, the chest closed; closing the box puts it back where it was and opens
-    the chest again; Escape puts everything back and leaves nothing open. full_hotbar: no free hotbar slot, so what makes room for it waits in an empty inventory slot meanwhile.
+    """Inventory Tweaks' Mod + right-click on a box in a chest opened by hand (in_chest: one of the chest's slots, else one
+    of yours below them): it's only put down, the chest staying up, and opens from its tab on the swap bar; Escape puts
+    everything back and leaves nothing open. full_hotbar: no free hotbar slot, so what makes room for it waits in an empty inventory slot meanwhile.
     hotbar/extra: other hotbar layouts and inventory items (index: item). times: opened and closed that many times over,
     the later ones at the spot just broken (a finish alone breaks it there). Never any obsidian (an ender chest broken
     without Silk Touch)."""
@@ -920,23 +924,30 @@ def chest_box_pass(item="red_shulker_box", in_chest=True, full_hotbar=False, hot
     name = item.split(" ")[0]
     client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "use", "wait 10", timeout=60)
     for _ in range(times - 1):
-        client(f"cursor slot {chest if in_chest else 27 + mine - 9}", "mouse 1 click", "wait 30", "key escape", "wait 200", "use", "wait 15", timeout=60)
-    out = client(f"cursor slot {chest if in_chest else 27 + mine - 9}", "mouse 1 click", "wait 30", timeout=60)
+        client(f"cursor slot {chest if in_chest else 27 + mine - 9}", "mouse 1 click alt", "wait 30", "key escape", "wait 200", "use", "wait 15", timeout=60)
+        # Back in the chest's first free slot (any will do): clicked there next.
+        chest = next((i for i, v in chest_items(1002, 100, 0).items() if v[0] == name), chest)
+    out = client(f"cursor slot {chest if in_chest else 27 + mine - 9}", "mouse 1 click alt", "wait 30", "status", "tab 2", "wait 20", "tabs", timeout=60)
     out_of_chest = chest_items(1002, 100, 0).get(chest, (None,))[0] != name if in_chest else not passed(f"if items entity {P} inventory.{mine - 9} {name}")
     # Escape, as you'd close it: everything put back, and nothing left open.
     out += client("status", "key escape", "wait 200", "status", timeout=60)
     screens = re.findall(r"screen=(\S+)", out)
-    back = chest_items(1002, 100, 0).get(chest, (None,))[0] == name if in_chest else passed(f"if items entity {P} inventory.{mine - 9} {name}")
+    # Back where it came from, in any slot: the chest, or your inventory.
+    back = passed(f"if items block 1002 100 0 container.* {name}") if in_chest else passed(f"if items entity {P} container.* {name}")
     slot = lambda s: f"hotbar.{s}" if s < 9 else f"inventory.{s - 9}"
     wrong = [s for s, t in hotbar.items() if not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")]
-    wrong += [s for s in range(9) if s not in hotbar and count(s)]
+    wrong += [s for s in range(9) if s not in hotbar and count(s) and not (not in_chest and passed(f"if items entity {P} hotbar.{s} {name}"))]
     wrong += [s for s, t in (extra or {}).items() if not passed(f"if items entity {P} {slot(s)} {t.split(' ')[0].split('[')[0]}")]
     obsidian = passed(f"if items entity {P} container.* obsidian") or "obsidian" in str(chest_items(1002, 100, 0))
-    closed = len(screens) == 2 and screens[1] == "none"
+    closed = len(screens) == 3 and screens[2] == "none"
+    # Put down with the chest still up, then the box's tab current.
+    stayed = bool(screens) and screens[0] == "ContainerScreen"
+    # The box's tab current (an ender chest's is the held one's, as Remote Ender Chest holds it).
+    opened = re.search(r"\[dev\] tabs: .*\*(?!1002, 100, 0\b)-?\d+, -?\d+, -?\d+", out) is not None
     client("key escape", "wait 5", timeout=30)
-    ok = out_of_chest and back and not wrong and closed and not obsidian
-    return ok, (f"opened (screen {screens[0] if screens else '?'})" if out_of_chest else "never left its slot") + \
-        (", back in its slot" if back else ", not back in its slot") + (f", hotbar {wrong} not as it was" if wrong else "") + \
+    ok = out_of_chest and stayed and opened and back and not wrong and closed and not obsidian
+    return ok, (f"put down, the chest {'still up' if stayed else 'gone'}, " + ("opened from its tab" if opened else "its tab didn't open it") if out_of_chest else "never left its slot") + \
+        (", back" if back else ", not back") + (f", hotbar {wrong} not as it was" if wrong else "") + \
         (", all closed" if closed else f", screens {screens}") + (", OBSIDIAN: broken without Silk Touch" if obsidian else "")
 
 
@@ -964,13 +975,14 @@ def t_open_box_ender_chest_in_chest_twice():
 
 
 def t_open_box_from_a_placed_box():
-    """A shulker box right-clicked in an ender chest Inventory Tweaks put down: it opens, and Escape puts it back in the
-    ender chest and the ender chest back in your hotbar. No obsidian."""
+    """A shulker box Mod + right-clicked in an ender chest Inventory Tweaks put down and opened (from your inventory, with
+    nothing on the swap bar): it's put down and opened from its tab, and Escape puts it back in the ender chest and the
+    ender chest back in your hotbar. No obsidian."""
     reset(pitch=35)
     cmd(*(f"item replace entity {P} hotbar.{s} with {t}" for s, t in {0: "diamond_sword", 5: "ender_chest 4", 6: "diamond_pickaxe[enchantments={silk_touch:1}]"}.items()),
         f"item replace entity {P} enderchest.0 with red_shulker_box", f"item replace entity {P} enderchest.1 with bread 7")
     client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "key e", "wait 10",
-           "cursor slot 41", "mouse 1 click", "wait 30", "status", "cursor slot 0", "mouse 1 click", "wait 30", timeout=60)
+           "cursor slot 41", "mouse 1 click alt", "wait 30", "status", "cursor slot 0", "mouse 1 click alt", "wait 30", "tab 2", "wait 20", timeout=60)
     nested = not passed(f"if items entity {P} enderchest.0 red_shulker_box")
     # One Escape: the shulker box back into the ender chest (opened again for it), then the ender chest home.
     out = client("status", "key escape", "wait 400", "status", timeout=60)
@@ -990,11 +1002,11 @@ def t_open_box_yours_with_chest_open():
 
 
 def remote_echest_setup():
-    """An ender chest beside the tester, a stack of diamonds in their ender chest's first slot, Remote Ender Chest on: it's
+    """An ender chest beside the tester, a stack of diamonds in their ender chest's first slot, Inventory Tweaks' Remote Ender Chest on: it's
     opened by hand and closed with Escape, which keeps it open on the server."""
     reset(pitch=35)
     cmd("setblock 1002 100 0 ender_chest[facing=west]", f"item replace entity {P} enderchest.0 with diamond 7", f"item replace entity {P} hotbar.3 with stick 5")
-    return client(".toggle remote_ender_chest on", "wait 5", "use", "wait 15", "status", "key escape", "wait 10", "status", timeout=60)
+    return client(".toggle inventory_tweaks on", ".set inventory_tweaks remote_ender_chest true", "wait 5", "use", "wait 15", "status", "key escape", "wait 10", "status", timeout=60)
 
 
 def screens(out):
@@ -1006,7 +1018,7 @@ def t_remote_ender_chest():
     # took the clicks in the ender chest it still had open.
     out = remote_echest_setup()
     out += client("key e", "wait 10", "status", "cursor slot 0", "mouse 0 click", "cursor slot 54", "mouse 0 click", "wait 10", "key escape", "wait 5",
-                  ".toggle remote_ender_chest off", "wait 5", timeout=60)
+                  ".toggle inventory_tweaks off", "wait 5", timeout=60)
     sc = screens(out)
     taken = passed(f"if items entity {P} hotbar.0 diamond") and not passed(f"if items entity {P} enderchest.0 diamond")
     ok = sc[:3] == ["ContainerScreen", "none", "ContainerScreen"] and taken
@@ -1016,42 +1028,281 @@ def t_remote_ender_chest():
 def t_remote_ender_chest_moves():
     # With its screen gone, your inventory's clicks go through it: a move (core's, as modules make them) lands on the server.
     out = remote_echest_setup()
-    out += client("move 3 20", "wait 10", ".toggle remote_ender_chest off", "wait 5", timeout=60)
+    out += client("move 3 20", "wait 10", ".toggle inventory_tweaks off", "wait 5", timeout=60)
     moved = passed(f"if items entity {P} inventory.11 stick") and not passed(f"if items entity {P} hotbar.3 stick")
     return moved, "the move went through the held ender chest" if moved else "the move didn't reach the server"
 
 
-def t_remote_ender_chest_out_of_reach():
-    # Out of reach, a vanilla server closes it: then the inventory key opens your own inventory again.
+def t_remote_ender_chest_far_away():
+    # Opened once more over itself when held, it's freed from its block: 20 blocks away, past where a server closes an
+    # ender chest, the inventory key shows it and its diamonds come out. Your inventory's tab leaves it open: the diamonds
+    # moved there (hotbar to inventory) move on the server, and its tab, then the inventory key, show the ender chest again.
     out = remote_echest_setup()
-    cmd(f"tp {P} 1020.5 100 0.5")
-    out += client("wait 20", "key e", "wait 10", "status", "key escape", "wait 5", ".toggle remote_ender_chest off", "wait 5", timeout=60)
+    cmd(f"tp {P} 1022.5 100 0.5")
+    out += client("wait 40", "key e", "wait 10", "status", "cursor slot 0", "mouse 0 click", "cursor slot 54", "mouse 0 click", "wait 10",
+                  "tab 0", "wait 10", "status", "cursor slot 36", "mouse 0 click", "cursor slot 9", "mouse 0 click", "wait 10", "tab 1", "wait 5", "status",
+                  "key escape", "wait 5", "key e", "wait 10", "status", "key escape", "wait 5", ".toggle inventory_tweaks off", "wait 5", timeout=60)
     sc = screens(out)
-    ok = len(sc) >= 3 and sc[2] == "InventoryScreen"
-    return ok, f"screens {sc[:3]}"
+    taken = passed(f"if items entity {P} inventory.0 diamond") and not passed(f"if items entity {P} enderchest.0 diamond")
+    ok = sc[:6] == ["ContainerScreen", "none", "ContainerScreen", "InventoryScreen", "ContainerScreen", "ContainerScreen"] and taken
+    return ok, f"screens {sc[:6]}, " + ("diamonds taken 20 blocks away and moved in your inventory's screen" if taken else "the diamonds didn't move on the server")
+
+
+def t_remote_ender_chest_armour():
+    # On your inventory's tab the held ender chest stays open until a click on what it doesn't show: a helmet carried
+    # from the hotbar onto the head slot lets it go (the close puts the helmet back, picked up again for the click) and
+    # goes on; the inventory key shows your inventory after.
+    out = remote_echest_setup()
+    cmd(f"item replace entity {P} hotbar.1 with diamond_helmet")
+    out += client("key e", "wait 10", "tab 0", "wait 10", "status", "cursor slot 37", "mouse 0 click", "wait 2", "cursor slot 5", "mouse 0 click", "wait 10",
+                  "key escape", "wait 5", "key e", "wait 10", "status", "key escape", "wait 5", ".toggle inventory_tweaks off", "wait 5", timeout=60)
+    sc = screens(out)
+    worn = passed(f"if items entity {P} armor.head diamond_helmet")
+    ok = sc[2:4] == ["InventoryScreen", "InventoryScreen"] and worn
+    return ok, f"screens {sc[2:4]}, " + ("helmet on" if worn else "helmet not on")
+
+
+def remote_box_pass(mode, nearby=False, ender_item=False):
+    """A shulker box in your remote ender chest, held 20 blocks away, Mod + right-clicked: put down, and on Escape back
+    through another ender chest in reach (nearby), one put down from your inventory (No Way Back: Ender Chest), or into
+    your inventory (Inventory); with none of these it isn't taken out (Refuse). Returns where it ended up."""
+    out = remote_echest_setup()
+    cmd(f"item replace entity {P} enderchest.1 with red_shulker_box", f"item replace entity {P} hotbar.6 with diamond_pickaxe[enchantments={{silk_touch:1}}]",
+        "setblock 1024 100 0 ender_chest[facing=west]" if nearby else "setblock 1024 100 0 air",
+        f"item replace entity {P} inventory.10 with ender_chest 2" if ender_item else f"item replace entity {P} inventory.10 with air",
+        f"tp {P} 1022.5 100 0.5")
+    out += client(f".set inventory_tweaks no_way_back {mode}", ".set inventory_tweaks air_place false", "wait 40", "key e", "wait 10", "status",
+                  "cursor slot 1", "mouse 1 click alt", "wait 40", "status", "tabs", "key escape", "wait 300", "status", timeout=90)
+    in_ender = passed(f"if items entity {P} enderchest.* red_shulker_box")
+    yours = passed(f"if items entity {P} container.* red_shulker_box")
+    standing = sum(1 for x in range(1019, 1027) for z in (-1, 0, 1, 2) for y in (100, 101, 102, 103) if passed(f"if block {x} {y} {z} #minecraft:shulker_boxes"))
+    placed_ender = [x for x in range(1019, 1027) if x != 1024 for _ in [0] if any(passed(f"if block {x} {y} {z} ender_chest") for z in (-1, 0, 1, 2) for y in (100, 101, 102, 103))]
+    ender_back = not ender_item or count(19) == 2
+    out += client("key e", "wait 10", "status", "key escape", "wait 5", ".set inventory_tweaks no_way_back refuse", ".toggle inventory_tweaks off", "wait 5", timeout=60)
+    cmd("setblock 1024 100 0 air")
+    where = "standing" if standing else "in the ender chest" if in_ender else "in your inventory" if yours else "LOST"
+    # Taken out: its tab on the swap bar.
+    taken = re.search(r"\[dev\] tabs: .* box", out) is not None
+    return ("taken out, back " if taken else "not taken out, ") + where, placed_ender, ender_back, screens(out)
+
+
+def t_remote_ender_chest_box_nearby():
+    # Back through the ender chest in reach (every one holds the same things), Refuse or not; that one held after, so the
+    # inventory key shows it.
+    where, placed, back, sc = remote_box_pass("refuse", nearby=True)
+    return where == "taken out, back in the ender chest" and not placed and sc[-1] == "ContainerScreen", f"{where}, screens {sc}"
+
+
+def t_remote_ender_chest_box_refused():
+    # No other ender chest in reach and Refuse: it isn't taken out.
+    where, placed, back, sc = remote_box_pass("refuse")
+    return where == "not taken out, in the ender chest", f"{where}, screens {sc}"
+
+
+def t_remote_ender_chest_box_placed_ender_chest():
+    # No Way Back: Ender Chest: one from your inventory is put down for it, and picked back up.
+    where, placed, back, sc = remote_box_pass("ender_chest", ender_item=True)
+    return where == "taken out, back in the ender chest" and not placed and back, f"{where}" + (", an ender chest LEFT STANDING" if placed else "") + \
+        ("" if back else ", the ender chest not back in your inventory") + f", screens {sc}"
+
+
+def t_remote_ender_chest_box_inventory():
+    # No Way Back: Inventory: taken out anyway, and it comes back into your inventory.
+    where, placed, back, sc = remote_box_pass("inventory")
+    return where == "taken out, back in your inventory", f"{where}, screens {sc}"
+
+
+def t_remote_ender_chest_put_down():
+    """An ender chest Inventory Tweaks puts down from your inventory, with its Remote Ender Chest on: Escape picks it back up
+    into its slot, and it stays open: the inventory key shows it and its diamonds come out."""
+    reset(pitch=35)
+    cmd(*(f"item replace entity {P} {t}" for t in ("hotbar.0 with diamond_sword", "hotbar.6 with diamond_pickaxe[enchantments={silk_touch:1}]", "inventory.5 with ender_chest")),
+        f"item replace entity {P} enderchest.0 with diamond 7")
+    out = client(".toggle inventory_tweaks on", ".set inventory_tweaks remote_ender_chest true", ".set inventory_tweaks air_place false", "select 2", "wait 10", "key e", "wait 10",
+                 "cursor slot 14", "mouse 1 click alt", "wait 40", "status", "key escape", "wait 300", "status", timeout=90)
+    standing = any(passed(f"if block {x} {y} {z} ender_chest") for x in (1001, 1000, 999) for z in (-1, 0, 1) for y in (100, 101, 102, 103))
+    home = passed(f"if items entity {P} container.* ender_chest")
+    out += client("key e", "wait 10", "status", "cursor slot 0", "mouse 0 click", "cursor slot 54", "mouse 0 click", "wait 10", "key escape", "wait 5",
+                  ".toggle inventory_tweaks off", "wait 5", timeout=60)
+    sc = screens(out)
+    taken = passed(f"if items entity {P} hotbar.0 diamond") and not passed(f"if items entity {P} enderchest.0 diamond")
+    obsidian = passed(f"if items entity {P} container.* obsidian")
+    ok = sc[:3] == ["ContainerScreen", "none", "ContainerScreen"] and not standing and home and taken and not obsidian
+    return ok, f"screens {sc[:3]}" + (", still standing" if standing else ", picked up") + (", back in your inventory" if home else ", not back in your inventory") + \
+        (", diamonds taken from it after" if taken else ", the diamonds didn't move") + (", OBSIDIAN" if obsidian else "")
+
+
+def t_open_box_slot_taken():
+    """A box put down from a chest whose slot is filled meanwhile (dirt put there): Escape puts it into the chest's first
+    free slot, the dirt left where it is. With the chest full, it goes into your inventory."""
+    out = []
+    for full in (False, True):
+        reset(pitch=35)
+        cmd("setblock 1002 100 0 air", "setblock 1002 100 0 chest[facing=west]", f"item replace entity {P} hotbar.0 with diamond_sword",
+            f"item replace entity {P} hotbar.6 with diamond_pickaxe", "item replace block 1002 100 0 container.4 with red_shulker_box")
+        client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "use", "wait 10",
+               "cursor slot 4", "mouse 1 click alt", "wait 30", timeout=60)
+        fill = [f"item replace block 1002 100 0 container.{i} with dirt" for i in range(27)] if full else ["item replace block 1002 100 0 container.4 with dirt"]
+        cmd(*fill)
+        client("wait 10", "key escape", "wait 200", timeout=60)
+        dirt = passed("if items block 1002 100 0 container.4 dirt")
+        box_in_chest = passed("if items block 1002 100 0 container.* red_shulker_box")
+        box_yours = passed(f"if items entity {P} container.* red_shulker_box")
+        standing = any(passed(f"if block {x} {y} {z} #minecraft:shulker_boxes") for x in (1001, 1000, 999) for z in (-1, 0, 1) for y in (100, 101, 102, 103))
+        ok = dirt and not standing and (box_yours and not box_in_chest if full else box_in_chest and not box_yours)
+        out.append((ok, ("full chest: " if full else "slot taken: ") + ("box in your inventory" if box_yours else "box in the chest" if box_in_chest else "box LOST" if not standing else "box standing")
+                    + ("" if dirt else ", the dirt moved")))
+        client("key escape", "wait 5", ".toggle inventory_tweaks off", timeout=30)
+    cmd("setblock 1002 100 0 air")
+    return all(o for o, _ in out), "; ".join(d for _, d in out)
+
+
+def t_open_box_plain_right_click():
+    """A plain right-click (no Mod) on a stack of ender chests is vanilla's: half the stack picked up, nothing put down."""
+    reset(pitch=35)
+    cmd(f"item replace entity {P} inventory.5 with ender_chest 4", f"item replace entity {P} hotbar.6 with diamond_pickaxe[enchantments={{silk_touch:1}}]")
+    client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "wait 5", "key e", "wait 10", "cursor slot 14", "mouse 1 click", "wait 20",
+           "cursor slot 15", "mouse 0 click", "wait 10", timeout=60)
+    split = count(14) == 2 and count(15) == 2
+    standing = any(passed(f"if block {x} {y} {z} ender_chest") for x in (1001, 1000, 999) for z in (-1, 0, 1) for y in (100, 101, 102, 103))
+    client("key escape", "wait 5", ".toggle inventory_tweaks off", timeout=30)
+    return split and not standing, ("split in two" if split else "not split") + (", PUT DOWN" if standing else ", nothing put down")
 
 
 def t_swap_bar():
-    """Two shulker boxes opened from a chest opened by hand, switched between on the swap bar (the chest, then the first
-    box again, opened by clicking it): they stand while you switch. Escape puts both back in their slots in the chest
-    and closes everything."""
+    """Two shulker boxes Mod + right-clicked in a chest opened by hand: both put down with the chest still up, then switched
+    between on the swap bar (the first box, the second, the chest, the first again): they stand while you switch. Escape
+    puts both back in their slots in the chest and closes everything."""
     reset(pitch=35)
     cmd("setblock 1002 100 0 chest[facing=west]", *(f"item replace entity {P} hotbar.{s} with {t}" for s, t in {0: "diamond_sword", 6: "diamond_pickaxe"}.items()),
         "item replace block 1002 100 0 container.4 with red_shulker_box", "item replace block 1002 100 0 container.6 with blue_shulker_box")
     out = client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "use", "wait 15",
-                 "cursor slot 4", "mouse 1 click", "wait 30", "status", "tabs", "tab 1", "wait 20", "status", "tabs",
-                 "cursor slot 6", "mouse 1 click", "wait 30", "status", "tabs", "tab 2", "wait 20", "status", "tabs", timeout=90)
+                 "cursor slot 4", "mouse 1 click alt", "wait 30", "cursor slot 6", "mouse 1 click alt", "wait 30", "status", "tabs",
+                 "tab 2", "wait 20", "status", "tabs", "tab 3", "wait 20", "status", "tabs", "tab 1", "wait 20", "status", "tabs",
+                 "tab 2", "wait 20", "status", "tabs", timeout=90)
     standing = sum(1 for x in (1001, 1000, 999, 1002) for z in (-1, 0, 1) for y in (100, 101, 102, 103) if passed(f"if block {x} {y} {z} #minecraft:shulker_boxes"))
     out += client("key escape", "wait 400", "status", timeout=90)
     sc = screens(out)
     items = chest_items(1002, 100, 0)
-    back = items.get(4, (None,))[0] == "red_shulker_box" and items.get(6, (None,))[0] == "blue_shulker_box"
+    back = sum(1 for v in items.values() if v[0] in ("red_shulker_box", "blue_shulker_box")) == 2
     hotbar_ok = passed(f"if items entity {P} hotbar.0 diamond_sword") and passed(f"if items entity {P} hotbar.6 diamond_pickaxe") and not any(count(h) for h in (1, 2, 3, 4, 5, 7, 8))
-    want = ["ShulkerBoxScreen", "ContainerScreen", "ShulkerBoxScreen", "ShulkerBoxScreen", "none"]
+    want = ["ContainerScreen", "ShulkerBoxScreen", "ShulkerBoxScreen", "ContainerScreen", "ShulkerBoxScreen", "none"]
     ok = sc == want and standing == 2 and back and hotbar_ok
     tabs = re.findall(r"\[dev\] tabs: (.*)", out)
     return ok, f"screens {sc}, {standing} boxes standing while switching" + (", both back in the chest" if back else f", chest {items}") + \
         ("" if hotbar_ok else ", hotbar not as it was") + ("" if ok else f", tabs {tabs}")
+
+
+def t_swap_bar_three_boxes():
+    """Three shulker boxes put down from a chest opened by hand, two of them red (one holding dirt, one stone): Escape breaks them one
+    after another and puts them back together, the chest opened once, each with what was in it. Reports the time from
+    Escape to all three back in the chest."""
+    reset(pitch=35)
+    # A chest already there keeps its contents through setblock: emptied first, and after (the other tests' chest is here too).
+    cmd("setblock 1002 100 0 air", "setblock 1002 100 0 chest[facing=west]", *(f"item replace entity {P} hotbar.{s} with {t}" for s, t in {0: "diamond_sword", 6: "diamond_pickaxe"}.items()),
+        "item replace block 1002 100 0 container.4 with red_shulker_box[container=[{slot:0,item:{id:dirt,count:1}}]]",
+        "item replace block 1002 100 0 container.5 with red_shulker_box[container=[{slot:0,item:{id:stone,count:1}}]]",
+        "item replace block 1002 100 0 container.6 with blue_shulker_box")
+    out = client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "use", "wait 15",
+                 "cursor slot 4", "mouse 1 click alt", "wait 30", "cursor slot 5", "mouse 1 click alt", "wait 30",
+                 "cursor slot 6", "mouse 1 click alt", "wait 30", "status", "tabs", timeout=90)
+    standing = sum(1 for x in (1001, 1000, 999, 1002) for z in (-1, 0, 1) for y in (100, 101, 102, 103) if passed(f"if block {x} {y} {z} #minecraft:shulker_boxes"))
+    client("key escape", timeout=30)
+    start, took = time.time(), None
+    while time.time() - start < 20:
+        # One check: chest_items can't read a box with things in it.
+        if re.search(r"count: 3\b", cmd("execute if items block 1002 100 0 container.* #minecraft:shulker_boxes")):
+            took = time.time() - start
+            break
+        time.sleep(0.1)
+    out += client("wait 20", "status", timeout=30)
+    inside = " ".join(cmd(f'data get block 1002 100 0 Items[{i}].components."minecraft:container"[0].item.id') for i in range(3))
+    own = "dirt" in inside and "stone" in inside
+    hotbar_ok = passed(f"if items entity {P} hotbar.0 diamond_sword") and passed(f"if items entity {P} hotbar.6 diamond_pickaxe") and not any(count(h) for h in (1, 2, 3, 4, 5, 7, 8))
+    sc = screens(out)
+    cmd("setblock 1002 100 0 air")
+    ok = standing == 3 and took is not None and own and hotbar_ok and sc[-1] == "none"
+    return ok, f"{standing} standing, " + (f"all back in {took:.1f} s" if took is not None else "not all back") + \
+        (", what was in them kept" if own else f", contents {inside}") + ("" if hotbar_ok else ", hotbar not as it was") + f", screens {sc}"
+
+
+def t_swap_bar_ender_chest_nearby():
+    """An ender chest in reach is a tab on the swap bar, over your inventory too: its tab opens it and its diamonds come
+    out. With a solid block on it (it wouldn't open) there's no tab."""
+    reset(pitch=35)
+    cmd("setblock 1002 100 0 ender_chest[facing=west]", "setblock 1002 101 0 air", f"item replace entity {P} enderchest.0 with diamond 7",
+        f"item replace entity {P} hotbar.3 with stick 5")
+    out = client(".toggle inventory_tweaks on", ".set inventory_tweaks remote_ender_chest false", "wait 5", "key e", "wait 10", "tabs", "tab 1", "wait 20", "status",
+                 "cursor slot 0", "mouse 0 click", "cursor slot 54", "mouse 0 click", "wait 10", "key escape", "wait 10", timeout=60)
+    taken = passed(f"if items entity {P} hotbar.0 diamond") and not passed(f"if items entity {P} enderchest.0 diamond")
+    cmd("setblock 1002 101 0 stone")
+    out2 = client("key e", "wait 10", "tabs", "key escape", "wait 5", ".set inventory_tweaks remote_ender_chest true", ".toggle inventory_tweaks off", timeout=60)
+    cmd("setblock 1002 101 0 air", "setblock 1002 100 0 air")
+    tabs = re.findall(r"\[dev\] tabs: (.*)", out)
+    blocked = re.findall(r"\[dev\] tabs: (.*)", out2)
+    sc = screens(out)
+    ok = bool(tabs) and "1002, 100, 0" in tabs[0] and sc[:1] == ["ContainerScreen"] and taken and blocked and "1002, 100, 0" not in blocked[0]
+    return ok, f"tabs {tabs[:1]}, screens {sc[:1]}, " + ("diamonds taken" if taken else "diamonds not taken") + f", under a block {blocked[:1]}"
+
+
+def t_swap_bar_full_inventory():
+    """Four shulker boxes put down from a chest with two empty slots in your inventory: Escape puts them back two at a time
+    (all are picked up before any goes back, so no more than fit), all back in the chest and none left on the ground."""
+    reset(pitch=35)
+    shulkers = ["red_shulker_box", "blue_shulker_box", "green_shulker_box", "yellow_shulker_box"]
+    cmd("setblock 1002 100 0 air", "setblock 1002 100 0 chest[facing=west]", *(f"item replace block 1002 100 0 container.{i} with {b}" for i, b in enumerate(shulkers)),
+        *(f"item replace entity {P} {'hotbar.' + str(s) if s < 9 else 'inventory.' + str(s - 9)} with {'diamond_pickaxe' if s == 6 else 'dirt 64'}"
+          for s in range(36) if s not in (2, 20)))
+    out = client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 3", "wait 10", "use", "wait 10",
+                 *(x for i in range(4) for x in (f"cursor slot {i}", "mouse 1 click alt", "wait 25")), "status", "tabs", timeout=90)
+    standing = sum(1 for x in (999, 1000, 1001) for z in (-1, 0, 1) for y in (100, 101, 102) if passed(f"if block {x} {y} {z} #minecraft:shulker_boxes"))
+    out += client("key escape", "wait 400", "status", timeout=60)
+    back = re.search(r"count: (\d+)", cmd("execute if items block 1002 100 0 container.* #minecraft:shulker_boxes"))
+    back = int(back.group(1)) if back else 0
+    lying = "passed" in cmd("execute if entity @e[type=item,x=1000,y=100,z=0,distance=..8]")
+    dirt = re.search(r"count: (\d+)", cmd(f"execute if items entity {P} container.* dirt"))
+    dirt_ok = dirt is not None and int(dirt.group(1)) == 33 * 64
+    sc = screens(out)
+    cmd("setblock 1002 100 0 air", "kill @e[type=item,x=1000,y=100,z=0,distance=..8]")
+    ok = standing == 4 and back == 4 and not lying and dirt_ok and sc[-1] == "none"
+    return ok, f"{standing} standing, {back} back in the chest" + (", SOME LEFT ON THE GROUND" if lying else "") + ("" if dirt_ok else ", the inventory changed") + f", screens {sc}"
+
+
+def t_swap_bar_full_hotbar():
+    """Two shulker boxes put down from a chest with a full hotbar: what made room for each waits in your inventory, and is
+    back in the hotbar once both boxes are back in the chest (one box lands in the other's hotbar slot meanwhile)."""
+    reset(pitch=35)
+    hotbar = {i: f"oak_planks {i + 1}" for i in range(9)}
+    hotbar[6] = "diamond_pickaxe"
+    cmd("setblock 1002 100 0 air", "setblock 1002 100 0 chest[facing=west]", "item replace block 1002 100 0 container.0 with red_shulker_box",
+        "item replace block 1002 100 0 container.1 with blue_shulker_box", *(f"item replace entity {P} hotbar.{h} with {t}" for h, t in hotbar.items()))
+    out = client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 3", "wait 10", "use", "wait 10",
+                 "cursor slot 0", "mouse 1 click alt", "wait 25", "cursor slot 1", "mouse 1 click alt", "wait 25", "key escape", "wait 300", "status", timeout=90)
+    back = re.search(r"count: (\d+)", cmd("execute if items block 1002 100 0 container.* #minecraft:shulker_boxes"))
+    back = int(back.group(1)) if back else 0
+    wrong = [h for h, t in hotbar.items() if not passed(f"if items entity {P} hotbar.{h} {t.split(' ')[0]}") or (h != 6 and count(h) != h + 1)]
+    cmd("setblock 1002 100 0 air")
+    ok = back == 2 and not wrong and screens(out)[-1:] == ["none"]
+    return ok, f"{back} back in the chest" + (f", hotbar {wrong} not as it was" if wrong else ", hotbar as it was")
+
+
+def t_swap_bar_chest_out_of_reach():
+    """A shulker box put down from a chest, then the tester moved so the chest is out of reach (as stepping to where boxes
+    fell does): Escape picks it up and walks back into reach to put it in the chest."""
+    reset(pitch=35)
+    cmd("setblock 1002 100 0 air", "setblock 1002 100 0 chest[facing=west]", "item replace block 1002 100 0 container.4 with red_shulker_box",
+        f"item replace entity {P} hotbar.6 with diamond_pickaxe")
+    client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 3", "wait 10", "use", "wait 10",
+           "cursor slot 4", "mouse 1 click alt", "wait 30", "tabs", timeout=60)
+    box = next(((x, z) for x in (999, 1000, 1001) for z in (-1, 0, 1) if passed(f"if block {x} 100 {z} red_shulker_box")), None)
+    # Back from the box, away from the chest: the box still in reach, the chest not.
+    if box: cmd(f"tp {P} {box[0] - 3.5} 100 {box[1] + 0.5} -90 35")
+    out = client("wait 5", "status", "key escape", "wait 300", "status", timeout=60)
+    walked = re.findall(r"status: pos (\S+) ", out)
+    back = passed("if items block 1002 100 0 container.* red_shulker_box")
+    yours = passed(f"if items entity {P} container.* red_shulker_box")
+    cmd("setblock 1002 100 0 air")
+    return box is not None and back, f"box at {box}, " + ("back in the chest" if back else "left in your inventory" if yours else "LOST") + f", x {walked}"
 
 
 def t_swap_bar_your_inventory():
@@ -1060,13 +1311,13 @@ def t_swap_bar_your_inventory():
     reset(pitch=35)
     cmd(*(f"item replace entity {P} {'hotbar.' + str(s) if s < 9 else 'inventory.' + str(s - 9)} with {t}" for s, t in {0: "diamond_sword", 14: "red_shulker_box"}.items()))
     out = client(".toggle inventory_tweaks on", ".set inventory_tweaks air_place false", "select 2", "wait 10", "key e", "wait 10",
-                 "cursor slot 14", "mouse 1 click", "wait 30", "status", "tab 0", "wait 10", "status", timeout=90)
+                 "cursor slot 14", "mouse 1 click alt", "wait 30", "status", "tab 0", "wait 10", "status", timeout=90)
     standing = any(passed(f"if block {x} {y} {z} #minecraft:shulker_boxes") for x in (1001, 1000, 999) for z in (-1, 0, 1) for y in (100, 101, 102, 103))
     out += client("key escape", "wait 200", "status", timeout=90)
     sc = screens(out)
-    home = passed(f"if items entity {P} inventory.5 red_shulker_box")
+    home = passed(f"if items entity {P} container.* red_shulker_box")
     ok = sc == ["ShulkerBoxScreen", "InventoryScreen", "none"] and standing and home
-    return ok, f"screens {sc}" + (", standing while your inventory showed" if standing else ", not standing") + (", back in its slot" if home else ", not back")
+    return ok, f"screens {sc}" + (", standing while your inventory showed" if standing else ", not standing") + (", back in your inventory" if home else ", not back")
 
 
 def t_inventory_tweaks_middle_sort():
@@ -1609,11 +1860,24 @@ TESTS = [
     ("open box ender chest in a chest full hotbar", t_open_box_ender_chest_in_chest_full_hotbar),
     ("open box ender chest in a chest twice", t_open_box_ender_chest_in_chest_twice),
     ("open box from a placed box", t_open_box_from_a_placed_box),
+    ("open box plain right click", t_open_box_plain_right_click),
+    ("open box slot taken", t_open_box_slot_taken),
     ("swap bar", t_swap_bar),
     ("swap bar your inventory", t_swap_bar_your_inventory),
+    ("swap bar full inventory", t_swap_bar_full_inventory),
+    ("swap bar full hotbar", t_swap_bar_full_hotbar),
+    ("swap bar chest out of reach", t_swap_bar_chest_out_of_reach),
+    ("swap bar ender chest nearby", t_swap_bar_ender_chest_nearby),
+    ("swap bar three boxes", t_swap_bar_three_boxes),
     ("remote ender chest", t_remote_ender_chest),
     ("remote ender chest moves", t_remote_ender_chest_moves),
-    ("remote ender chest out of reach", t_remote_ender_chest_out_of_reach),
+    ("remote ender chest far away", t_remote_ender_chest_far_away),
+    ("remote ender chest put down", t_remote_ender_chest_put_down),
+    ("remote ender chest armour", t_remote_ender_chest_armour),
+    ("remote ender chest box nearby", t_remote_ender_chest_box_nearby),
+    ("remote ender chest box refused", t_remote_ender_chest_box_refused),
+    ("remote ender chest box placed ender chest", t_remote_ender_chest_box_placed_ender_chest),
+    ("remote ender chest box inventory", t_remote_ender_chest_box_inventory),
     ("inventory_tweaks middle sort", t_inventory_tweaks_middle_sort),
     ("auto_sort opened by hand", t_auto_sort_opened_by_hand),
     ("inventory_tweaks middle sort held", t_inventory_tweaks_middle_sort_held),

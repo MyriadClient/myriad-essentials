@@ -2,7 +2,9 @@ package dev.myriadclient.essentials.modules.player;
 
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
+import dev.myriadclient.api.event.events.ContainerEvent;
 import dev.myriadclient.api.event.events.ContainerScreenEvent;
+import dev.myriadclient.api.event.events.ItemTooltipEvent;
 import dev.myriadclient.api.job.Why;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
@@ -15,7 +17,10 @@ import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.ItemInfo;
 import dev.myriadclient.essentials.util.Layouts;
 import dev.myriadclient.essentials.util.Menus;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -26,9 +31,13 @@ import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ShulkerBoxBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -36,11 +45,14 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Right-click a shulker box (or ender chest) in your inventory, or in a chest (barrel, shulker box, ender chest, hopper,
- * dispenser) you have open, to open it on the spot: it's placed above you or beside you, opened, and broken and picked
- * back up when you close it, back in its slot; from a chest, that chest opens again with it back inside, so closing
- * the box takes you back to the chest. Ender chests need a Silk Touch pickaxe, or breaking them would only drop
- * obsidian.
+ * Mod + right-click a shulker box (or ender chest) in your inventory, or in a chest (barrel, shulker box, ender chest,
+ * hopper, dispenser) you have open, to put it down on the spot, above you or beside you: from your inventory with
+ * nothing else on core's swap bar it opens too; otherwise it only gets a tab there, the screen you're in staying up, so
+ * several can be put down in a row and opened from the bar. It stands while you switch, and is broken and picked back
+ * up once you close a screen yourself, into your inventory or the container it came from (any free slot). A plain right-click stays vanilla's (half a stack). Ender chests
+ * need a Silk Touch pickaxe, or breaking them would only drop obsidian.
+ * Remote Ender Chest holds an ender chest open after you close it (Containers.hold), from anywhere: the inventory key
+ * shows it again.
  * <p>
  * And the mouse in any inventory screen: Shift-drag shift-clicks every slot you pass, a left drag that starts on a slot
  * of the item you're carrying gathers every matching slot it passes into your stack, and the wheel moves one item at a
@@ -52,9 +64,22 @@ import java.util.concurrent.CompletableFuture;
  * a multi-click move is never left half done. Applied by this addon's ContainerScreenMixin.
  */
 public class InventoryTweaks extends Module {
-	private final BoolSetting shulkers = sgGeneral.bool("Instant Shulker").description("Right-click a shulker box in your inventory, or in a chest you have open, to open it.").defaultValue(true).build();
-	private final BoolSetting enderChests = sgGeneral.bool("Instant Ender Chest").description("Right-click an ender chest in your inventory, or in a chest you have open, to open it (needs a Silk Touch pickaxe to pick it back up).")
-		.defaultValue(true).build();
+	private final BoolSetting shulkers = sgGeneral.bool("Instant Shulker").description("Mod + right-click a shulker box in your inventory, or in a chest you have open, "
+		+ "to put it down and add it to the swap bar (opened too, from your inventory with nothing else there).").defaultValue(true).build();
+	private final BoolSetting enderChests = sgGeneral.bool("Instant Ender Chest").description("Mod + right-click an ender chest in your inventory, or in a chest you have "
+		+ "open, to put it down as a shulker box is (needs a Silk Touch pickaxe to pick it back up).").defaultValue(true).build();
+	private final BoolSetting remoteEnderChest = sgGeneral.bool("Remote Ender Chest").description("Keep an ender chest open after you close it, from anywhere, "
+		+ "and open it again with your inventory key. One opened from your inventory is picked back up and stays open.")
+		.defaultValue(true).onChanged(on -> {
+			if (!on) letGo();
+		}).build();
+	private final EnumSetting<Containers.NoWayBack> noWayBack = sgGeneral.oneOf("No Way Back", Containers.NoWayBack.REFUSE).description("A box from a "
+		+ "container that can't be opened again to put it back (your remote ender chest far away, with no other ender chest in reach; any one will do): "
+		+ "Refuse leaves it there; Ender Chest puts one down from your inventory to put it back through, and picks it up again; Inventory lets it "
+		+ "come back into your inventory.").visible(() -> shulkers.get() || enderChests.get())
+		.onChanged(v -> {
+			if (Myriad.isReady()) Myriad.containers().noWayBack(this, v);
+		}).build();
 	// Shown everywhere, as core's Air Place is: 2b2t takes it and current Grim doesn't.
 	private final BoolSetting airPlace = sgGeneral.bool("Air Place").description("Put the box above your head with nothing there to click against, "
 		+ "through the off hand. 2b2t takes it; current Grim refuses it. Off, it goes above your head only under a ceiling, else beside you.")
@@ -90,16 +115,43 @@ public class InventoryTweaks extends Module {
 	// The drag in progress: where the button went down, with what, and the slots it has handled.
 	private @Nullable Slot pressed;
 	private int pressButton = -1;
-	private boolean pressShift, collectStart, collecting;
+	private boolean pressShift, pressMod, collectStart, collecting;
 	private final Set<Slot> handled = Collections.newSetFromMap(new IdentityHashMap<>());
 
 	public InventoryTweaks() {
 		super(Tags.PLAYER, "Inventory Tweaks", "Open shulker boxes from your inventory, and move items with drags and the wheel.");
 	}
 
+	/** The ender chest held for Remote Ender Chest (its block may be gone). */
+	private Containers.@Nullable View held;
+
+	@Override
+	protected void onEnable() {
+		// The swap bar over container screens, themed or not: boxes and the held ender chest are switched between there.
+		Myriad.containers().swapBar(this, true);
+		Myriad.containers().noWayBack(this, noWayBack.get());
+	}
+
 	@Override
 	protected void onDisable() {
+		Myriad.containers().swapBar(this, false);
 		release();
+		letGo();
+	}
+
+	/**
+	 * An ender chest opened (by hand, or put down from your inventory) is held: core opens it once more over itself, after
+	 * which the server keeps it open anywhere; one put down for you is picked back up when you close it and stays open.
+	 */
+	@Subscribe
+	private void onOpened(ContainerEvent.Opened e) {
+		Containers.View v = e.view();
+		if (remoteEnderChest.get() && inGame() && v.pos() != null && mc.level.getBlockState(v.pos()).is(Blocks.ENDER_CHEST) && Myriad.containers().hold(v)) held = v;
+	}
+
+	private void letGo() {
+		if (held != null && Myriad.containers().held().orElse(null) == held) Myriad.containers().release();
+		held = null;
 	}
 
 	@Subscribe
@@ -109,7 +161,7 @@ public class InventoryTweaks extends Module {
 
 	/** Each slot click in an inventory screen. Returns true to swallow the click. */
 	private boolean onSlotClick(Slot slot, int button, ContainerInput input) {
-		if (input != ContainerInput.PICKUP || button != 1 || slot == null || !slot.hasItem() || !inGame()) return false;
+		if (input != ContainerInput.PICKUP || button != 1 || slot == null || !slot.hasItem() || !inGame() || !pressMod) return false;
 		AbstractContainerMenu menu = mc.player.containerMenu;
 		if (mc.player.isCreative() || !menu.getCarried().isEmpty()) return false;
 		// Your own inventory's slots, or a storage container's (opened from a block, to be opened again once it's back).
@@ -118,26 +170,50 @@ public class InventoryTweaks extends Module {
 		if (inventory ? slot.container != mc.player.getInventory() : from == null || !storage(menu)) return false;
 		if (Myriad.jobs().isBusy(this)) return false;
 		ItemStack stack = slot.getItem();
-		boolean shulker = shulkers.get() && ItemInfo.isShulkerBox(stack);
-		boolean ender = enderChests.get() && stack.is(Items.ENDER_CHEST);
-		if (!shulker && !ender) return false;
+		if (!isBox(stack)) return false;
 		int index = slot.getContainerSlot();
 		if (inventory && (index < 0 || index >= 36)) return false;
 
-		// Put down and opened, and picked back up once you close a screen yourself (core keeps it standing while you switch
-		// between containers on the swap bar), or when it can't open, saying why.
+		// Put down (opened too from your inventory with nothing else on the swap bar, else only given a tab there), and
+		// picked back up once you close a screen yourself (core keeps it standing while you switch between containers on
+		// the bar), or when it can't go down, saying why.
+		standing.removeIf(b -> !stands(b));
+		boolean open = inventory && standing.isEmpty() && Myriad.containers().held().isEmpty();
 		Placement.Options options = Placement.Options.forServer().withAirPlace(airPlace.get());
-		CompletableFuture<Containers.ItemSession> opening = inventory ? Myriad.containers().openItem(this, index, OPEN_TICKS, options)
-			: Myriad.containers().openItem(this, from, slot.index, OPEN_TICKS, options);
-		opening.whenComplete((session, t) -> {
+		Containers c = Myriad.containers();
+		CompletableFuture<Containers.ItemSession> down = inventory ? open ? c.openItem(this, index, OPEN_TICKS, options) : c.putDownItem(this, index, OPEN_TICKS, options)
+			: c.putDownItem(this, from, slot.index, OPEN_TICKS, options);
+		down.whenComplete((session, t) -> {
 			if (t != null) {
 				Why why = Why.of(t);
 				if (!why.is(Why.CANCELLED) && !why.is(Why.OWNER_OFF) && !why.is(Why.LEFT_WORLD)) warn(capitalized(why.detail().isEmpty() ? why.toString() : why.detail()));
 				return;
 			}
+			standing.add(session);
 			session.finishWhenClosed();
 		});
 		return true;
+	}
+
+	/** Boxes this put down, until they're back. */
+	private final List<Containers.ItemSession> standing = new ArrayList<>();
+
+	private boolean stands(Containers.ItemSession box) {
+		if (box.where() == null) return false;
+		BlockState state = mc.level.getBlockState(box.where());
+		return state.getBlock() instanceof ShulkerBoxBlock || state.is(Blocks.ENDER_CHEST);
+	}
+
+	private boolean isBox(ItemStack stack) {
+		return shulkers.get() && ItemInfo.isShulkerBox(stack) || enderChests.get() && stack.is(Items.ENDER_CHEST);
+	}
+
+	/** With the Mod key held, a box's tooltip says a right-click puts it down. */
+	@Subscribe
+	private void onTooltip(ItemTooltipEvent e) {
+		if (!mc.isSameThread() || !inGame() || mc.player.isCreative() || e.lines().isEmpty() || !isBox(e.stack())) return;
+		if (!(mc.gui.screen() instanceof AbstractContainerScreen<?>) || !Myriad.ui().theme().modKey.get().isDown()) return;
+		e.lines().set(0, e.lines().getFirst().copy().append(Component.literal(" (Right Click Place)").withStyle(ChatFormatting.GRAY)));
 	}
 
 	/** Plain storage, whose slots a box can be in and go back to. */
@@ -159,7 +235,7 @@ public class InventoryTweaks extends Module {
 	}
 
 	/** A mouse button went down over {@code slot} (null if none). */
-	public static void press(ScreenAccess screen, @Nullable Slot slot, int button, boolean shift) {
+	public static void press(ScreenAccess screen, @Nullable Slot slot, int button, boolean shift, int modifiers) {
 		InventoryTweaks m = active(screen);
 		if (m == null) return;
 		Modules.guard(m, () -> {
@@ -167,6 +243,7 @@ public class InventoryTweaks extends Module {
 			m.pressed = slot;
 			m.pressButton = button;
 			m.pressShift = shift;
+			m.pressMod = Myriad.ui().theme().modKey.get().in(modifiers);
 			ItemStack carried = screen.essentials$menu().getCarried();
 			m.collectStart = button == 0 && !carried.isEmpty() && slot != null && slot.hasItem() && ItemStack.isSameItemSameComponents(slot.getItem(), carried);
 		});
