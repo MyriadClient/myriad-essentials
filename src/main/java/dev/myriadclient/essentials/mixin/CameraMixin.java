@@ -20,17 +20,14 @@ public abstract class CameraMixin {
 	@Shadow
 	private boolean detached;
 
-	@Shadow
-	protected abstract float getMaxZoom(float distance);
-
 	/**
-	 * Free Look's scroll distance, shortened as vanilla does to keep the camera out of blocks. Set on the move that backs
-	 * the camera off rather than on its distance, so another client that sets that move's distance (Boze does) can't
-	 * undo it.
+	 * Free Look's scroll distance, through blocks: vanilla's shortening pulled the camera in at every block near you
+	 * (looking around while you bounce or fly low, it kept running into them). Set on the move that backs the camera off
+	 * rather than on its distance, so another client that sets that move's distance (Boze does) can't undo it.
 	 */
 	@WrapOperation(method = "alignWithEntity", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Camera;move(FFF)V"))
 	private void essentials$freeLookDistance(Camera camera, float forwards, float up, float right, Operation<Void> original) {
-		if (detached && FreeLook.active()) forwards = -getMaxZoom(FreeLook.distance());
+		if (detached && FreeLook.active()) forwards = -FreeLook.distance();
 		original.call(camera, forwards, up, right);
 	}
 }

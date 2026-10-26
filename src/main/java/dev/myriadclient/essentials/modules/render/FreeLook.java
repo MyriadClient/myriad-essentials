@@ -123,7 +123,7 @@ public class FreeLook extends Module {
 		return m != null && m.isEnabled();
 	}
 
-	/** How far the third-person camera backs off while {@link #active()}. Vanilla still shortens it where a block is in the way. */
+	/** How far the third-person camera backs off while {@link #active()}, through blocks (nothing shortens it). */
 	public static float distance() {
 		FreeLook m = Modules.get(FreeLook.class);
 		long now = System.nanoTime();
