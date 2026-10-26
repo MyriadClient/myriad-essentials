@@ -3,7 +3,7 @@
 // the maven publication and publishAddon. `-PcoreDir=../myriad` builds against a core checkout next to this one, the
 // plugin included. What's below is Essentials' own.
 plugins {
-	id 'dev.myriadclient.addon' version '1.1.1'
+	id 'dev.myriadclient.addon' version '1.2.0'
 }
 
 version = project.mod_version
