@@ -36,8 +36,8 @@ import dev.myriadclient.essentials.modules.movement.ElytraFly;
 import dev.myriadclient.essentials.modules.movement.ElytraSwap;
 import dev.myriadclient.essentials.modules.movement.InventoryMove;
 import dev.myriadclient.essentials.modules.movement.NoSlow;
-import dev.myriadclient.essentials.modules.movement.RotationLock;
 import dev.myriadclient.essentials.modules.movement.RocketBoost;
+import dev.myriadclient.essentials.modules.movement.RotationLock;
 import dev.myriadclient.essentials.modules.movement.Velocity;
 import dev.myriadclient.essentials.modules.player.AutoEat;
 import dev.myriadclient.essentials.modules.player.AutoMend;
@@ -65,10 +65,11 @@ import dev.myriadclient.essentials.modules.render.Tracers;
 import dev.myriadclient.essentials.modules.render.ViewModel;
 import dev.myriadclient.essentials.modules.render.Zoom;
 import dev.myriadclient.essentials.modules.world.AirPlace;
-import dev.myriadclient.essentials.modules.world.BaritoneSettings;
 import dev.myriadclient.essentials.modules.world.AutoPortal;
+import dev.myriadclient.essentials.modules.world.BaritoneSettings;
 import dev.myriadclient.essentials.modules.world.Printer;
 import dev.myriadclient.essentials.modules.world.Scaffold;
+import dev.myriadclient.essentials.util.PearlOwners;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.List;
@@ -85,6 +86,7 @@ import static dev.myriadclient.api.ui.PanelType.Anchor.TOP_RIGHT;
 public final class Essentials implements MyriadAddon {
 	@Override
 	public void initialize(AddonContext ctx) {
+		PearlOwners.load(ctx.storage());
 		// Modules the ready-made control panels below combine.
 		ElytraSwap elytraSwap = new ElytraSwap();
 		RotationLock rotationLock = new RotationLock();

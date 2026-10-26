@@ -7,6 +7,9 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 Needs Myriad 1.2.0.
 
+- **Nametags** remembers who threw each ender pearl, by the pearl, per server (saved in pearl-owners.json): the
+  client knows a pearl's thrower only while they're loaded near you, so a pearl in a stasis chamber lost its name once
+  they'd gone; now it keeps it, after you leave and come back too. Pearls unseen for a month are forgotten.
 - **Coordinates** groups the digits in thousands (8,290,779), a new Commas setting, on by default.
 - **Biome**, a new HUD element: the biome you're standing in, by the game's name for it.
 - **Middle Click** sends no swing with a pearl, rocket or bottle on 2b2t (Myriad's 2b2t profile, which wants none),

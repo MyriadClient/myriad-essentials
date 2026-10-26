@@ -4,6 +4,8 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.EntityRenderEvent;
 import dev.myriadclient.api.event.events.Render2DEvent;
+import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.event.events.WorldEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Canvas;
@@ -19,6 +21,7 @@ import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Entities;
 import dev.myriadclient.api.util.ItemInfo;
+import dev.myriadclient.essentials.util.PearlOwners;
 import dev.myriadclient.essentials.util.PopColors;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -51,7 +54,7 @@ import java.util.Map;
  * enchantments) above.</li>
  * <li>Mobs: name and health.</li>
  * <li>Items: what's on the ground and how many, grouped when they lie together.</li>
- * <li>Pearls: who threw each ender pearl.</li>
+ * <li>Pearls: who threw each ender pearl, remembered once the thrower has gone (PearlOwners).</li>
  * </ul>
  * Vanilla's labels are hidden for whatever this draws.
  */
@@ -266,11 +269,29 @@ public class Nametags extends Module {
 	}
 
 	private void drawPearl(Canvas c, ThrownEnderpearl pearl, float tickDelta) {
-		Entity owner = pearl.getOwner();
+		// Its owner as last known, once they've gone (PearlOwners).
+		String owner = PearlOwners.owner(pearl);
 		if (owner == null) return;
 		AABB box = Entities.lerpedBox(pearl, tickDelta);
-		int color = owner instanceof Player p && Entities.isFriend(p) ? friendColor.argb() : nameColor.argb();
-		label(c, new Vec3(box.getCenter().x, box.maxY + 0.25, box.getCenter().z), List.of(new WorldLabel.Segment(owner.getScoreboardName(), color)));
+		int color = Myriad.friends().isFriend(owner) ? friendColor.argb() : nameColor.argb();
+		label(c, new Vec3(box.getCenter().x, box.maxY + 0.25, box.getCenter().z), List.of(new WorldLabel.Segment(owner, color)));
+	}
+
+	/** Every pearl in sight noted with its owner, not only those near enough to be labelled (see PearlOwners). */
+	@Subscribe(inGame = true)
+	private void onTick(TickEvent.Post e) {
+		if (!pearls.get() || mc.player.tickCount % 10 != 0) return;
+		for (Entity entity : mc.level.entitiesForRendering()) if (entity instanceof ThrownEnderpearl pearl) PearlOwners.owner(pearl);
+	}
+
+	@Subscribe
+	private void onLeave(WorldEvent.Leave e) {
+		PearlOwners.save();
+	}
+
+	@Override
+	protected void onDisable() {
+		PearlOwners.save();
 	}
 
 	private void drawItems(Canvas c, float tickDelta) {
