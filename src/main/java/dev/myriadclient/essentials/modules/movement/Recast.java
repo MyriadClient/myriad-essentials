@@ -4,6 +4,7 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.build.Target;
 import dev.myriadclient.api.elytra.ChestSwap;
 import dev.myriadclient.api.event.events.InputEvent;
+import dev.myriadclient.api.hook.Hook;
 import dev.myriadclient.api.job.Job;
 import dev.myriadclient.api.job.JobContext;
 import dev.myriadclient.api.job.Progress;
@@ -73,8 +74,46 @@ import java.util.function.Predicate;
  * and timed (a tick held back where needed) so it reaches the face high enough; a drop of up to two is glided down.
  * Anything higher, something in the way at head height, water or lava, or a deeper drop stops it, landing in front:
  * it clears nothing there, and bounces on once you look somewhere clear.
+ * <p>
+ * For addon developers: each tick of a bounce goes through the {@link #HOP} hook, which can change the pitch it flies,
+ * whether it jumps and when the glide starts; {@link #PASS_THROUGH} says which blocks don't count as in its way.
+ *
+ * <pre>{@code
+ * ctx.hook(Recast.HOP)
+ *     .named("Steady pitch")
+ *     .handle(call -> call.input().withPitch(40));
+ * }</pre>
  */
 public class Recast extends GlideMode {
+	/**
+	 * One tick of a bounce, for {@link #HOP}: on the ground (for how many ticks) or in the air (for how many), the
+	 * floor's height, the way the lane runs, whether it follows terrain; and what Recast does with it: the pitch it flies,
+	 * whether it jumps (on the ground), and whether each glide starts on the hop's last tick in the air, swapping nothing,
+	 * instead of as it rises (with No Durability's chestplate swaps).
+	 */
+	public record Hop(boolean onGround, int groundTicks, int airTicks, double floorY, Vec3 lane, boolean terrain, float pitch,
+					  boolean jump, boolean lateStart) {
+		public Hop withPitch(float pitch) {
+			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart);
+		}
+
+		public Hop withJump(boolean jump) {
+			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart);
+		}
+
+		public Hop withLateStart(boolean lateStart) {
+			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart);
+		}
+	}
+
+	/** How Recast flies a tick of its bounce: the input is its own plan, the caller is Recast. */
+	public static final Hook<Hop, Hop> HOP = Hook.of("myriad-essentials:recast_hop", "Recast hop",
+		"How Recast flies each tick of a bounce: its pitch, whether it jumps, when the glide starts.");
+
+	/** Whether Recast looks through the block at a position when it checks the way ahead (default: no). */
+	public static final Hook<BlockPos, Boolean> PASS_THROUGH = Hook.of("myriad-essentials:recast_pass_through", "Recast pass-through",
+		"Blocks Recast doesn't count as in its way.");
+
 	public enum Obstacles {
 		CLEAR, STOP
 	}
@@ -178,8 +217,8 @@ public class Recast extends GlideMode {
 	private boolean baritoneFailed;
 	private int pauseTicks;
 	private double groundY;
-	/** Ticks since you last touched the ground. */
-	private int airTicks;
+	/** Ticks since you last touched the ground, and on the ground since you landed. */
+	private int airTicks, groundTicks;
 	/**
 	 * Recast with No Durability: the chestplate is worn through each hop, the elytra going on only for the moment of
 	 * each glide start (see {@link #bounce}).
@@ -417,18 +456,20 @@ public class Recast extends GlideMode {
 	/** One tick of the bounce itself. */
 	private void bounce() {
 		Myriad.elytra().glideHold().arm(this);
-		spoof(steeredYaw(), mc.player.getDeltaMovement().y > DIVE_UNTIL_Y && !climbing() ? 90 : 4);
 		// Vanilla waits 10 ticks between held jumps; jump the tick you touch down.
 		Interactions.setJumpCooldown(0);
 		boolean ground = mc.player.onGround();
 		airTicks = ground ? 0 : airTicks + 1;
+		groundTicks = ground ? groundTicks + 1 : 0;
 		yieldSprint = !ground && Myriad.inventory().clickWaiting();
 		sinceStart++;
-		if (ground) hopStarted = false;
 		if (ground) {
+			hopStarted = false;
 			groundY = mc.player.getY();
-			wantJump = true;
 		}
+		Hop hop = hop(ground);
+		spoof(steeredYaw(), hop.pitch());
+		if (ground) wantJump = hop.jump();
 
 		boolean gliding = elytraOpen();
 		if (gliding) holdGlide = true;
@@ -442,21 +483,26 @@ public class Recast extends GlideMode {
 		// can go on for several items. Nothing is swapped meanwhile, so eating can start whenever (Auto Eat, or right
 		// click), the chestplate on or not; between Auto Eat's bites too, or a swap would stop the next one.
 		boolean eating = chestSwaps() && (mc.player.isUsingItem() || AutoEat.wantsToEat());
-		chestMode = chestSwaps() && Myriad.elytra().chestSwap().ready() && !eating;
-		boolean mayGlide = !eating;
-		if (chestSwaps()) noDur.chestplateAtHand(false);
+		// A late start (see Hop) goes on the last tick in the air: the server glides from it to the landing, a tick at
+		// most, with nothing swapped, so eating needn't stop it.
+		boolean late = hop.lateStart();
+		chestMode = !late && chestSwaps() && Myriad.elytra().chestSwap().ready() && !eating;
+		boolean mayGlide = late || !eating;
+		if (chestSwaps() && !late) noDur.chestplateAtHand(false);
 		boolean cleared = Myriad.elytra().glideHold().cleared(this);
 		// What's worn only counts once the server has answered the last swap (see Myriad.elytra().chestSwap().settled): with jitter the
 		// client can show a moment that's already past, and swapping on that puts the client and Grim out of step.
 		boolean settled = !chestMode || Myriad.elytra().chestSwap().settled();
-		boolean startDue = !chestMode || !hopStarted || sinceStart >= RESTART_TICKS;
+		boolean startDue = late ? landsThisTick(hop.pitch()) : !chestMode || !hopStarted || sinceStart >= RESTART_TICKS;
 		// Grim already knows the server stopped the glide (its ping got answered before the hold could take it, see
 		// Myriad.elytra().glideHold().exposed): start again at once, or it sets you back for gliding on. Without waiting for the last swap
 		// to settle: the stop is the server's answer to it.
 		boolean exposed = Myriad.elytra().glideHold().exposed(this);
 		// Where nothing holds the stop back from the anti-cheat (6b6t), only once the server has answered the last start:
-		// a stop older than it would have this start end the glide that one began.
-		boolean answered = AntiCheat.inEffect().simulatesGlide() || Myriad.elytra().glideHold().stoppedSinceStart(this);
+		// a stop older than it would have this start end the glide that one began. A late start waits for it everywhere:
+		// the server's glide of a tick says it glides and then that it stopped a tick apart, and a start between the two
+		// would be a second start to Grim.
+		boolean answered = !late && AntiCheat.inEffect().simulatesGlide() || Myriad.elytra().glideHold().stoppedSinceStart(this);
 		if (cleared && answered && !ground && airTicks >= 2 && (exposed || settled && startDue)) {
 			// The server stopped the glide (at the landing, or when the chestplate went on) and the client kept it up:
 			// start it again now you're back in the air, the held ping answers first (on the tick jump goes down) so
@@ -475,7 +521,7 @@ public class Recast extends GlideMode {
 				}
 			}
 			if (mayGlide) startGliding();
-		} else if (!gliding && !ground && !cleared && mayGlide) {
+		} else if (!gliding && !ground && !cleared && mayGlide && (!late || landsThisTick(hop.pitch()))) {
 			// Take off the same way, after the first jump or off a ledge. With the chestplate on through each hop, as a
 			// restart: the elytra on, the start and the chestplate back on in one tick, the client (and Grim) gliding on
 			// with the hold. Left to vanilla (the elytra put on, its jump press starting the glide), the server would
@@ -493,6 +539,24 @@ public class Recast extends GlideMode {
 		} else {
 			cutLongGlide(gliding, cleared);
 		}
+	}
+
+	/** This tick of the bounce: Recast's own, unless a {@link #HOP} hook flies it differently. */
+	private Hop hop(boolean ground) {
+		float pitch = mc.player.getDeltaMovement().y > DIVE_UNTIL_Y && !climbing() ? 90 : 4;
+		Hop asked = new Hop(ground, groundTicks, airTicks, groundY, laneDir(), terrain(), pitch, true, false);
+		if (!HOP.hooked()) return asked;
+		Hop hooked = HOP.call(this, asked, h -> h);
+		return hooked != null ? hooked : asked;
+	}
+
+	/** Whether this tick's move lands, by the glide's own maths at {@code pitch}. */
+	private boolean landsThisTick(float pitch) {
+		var p = mc.player;
+		double cos = Math.cos(Math.toRadians(pitch)), lift = cos * cos;
+		double vy = p.getDeltaMovement().y + p.getGravity() * (-1 + lift * 0.75);
+		if (vy < 0) vy += vy * -0.1 * lift;
+		return p.getY() + vy * 0.98 <= groundY + 1e-4;
 	}
 
 	/**
@@ -1199,6 +1263,7 @@ public class Recast extends GlideMode {
 	 * or a collision shape that meets {@code box}.
 	 */
 	private boolean obstructs(BlockPos pos, AABB box) {
+		if (PASS_THROUGH.hooked() && Boolean.TRUE.equals(PASS_THROUGH.call(this, pos.immutable(), p -> false))) return false;
 		BlockState state = mc.level.getBlockState(pos);
 		if (isPortal(state) || state.is(Blocks.COBWEB)) return true;
 		if (state.isAir() || !state.getFluidState().isEmpty()) return false;

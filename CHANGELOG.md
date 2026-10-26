@@ -5,6 +5,9 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 ## Unreleased
 
+- **Elytra Fly**'s Recast has hooks for addons: `Recast.HOP` (each tick of a bounce: the pitch it flies, whether it
+  jumps, and whether each glide starts on the hop's last tick in the air, swapping nothing) and `Recast.PASS_THROUGH`
+  (blocks it doesn't count as in its way).
 - **Free Look**'s camera goes through blocks: vanilla's shortening pulled it in at every block near you, so looking
   around while you bounce or fly low kept running into them.
 
