@@ -34,9 +34,16 @@ Needs Myriad 1.3.0. Unreleased.
   a row apart just above the pile, eight rows at most (the last "+N more"). They were stacked in the world, a quarter
   block apart, so a pile of many kinds stood in a column blocks tall, far from what it named (and further up close).
 - **Elytra Fly**'s Recast stops nearer what it stops for: it keeps bouncing while a stop begun later would still end
-  3 blocks short of it (a stop comes down at the hop's landing, then slides on up to 9 ticks of its speed, measured),
+  3 blocks short of it (a stop comes down at the hop's landing at the latest, then slides on),
   where it braked as soon as it saw it, a lookahead that grows with speed (60 blocks at 4 a tick). Baritone, taking
-  you past, walks that much less.
+  you past, walks that much less. Its slide is counted as 4 ticks of the speed it lands at (2.8 measured).
+- **Elytra Fly**'s Recast bounces on through eating with Elytra Swap: the elytra goes on before the first bite (Auto
+  Eat about to eat) and the hops glide as they would without Elytra Swap until you're done, the server gliding them
+  (a little wear, about a point a second of eating). It started no glides while you ate, so the hops were sprint jumps
+  slowed by eating, walking pace.
+- **Elytra Fly**'s Recast bounces through nether portals: one takes you only after you've stood in it a while, so it's
+  no longer in the way (end portals and gateways still are). Nowhere in one is a place to stop or to be taken to by
+  Baritone, and standing in one you're walked out first.
 - **Elytra Fly**'s Recast stops when you're too hungry to sprint (food 6 or less, with nothing eating), says so, and
   bounces on once you've eaten. The bounce's push forward is the sprint jump's: it hopped on the spot instead, took
   that for being stuck and handed you to Baritone over and over (seen on 2b2t with Auto Eat off).

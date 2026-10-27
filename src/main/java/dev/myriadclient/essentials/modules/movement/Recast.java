@@ -188,9 +188,10 @@ public class Recast extends GlideMode {
 	private static final double JUMP_POWER = 0.42;
 	/**
 	 * A stop ends this far short of what it stops for, or of chunks that haven't loaded; and slides on after landing
-	 * up to this many ticks of the speed it came down at (measured: 3.6 to 8.2, the glide lasting a little on the ground).
+	 * this many ticks of the speed it came down at (about 2.8, measured from 45 b/s: the first tick on the ground keeps
+	 * most of it).
 	 */
-	private static final double STAND_OFF = 3, UNLOADED_STAND_OFF = 6, SLIDE_TICKS = 9;
+	private static final double STAND_OFF = 3, UNLOADED_STAND_OFF = 6, SLIDE_TICKS = 4;
 	/** How far to look for a way out of a nether portal you stand in, in blocks. */
 	private static final double PORTAL_EXIT = 3;
 	/**
@@ -418,7 +419,8 @@ public class Recast extends GlideMode {
 			pauseTicks = FLAG_PAUSE;
 			countSetback();
 		}
-		if (mc.player.onGround() && inNetherPortal(mc.player.getBoundingBox())) {
+		// Bouncing through one is fine (it takes you only after a while in it); stopped in one, not.
+		if (state != State.BOUNCING && mc.player.onGround() && inNetherPortal(mc.player.getBoundingBox())) {
 			leavePortal();
 			return;
 		}
@@ -540,16 +542,17 @@ public class Recast extends GlideMode {
 		// should glide as little as it can. Each start puts the elytra on, starts the glide and puts the chestplate back
 		// on in the same tick: the server glides for a tick at most, and the glide hold keeps you (and Grim) gliding
 		// through the rest. No chestplate in the hotbar or off hand: one is brought in from the inventory.
-		// Not while you eat (or use anything held): Grim stops it at every swap. And then no glides at all: the hops go
-		// on without (a little slower) until you're done. With the elytra on, each would last the whole hop, and eating
-		// can go on for several items. Nothing is swapped meanwhile, so eating can start whenever (Auto Eat, or right
-		// click), the chestplate on or not; between Auto Eat's bites too, or a swap would stop the next one.
+		// Not while you eat (or use anything held): Grim stops it at every swap. Then the elytra stays on and the hops
+		// glide as without No Durability, the server gliding them whole (a little wear, about a point a second of
+		// eating): without glides the hops are a sprint jump slowed by eating, walking pace. It goes on before the first
+		// bite (Auto Eat about to eat), so no bite is cut short; nothing is swapped again until you're done.
 		boolean eating = chestSwaps() && (mc.player.isUsingItem() || AutoEat.wantsToEat());
 		// A late start (see Hop) goes on the last tick in the air: the server glides from it to the landing, a tick at
 		// most, with nothing swapped, so eating needn't stop it.
 		boolean late = hop.lateStart();
 		chestMode = !late && chestSwaps() && Myriad.elytra().chestSwap().ready() && !eating;
-		boolean mayGlide = late || !eating;
+		if (eating && !late && !mc.player.isUsingItem() && !Myriad.elytra().chestSwap().elytraWorn()) Myriad.elytra().chestSwap().restoreElytra();
+		boolean mayGlide = late || !eating || Myriad.elytra().chestSwap().elytraWorn();
 		if (chestSwaps() && !late) noDur.chestplateAtHand(false);
 		boolean cleared = Myriad.elytra().glideHold().cleared(this);
 		// What's worn only counts once the server has answered the last swap (see Myriad.elytra().chestSwap().settled): with jitter the
@@ -1146,7 +1149,7 @@ public class Recast extends GlideMode {
 
 	private boolean standable(Vec3 feet, double height) {
 		AABB body = new AABB(feet.x - 0.3, feet.y + FLOOR_CLEARANCE, feet.z - 0.3, feet.x + 0.3, feet.y + height, feet.z + 0.3);
-		if (!loaded(feet) || blocksIn(body, null)) return false;
+		if (!loaded(feet) || blocksIn(body, null) || inNetherPortal(body)) return false;
 		BlockPos floor = BlockPos.containing(feet.x, feet.y - 0.5, feet.z);
 		return !mc.level.getBlockState(floor).getCollisionShape(mc.level, floor).isEmpty();
 	}
@@ -1469,12 +1472,15 @@ public class Recast extends GlideMode {
 	}
 
 	/**
-	 * Whether the block at {@code pos} is something to clear: a portal, a cobweb (no collision, but it stops you dead),
-	 * or a collision shape that meets {@code box}.
+	 * Whether the block at {@code pos} is something to clear: an end portal or gateway (they take you at once), a cobweb
+	 * (no collision, but it stops you dead), or a collision shape that meets {@code box}. A nether portal isn't: it takes
+	 * you only after you've stood in it a while, so a bounce goes through (nowhere in one is a place to stand, though:
+	 * {@link #standable}, and Baritone never walks you into one).
 	 */
 	private boolean obstructs(BlockPos pos, AABB box) {
 		if (PASS_THROUGH.hooked() && Boolean.TRUE.equals(PASS_THROUGH.call(this, pos.immutable(), p -> false))) return false;
 		BlockState state = mc.level.getBlockState(pos);
+		if (state.is(Blocks.NETHER_PORTAL)) return false;
 		if (isPortal(state) || state.is(Blocks.COBWEB)) return true;
 		if (state.isAir() || !state.getFluidState().isEmpty()) return false;
 		return state.getCollisionShape(mc.level, pos).toAabbs().stream().anyMatch(part -> part.move(pos).intersects(box));
