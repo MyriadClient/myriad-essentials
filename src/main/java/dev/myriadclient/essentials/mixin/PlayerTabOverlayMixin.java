@@ -11,9 +11,8 @@ import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** The player list as Extra Tab has it: how many, how many rows, ping as a number, names picked out, header and footer. */
@@ -22,20 +21,25 @@ public abstract class PlayerTabOverlayMixin {
 	/** The widest ping text a slot is made room for (four digits and "ms"). */
 	private static final String WIDEST_PING = "9999ms";
 
-	@ModifyConstant(method = "getPlayerInfos", constant = @Constant(longValue = 80L))
+	/**
+	 * The limit as it reaches the stream, not Minecraft's 80 itself: other mods (Meteor's Better Tab) change that
+	 * constant too, and only one ModifyConstant can. The constants below are changed with ModifyExpressionValue, which
+	 * chains with other mods' changes.
+	 */
+	@ModifyArg(method = "getPlayerInfos", at = @At(value = "INVOKE", target = "Ljava/util/stream/Stream;limit(J)Ljava/util/stream/Stream;"))
 	private long essentials$players(long vanilla) {
 		ExtraTab m = ExtraTab.on();
 		return m != null ? m.players.get() : vanilla;
 	}
 
-	@ModifyConstant(method = "extractRenderState", constant = @Constant(intValue = 20))
+	@ModifyExpressionValue(method = "extractRenderState", at = @At(value = "CONSTANT", args = "intValue=20"))
 	private int essentials$rows(int vanilla) {
 		ExtraTab m = ExtraTab.on();
 		return m != null ? m.rows.get() : vanilla;
 	}
 
 	/** Room in each slot for the ping as text, where Minecraft leaves 13 for the bars' 10 and a gap. */
-	@ModifyConstant(method = "extractRenderState", constant = @Constant(intValue = 13))
+	@ModifyExpressionValue(method = "extractRenderState", at = @At(value = "CONSTANT", args = "intValue=13"))
 	private int essentials$pingRoom(int vanilla) {
 		ExtraTab m = ExtraTab.on();
 		if (m == null || m.ping.get() != ExtraTab.Ping.NUMBER) return vanilla;

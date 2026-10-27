@@ -3,6 +3,17 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.4.1
+
+Needs Myriad 1.3.0. Unreleased.
+
+- **The game starts again with Meteor installed.** Extra Tab and Meteor's Better Tab both changed Minecraft's limit of
+  80 players in the tab list, the same way, and only one mod can change a number like that: the game crashed while
+  starting ("Critical injection failure ... PlayerTabOverlayMixin"). Extra Tab now changes the limit as it's used, and
+  Extra Tab's and Chat's other changes to Minecraft's numbers (rows, ping room, chat history and line height) are made
+  in a way other mods' changes to the same number stack with, Meteor's chat history included. Checked in the dev client
+  with a stand-in for Meteor's changes, loaded before and after Essentials: the old Extra Tab crashed, now it starts.
+
 ## 1.4.0
 
 Needs Myriad 1.3.0.

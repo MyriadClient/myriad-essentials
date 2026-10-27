@@ -18,9 +18,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -54,8 +52,12 @@ public abstract class ChatComponentMixin {
 		return original.call(new GuiMessage(message.addedTime(), ThemeFont.styled(message.content()), message.signature(), message.source(), message.tag()), font, width);
 	}
 
-	/** As many messages kept as History says, where Minecraft keeps 100. */
-	@ModifyConstant(method = {"addMessageToQueue", "addMessageToDisplayQueue"}, constant = @Constant(intValue = 100))
+	/**
+	 * As many messages kept as History says, where Minecraft keeps 100. Constants are changed with
+	 * ModifyExpressionValue throughout, which other mods' changes to the same value (another chat mod's history)
+	 * chain with: a ModifyConstant fails, and fails the game's start, when another mod has changed it first.
+	 */
+	@ModifyExpressionValue(method = {"addMessageToQueue", "addMessageToDisplayQueue"}, at = @At(value = "CONSTANT", args = "intValue=100"))
 	private int essentials$history(int vanilla) {
 		return Chat.kept();
 	}
@@ -115,19 +117,19 @@ public abstract class ChatComponentMixin {
 	 * Chat's rows in the theme's font: as tall as it is (Chat.rowHeight), not Minecraft's 9, with the text placed as far
 	 * up them as vanilla places its own (its 8, the row less the gap under the text), and as many lines a page.
 	 */
-	@ModifyConstant(method = "extractRenderState(Lnet/minecraft/client/gui/components/ChatComponent$ChatGraphicsAccess;IILnet/minecraft/client/gui/components/ChatComponent$DisplayMode;)V",
-		constant = @Constant(intValue = 9))
+	@ModifyExpressionValue(method = "extractRenderState(Lnet/minecraft/client/gui/components/ChatComponent$ChatGraphicsAccess;IILnet/minecraft/client/gui/components/ChatComponent$DisplayMode;)V",
+		at = @At(value = "CONSTANT", args = "intValue=9"))
 	private int essentials$rowHeight(int height) {
 		return Chat.rowHeight();
 	}
 
-	@ModifyConstant(method = "extractRenderState(Lnet/minecraft/client/gui/components/ChatComponent$ChatGraphicsAccess;IILnet/minecraft/client/gui/components/ChatComponent$DisplayMode;)V",
-		constant = @Constant(doubleValue = 8.0))
+	@ModifyExpressionValue(method = "extractRenderState(Lnet/minecraft/client/gui/components/ChatComponent$ChatGraphicsAccess;IILnet/minecraft/client/gui/components/ChatComponent$DisplayMode;)V",
+		at = @At(value = "CONSTANT", args = "doubleValue=8.0"))
 	private double essentials$textInRow(double offset) {
 		return Chat.rowHeight() == 9 ? offset : Chat.rowHeight();
 	}
 
-	@ModifyConstant(method = "getLineHeight", constant = @Constant(doubleValue = 9.0))
+	@ModifyExpressionValue(method = "getLineHeight", at = @At(value = "CONSTANT", args = "doubleValue=9.0"))
 	private double essentials$lineHeight(double height) {
 		return Chat.rowHeight();
 	}
