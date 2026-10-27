@@ -14,6 +14,10 @@ Needs Myriad 1.3.0. Unreleased.
   Minecraft's. In the theme's font its rows are 11 pixels, where Minecraft's are 9 (Line Spacing on top): the font
   reaches 7.5 above its baseline and 2.5 below, so in Minecraft's rows accents ran into the line above and descenders
   into the line below, and the last line hung out of the box. Only accents on capitals still reach the row above.
+- **Extra Tab** (Render), a module: the player list (Tab) with up to 1000 players (Minecraft lists 80) and as many
+  rows a column as you like (10 to 60, Minecraft's 20), each player's ping in milliseconds where the bars were,
+  coloured as the bars step (under 150, 300, 600, 1000), friends and you picked out in colours of your own, and the
+  server's header and footer left out if you like.
 
 - **Elytra Fly**'s Recast only stops for a hole or a low ceiling it would really meet. It works out where the hops
   ahead come down and take off (each is as many ticks in the air as the last, flown by the glide's own maths; within
