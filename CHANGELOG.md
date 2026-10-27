@@ -3,6 +3,25 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.3.2
+
+Needs Myriad 1.2.0. Unreleased.
+
+- **Elytra Fly**'s Recast only stops for a hole or a low ceiling it would really meet. It works out where the hops
+  ahead come down and take off (each is as many ticks in the air as the last, flown by the glide's own maths; within
+  0.2 of a block for the next landing in tests) and checks there. A landing needs floor under you where its tick
+  starts, since a move comes down before it goes on, and a hole only a block deep counts now: landing in one is what
+  stopped you, the dip's far side taken for a wall. Anything else in the lane's floor is flown over. A ceiling only
+  gets in the way of the start of a hop, its first three ticks, which you rise standing, to 2.55 above the floor at
+  most; anything from 2.6 up never does (2.9 before). Stopped, everything in the next 16 blocks still counts, as
+  before, and a stop once begun is finished before it decides again. On the Grim test server: six single-block holes
+  on the line, 2 passed in 20 s before and all 6 in 25 s now, none landed in; a roof of trapdoors 2.81 up bounced
+  under at full speed, walked before.
+- **Elytra Fly**'s Recast never takes you through a nether portal: Baritone, taking you past something, adds nether
+  portals to the blocks it avoids meanwhile (it walked through them, and on the test server took the tester to the
+  Nether past a lit portal across the lane), and standing in one however you got there, you're walked out of it the
+  shortest way first, before it takes you anywhere.
+
 ## 1.3.1
 
 Needs Myriad 1.2.0.

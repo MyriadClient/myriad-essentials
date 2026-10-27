@@ -1461,16 +1461,17 @@ def t_elytra_recast():
 
 
 def t_elytra_recast_obstacles():
-    # An ender chest and a 2-deep hole in the lane, Clear: past the chest (walked round with Baritone, or mined), and
-    # at the hole either stopped before it (no Baritone and no blocks) or across it with Baritone.
+    # An ender chest and a 3-deep hole across the lane, Clear: past the chest (walked round with Baritone, or mined), and
+    # the hole flown over, or (a hop coming down in it) stopped before it without Baritone and blocks, or across it with
+    # Baritone. Never in it.
     recast_highway("setblock 4150 201 0 ender_chest", "fill 4250 198 -1 4250 200 1 air",
         f"item replace entity {P} hotbar.0 with netherite_pickaxe[enchantments={{efficiency:5}}]")
     client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 400", ".toggle elytra_fly off", "wait 20", timeout=90)
     x, y, _ = position()
     mined = "passed" in cmd("execute if block 4150 201 0 air")
     baritone = has_baritone()
-    ok = x > 4160 and y > 200.5 and (x < 4250 or baritone)
-    return ok, f"chest {'mined' if mined else 'walked round'}, x={x:.1f} (hole at 4250), y={y:.1f}"
+    ok = x > 4160 and y > 200.5
+    return ok, f"chest {'mined' if mined else 'walked round'}, x={x:.1f} (hole at 4250, {'Baritone' if baritone else 'no Baritone'}), y={y:.1f}"
 
 
 def elytra_damage():
@@ -1569,14 +1570,50 @@ def t_elytra_recast_full_hotbar():
 
 
 def t_elytra_recast_fill_hole():
-    # A 3-deep hole across the lane: Clear fills it at floor level with blocks from the hotbar (without Baritone), or
-    # Baritone bridges it with them, and bounces on.
-    recast_highway("fill 4100 197 -1 4101 200 1 air", f"item replace entity {P} hotbar.2 with obsidian 64")
+    # A 3-deep hole across the lane, within the first hops (which can come down anywhere): Clear fills it at floor level
+    # with blocks from the hotbar (without Baritone), or Baritone bridges it with them, and bounces on.
+    recast_highway("fill 4006 197 -1 4007 200 1 air", f"item replace entity {P} hotbar.2 with obsidian 64")
     client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 400", ".toggle elytra_fly off", "wait 20", timeout=90)
     x, y, _ = position()
-    filled = sum(passed(f"if block {bx} 200 {bz} obsidian") for bx in (4100, 4101) for bz in (-1, 0, 1))
-    above = sum(passed(f"if block {bx} 201 {bz} obsidian") for bx in range(4095, 4106) for bz in (-1, 0, 1))
+    filled = sum(passed(f"if block {bx} 200 {bz} obsidian") for bx in (4006, 4007) for bz in (-1, 0, 1))
+    above = sum(passed(f"if block {bx} 201 {bz} obsidian") for bx in range(4000, 4012) for bz in (-1, 0, 1))
     return filled >= 2 and above == 0 and x > 4150 and y > 200.5, f"{filled}/6 hole blocks filled, {above} placed above the floor, x={x:.0f}, y={y:.1f}"
+
+
+def t_elytra_recast_holes_flown_over():
+    # Single-block holes on the lane's line, a block deep and two deep, Clear: only where a hop comes down is one in the
+    # way, so most are flown over (stopping at each, Baritone taking you past, takes about 4 s apiece: 2 of the 6 in 20 s), and none is
+    # landed in.
+    holes = (4093, 4131, 4178, 4219, 4262, 4307)
+    recast_highway(*(f"fill {hx} {200 - (i % 2)} 0 {hx} 200 0 air" for i, hx in enumerate(holes)),
+                   f"item replace entity {P} hotbar.2 with obsidian 64")
+    client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 500", ".toggle elytra_fly off", "wait 20", timeout=90)
+    x, y, _ = position()
+    passed_over = sum(hx < x for hx in holes)
+    return y > 200.5 and passed_over == len(holes), f"{passed_over}/{len(holes)} holes passed in 25 s, x={x:.0f}, y={y:.1f}"
+
+
+def t_elytra_recast_high_roof():
+    # A roof of closed top-half trapdoors 2.81 above the floor over 200 blocks of lane: above anything a hop reaches (it
+    # rises standing to 2.55 at most), so it bounces on under it, where it walked under anything below 2.9 before; Grim
+    # agrees (no flags).
+    recast_highway("fill 4040 203 -1 4240 203 1 oak_trapdoor[half=top,open=false]")
+    client(".set elytra_fly obstacles stop", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 200", ".toggle elytra_fly off", "wait 20", timeout=90)
+    x = position()[0]
+    return x - 4000 > 200, f"{x - 4000:.0f} blocks in 10 s"
+
+
+def t_elytra_recast_portal():
+    # Baritone installed: a lit nether portal across the lane in an obsidian wall, a way round on either side. Baritone
+    # walks round it, never through it: the tester is still in the overworld and past it.
+    recast_highway("fill 4090 200 -5 4110 200 5 obsidian", "fill 4100 200 -1 4100 204 2 obsidian", "fill 4100 201 0 4100 203 1 nether_portal[axis=z]",
+                   f"item replace entity {P} hotbar.0 with netherite_pickaxe")
+    if not has_baritone(): return True, "skipped: Baritone isn't installed in the dev client (run/mods)"
+    client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 500", ".toggle elytra_fly off", "wait 20", timeout=90)
+    x, y, _ = position()
+    dim = data("Dimension")
+    portal = passed("if block 4100 202 0 nether_portal")
+    return "overworld" in dim and x > 4105 and portal, f"x={x:.0f}, {dim.strip()}, portal {'there' if portal else 'broken'}"
 
 
 def t_elytra_recast_terrain():
@@ -1895,6 +1932,9 @@ TESTS = [
     ("recast spare elytras", t_elytra_recast_spare_elytras),
     ("recast full hotbar", t_elytra_recast_full_hotbar),
     ("recast fill hole", t_elytra_recast_fill_hole),
+    ("recast holes flown over", t_elytra_recast_holes_flown_over),
+    ("recast high roof", t_elytra_recast_high_roof),
+    ("recast portal", t_elytra_recast_portal),
     ("recast walk round", t_elytra_recast_walk_round),
     ("recast back on lane", t_elytra_recast_back_on_lane),
     ("recast disconnect", t_elytra_recast_disconnect),

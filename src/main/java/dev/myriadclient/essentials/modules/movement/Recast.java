@@ -60,9 +60,11 @@ import java.util.function.Predicate;
  * The highway is fixed when you turn it on (where you face, rounded as Elytra Fly's Snap says: the nearest 45° by
  * default; through the middle of the block you stand on), so looking around never steers; drifting off that line turns the flight a little back onto it. Far enough ahead
  * to stop in time (it grows with your speed) it watches for anything in the way: a block (an ender chest, a portal, a
- * wall), a hole you could fall into, or chunks that haven't loaded. It then stops jumping and lands, as you would, and
+ * wall), chunks that haven't loaded, and where the hops ahead come down, a hole (even a block deep) or a ceiling low
+ * enough for the jump to hit; one the hops pass over isn't in the way. It then stops jumping and lands, as you would, and
  * Obstacles decides what happens next. Clear hands over to Baritone, with a goal at the first clear spot past it, which
- * gets you there however it can (walking round, mining, placing); once you're there you face along the lane again and
+ * gets you there however it can (walking round, mining, placing, never through a nether portal: standing in one, you're
+ * walked out of it first); once you're there you face along the lane again and
  * bouncing goes on, and if Baritone can't get there the lane counts as blocked. Without Baritone, Clear mines through
  * blocks and fills holes itself, placing blocks only at floor level, never above your feet. Stop stops there. It also
  * notices when it's stuck, or the server keeps setting you back, and doesn't keep trying. The lane's height is kept from
@@ -165,10 +167,32 @@ public class Recast extends GlideMode {
 	private static final double RESUME_LOOK_AHEAD = LOOK_AHEAD + 2 * LOOK_AHEAD_TICKS;
 	/** How far apart the swept hitboxes are along the lane (each also covers the step to the next). */
 	private static final double SWEEP_STEP = 0.5;
-	/** What counts as in the way, above the floor: from this (carpets and snow layers don't) to the top of a hop. */
-	private static final double FLOOR_CLEARANCE = 0.2, HOP_CLEARANCE = 2.9;
-	/** A standing player's height: a ceiling above it (and below a hop's top) can be walked under, not bounced under. */
-	private static final double STAND_HEIGHT = 1.8;
+	/** What counts as in the way above the floor starts this high: carpets and snow layers don't. */
+	private static final double FLOOR_CLEARANCE = 0.2;
+	/**
+	 * A standing player's height, and the top of a hop: you rise standing for the jump's tick and the next two, until the
+	 * glide starts again (to 0.75 up, a head at 2.55; the climb is the same at any speed), then glide 0.6 tall,
+	 * well below a standing head. So a ceiling between the two can be walked under, and only gets in the way of the
+	 * start of a hop: from where it takes off, for {@link #RISE_TICKS} of travel.
+	 */
+	private static final double STAND_HEIGHT = 1.8, JUMP_TOP = 2.6;
+	private static final int RISE_TICKS = 3;
+	/**
+	 * Where the hops ahead come down is known to within this much, and they come down up to this share of how far ahead
+	 * it is further on (about 2% in tests: the hops' speed grows a little faster than counted).
+	 */
+	private static final double TOUCHDOWN_MARGIN = 0.5, TOUCHDOWN_ERROR = 0.04;
+	/** Your speed through the air keeps this much of itself each tick. */
+	private static final double GLIDE_DRAG = 0.99;
+	/** A jump's vertical speed. */
+	private static final double JUMP_POWER = 0.42;
+	/** How far to look for a way out of a nether portal you stand in, in blocks. */
+	private static final double PORTAL_EXIT = 3;
+	/**
+	 * Stopped, and setting off again, where the hops will come down isn't known (the first are short, and how short
+	 * isn't known well): within this many blocks they can come down, and rise, anywhere; past it, nothing counts yet.
+	 */
+	private static final double START_SPAN = 16;
 	/** Past a low ceiling, how much further a wall or a hole still counts as the thing to deal with first. */
 	private static final double UNDER_LOOK_AHEAD = 4;
 	/** Ticks to stop after the server snaps you back; and how many snaps within the window mean it's stuck. */
@@ -219,6 +243,10 @@ public class Recast extends GlideMode {
 	private double groundY;
 	/** Ticks since you last touched the ground, and on the ground since you landed. */
 	private int airTicks, groundTicks;
+	/** The last hop's ticks in the air and on the ground (the jump's tick the last of them): the ones ahead are the same. */
+	private int hopAir = HOP_TICKS - 1, hopGround = 1;
+	/** The pitch this tick of the bounce was flown at. */
+	private float flownPitch;
 	/**
 	 * Recast with No Durability: the chestplate is worn through each hop, the elytra going on only for the moment of
 	 * each glide start (see {@link #bounce}).
@@ -251,7 +279,7 @@ public class Recast extends GlideMode {
 	private @Nullable Job<Void> handoff;
 	/** With Baritone: your pitch when it took over (to look that way again after), and its settings before. */
 	private float handoffPitch;
-	private Object breakBefore, placeBefore, throwawayBefore;
+	private Object breakBefore, placeBefore, throwawayBefore, avoidBefore;
 	/** With Baritone: ticks without getting closer, and without Baritone going, that mean it can't get there. */
 	private static final int PATH_STALL = 300, PATH_START = 40;
 	/** How far along the lane you were each of the last {@link #STUCK_TICKS} ticks spent trying to move. */
@@ -283,6 +311,8 @@ public class Recast extends GlideMode {
 		letGo();
 		putElytraBack();
 		pauseTicks = progressCount = sinceStart = 0;
+		hopAir = HOP_TICKS - 1;
+		hopGround = 1;
 		hopStarted = false;
 		lane = Float.NaN;
 		rise = null;
@@ -382,6 +412,10 @@ public class Recast extends GlideMode {
 			pauseTicks = FLAG_PAUSE;
 			countSetback();
 		}
+		if (mc.player.onGround() && inNetherPortal(mc.player.getBoundingBox())) {
+			leavePortal();
+			return;
+		}
 		if (state == State.PATHING) {
 			tickPathing();
 			return;
@@ -410,6 +444,9 @@ public class Recast extends GlideMode {
 			handleObstacle(ahead);
 			return;
 		}
+		// A stop once begun is finished before bouncing goes on: braking's dive isn't a hop, so where the hops would come
+		// down isn't known again until you stand.
+		if (state == State.BRAKING && !brake()) return;
 		if (state != State.BOUNCING && !readyToBounce()) return;
 		if (state != State.BOUNCING) {
 			stopMining();
@@ -459,6 +496,8 @@ public class Recast extends GlideMode {
 		// Vanilla waits 10 ticks between held jumps; jump the tick you touch down.
 		Interactions.setJumpCooldown(0);
 		boolean ground = mc.player.onGround();
+		if (ground && airTicks > 0) hopAir = airTicks;
+		if (!ground && groundTicks > 0) hopGround = groundTicks;
 		airTicks = ground ? 0 : airTicks + 1;
 		groundTicks = ground ? groundTicks + 1 : 0;
 		yieldSprint = !ground && Myriad.inventory().clickWaiting();
@@ -468,6 +507,7 @@ public class Recast extends GlideMode {
 			groundY = mc.player.getY();
 		}
 		Hop hop = hop(ground);
+		flownPitch = hop.pitch();
 		spoof(steeredYaw(), hop.pitch());
 		if (ground) wantJump = hop.jump();
 
@@ -770,6 +810,42 @@ public class Recast extends GlideMode {
 		trackStuck();
 	}
 
+	/**
+	 * Standing in a nether portal, however you got there: out of it before it takes you to another dimension (it takes
+	 * four seconds), the shortest way along the lane or across it to where you stand clear of it. Baritone, if it's
+	 * taking you somewhere, is stopped first; once you're out, what's ahead is dealt with as usual.
+	 */
+	private void leavePortal() {
+		Job<Void> h = handoff;
+		handoff = null;
+		if (h != null) h.cancel();
+		stopMining();
+		stand();
+		AABB box = mc.player.getBoundingBox();
+		float way = lane;
+		double nearest = Double.MAX_VALUE;
+		for (int i = 0; i < 4; i++) {
+			Vec3 dir = Vec3.directionFromRotation(0, lane + 90 * i);
+			for (double d = SWEEP_STEP / 2; d < nearest && d <= PORTAL_EXIT; d += SWEEP_STEP / 2) {
+				AABB at = box.move(dir.scale(d));
+				if (!mc.level.noCollision(mc.player, at)) break;
+				if (inNetherPortal(at)) continue;
+				nearest = d;
+				way = lane + 90 * i;
+			}
+		}
+		state = State.WALKING;
+		spoof(way, 0);
+		wantForward = true;
+	}
+
+	private boolean inNetherPortal(AABB box) {
+		for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+			if (mc.level.getBlockState(pos).is(Blocks.NETHER_PORTAL)) return true;
+		}
+		return false;
+	}
+
 	/** Mines the block once it's in reach, walking along the lane up to it first. */
 	private void mineOrApproach(BlockPos pos) {
 		if (mc.player.getEyePosition().distanceTo(Vec3.atCenterOf(pos)) <= MINE_REACH) {
@@ -867,6 +943,12 @@ public class Recast extends GlideMode {
 		handoffPitch = mc.player.getXRot();
 		breakBefore = Baritone.setSetting("allowBreak", true);
 		placeBefore = Baritone.setSetting("allowPlace", true);
+		// Never through a nether portal: it walks through them otherwise, and stopping in one takes you to another dimension.
+		if (Baritone.getSetting("blocksToAvoid") instanceof List<?> avoid && !avoid.contains(Blocks.NETHER_PORTAL)) {
+			List<Object> blocks = new ArrayList<>(avoid);
+			blocks.add(Blocks.NETHER_PORTAL);
+			avoidBefore = Baritone.setSetting("blocksToAvoid", blocks);
+		}
 		// It builds only with its throwaway blocks (dirt, cobblestone...): yours count too meanwhile (obsidian, say),
 		// from the hotbar (one is brought in if they're all in the inventory).
 		if (Baritone.getSetting("acceptableThrowawayItems") instanceof List<?> throwaway) {
@@ -893,7 +975,8 @@ public class Recast extends GlideMode {
 		if (breakBefore != null) Baritone.setSetting("allowBreak", breakBefore);
 		if (placeBefore != null) Baritone.setSetting("allowPlace", placeBefore);
 		if (throwawayBefore != null) Baritone.setSetting("acceptableThrowawayItems", throwawayBefore);
-		breakBefore = placeBefore = throwawayBefore = null;
+		if (avoidBefore != null) Baritone.setSetting("blocksToAvoid", avoidBefore);
+		breakBefore = placeBefore = throwawayBefore = avoidBefore = null;
 	}
 
 	/** Standing well to the side of the lane's line, or below its height. */
@@ -1008,7 +1091,7 @@ public class Recast extends GlideMode {
 	 * ceiling).
 	 */
 	private Vec3 clearSpotPast(double from) {
-		for (double height : new double[]{HOP_CLEARANCE, STAND_HEIGHT}) {
+		for (double height : new double[]{JUMP_TOP, STAND_HEIGHT}) {
 			for (double t = Math.ceil(from); t < from + PASS_SEARCH; t++) {
 				if (standable(pointOnLine(t), height) && standable(pointOnLine(t + 1), height)) return pointOnLine(t);
 			}
@@ -1120,36 +1203,116 @@ public class Recast extends GlideMode {
 	/**
 	 * The first thing in the lane within {@code range}: blocks the player's hitbox would run into sliding along it (a
 	 * little narrower than the hitbox, so brushing a wall doesn't count; from just above the floor to a standing
-	 * player's height), a hole at least two deep (one you'd land in and not hop out of), or chunks that haven't loaded.
-	 * A ceiling that only a hop would reach is walked under rather than mined; it's what's ahead unless one of the
-	 * others comes just after it. Null if it's clear.
+	 * player's height), chunks that haven't loaded, and, where the hops ahead come down ({@link #touchdowns}), nothing to
+	 * land on (a hole a block deep is one you'd drop into) or a ceiling low enough for the jump to hit. A hole or a low
+	 * ceiling that the hops pass over isn't in the way. A ceiling is walked under rather than mined; it's what's ahead
+	 * unless one of the others comes just after it. Null if it's clear.
 	 */
 	private Obstruction scanAhead(double range) {
 		Vec3 dir = laneDir(), step = dir.scale(SWEEP_STEP);
 		AABB box = mc.player.getBoundingBox();
 		double floor = floorY();
 		AABB body = new AABB(box.minX + 0.2, floor + FLOOR_CLEARANCE, box.minZ + 0.2, box.maxX - 0.2, floor + STAND_HEIGHT, box.maxZ - 0.2);
-		AABB headroom = new AABB(body.minX, floor + STAND_HEIGHT, body.minZ, body.maxX, floor + HOP_CLEARANCE, body.maxZ);
-		AABB feet = new AABB(box.minX, floor - 2, box.minZ, box.maxX, floor - 0.5, box.maxZ);
+		Obstruction first = null;
 		List<BlockPos> hits = new ArrayList<>();
-		Obstruction ceiling = null;
-		for (double d = 0; d <= range; d += SWEEP_STEP) {
-			if (ceiling != null && d > ceiling.distance() + UNDER_LOOK_AHEAD) return ceiling;
+		for (double d = 0; d <= range && first == null; d += SWEEP_STEP) {
 			Vec3 at = dir.scale(d);
-			if (!loaded(mc.player.position().add(at))) return new Obstruction(Hazard.UNLOADED, d, List.of());
-			if (blocksIn(body.move(at).expandTowards(step), hits)) {
+			if (!loaded(mc.player.position().add(at))) first = new Obstruction(Hazard.UNLOADED, d, List.of());
+			else if (blocksIn(body.move(at).expandTowards(step), hits)) {
 				Vec3 eye = mc.player.getEyePosition();
 				hits.sort(Comparator.comparingDouble(pos -> pos.distToCenterSqr(eye)));
-				return new Obstruction(Hazard.BLOCKS, d, hits);
-			}
-			if (ceiling == null && blocksIn(headroom.move(at).expandTowards(step), null)) ceiling = new Obstruction(Hazard.CEILING, d, List.of());
-			// The floor: nothing to stand on for two blocks down under the whole hitbox. Every quarter block, so even a
-			// hole just wider than you (one block) is found wherever you are.
-			if (d >= 1 && (!blocksIn(feet.move(at), null) || !blocksIn(feet.move(at.add(step.scale(0.5))), null))) {
-				return new Obstruction(Hazard.HOLE, d, List.of());
+				first = new Obstruction(Hazard.BLOCKS, d, hits);
 			}
 		}
-		return ceiling;
+		// A landing stands on the floor's own layer, anywhere under the hitbox; a hop's start rises standing.
+		AABB support = new AABB(box.minX, floor - 0.45, box.minZ, box.maxX, floor - 0.05, box.maxZ);
+		AABB headroom = new AABB(body.minX, floor + STAND_HEIGHT, body.minZ, body.maxX, floor + JUMP_TOP, body.maxZ);
+		Obstruction ceiling = null;
+		// Stopped: anywhere near. (Bouncing, not where you are: in the air over a hole is how a hop passes it.)
+		double start = state == State.BOUNCING ? 0 : Math.min(START_SPAN, range);
+		for (double d = 0; state != State.BOUNCING && d <= start; d += SWEEP_STEP / 2) {
+			if (first != null && d > first.distance()) break;
+			if (!blocksIn(support.move(dir.scale(d)), null)) first = new Obstruction(Hazard.HOLE, d, List.of());
+			else if (ceiling == null && blocksIn(headroom.move(dir.scale(d)), null)) ceiling = new Obstruction(Hazard.CEILING, d, List.of());
+		}
+		// Where the hops come down is only known while they go on; stopped, what's near is what counts.
+		for (Touchdown down : state == State.BOUNCING ? touchdowns(range) : List.<Touchdown>of()) {
+			double back = down.exact() ? 0 : TOUCHDOWN_MARGIN, on = down.exact() ? 0 : TOUCHDOWN_MARGIN + TOUCHDOWN_ERROR * down.land();
+			if (first != null && down.land() - back > first.distance()) break;
+			// Under the landing; and on to the jump when it waits on the ground (it slides there), not otherwise.
+			double until = hopGround > 1 ? down.takeoff() : down.land();
+			for (double d = Math.max(start, down.land() - back); d <= until + on; d += SWEEP_STEP / 2) {
+				if (blocksIn(support.move(dir.scale(d)), null)) continue;
+				if (first == null || d < first.distance()) first = new Obstruction(Hazard.HOLE, d, List.of());
+				break;
+			}
+			for (double d = Math.max(start, down.takeoff() - back); ceiling == null && d <= down.risen() + on; d += SWEEP_STEP / 2) {
+				if (blocksIn(headroom.move(dir.scale(d)), null)) ceiling = new Obstruction(Hazard.CEILING, d, List.of());
+			}
+		}
+		if (ceiling != null && (first == null || first.distance() > ceiling.distance() + UNDER_LOOK_AHEAD)) return ceiling;
+		return first;
+	}
+
+	/**
+	 * Where a hop ahead comes down, along the lane from where you are: where it lands (where the landing tick's move
+	 * starts: it comes down before it goes on), where the jump after it leaves the ground (where that move ends, and
+	 * further on when it waits there a tick or more) and where it has risen to its top, standing ({@link #RISE_TICKS}
+	 * after). Exact for the landing you're standing on now.
+	 */
+	private record Touchdown(double land, double takeoff, double risen, boolean exact) {
+	}
+
+	/**
+	 * The hops ahead, out to {@code range}: each as many ticks in the air and on the ground as the last (a glide climbs
+	 * and falls the same at any speed), flown tick by tick as the glide's own maths has it (see {@link #glide}): the
+	 * jump's push, the glide's drag, and the push forward as it levels out.
+	 */
+	private List<Touchdown> touchdowns(double range) {
+		var p = mc.player;
+		Vec3 v = p.getDeltaMovement(), dir = laneDir();
+		double[] m = {Math.max(0, v.x * dir.x + v.z * dir.z), v.y};
+		// A move goes down (or up) first and along after: a landing comes down where its tick's move starts.
+		double d = 0, land = 0;
+		boolean standing = p.onGround();
+		for (int i = standing ? 0 : Math.max(1, hopAir - airTicks); i > 0; i--) {
+			land = d;
+			d += glide(m);
+		}
+		List<Touchdown> downs = new ArrayList<>();
+		while (land <= range) {
+			double landed = land;
+			for (int i = 1; i < hopGround; i++) d += glide(m);
+			double takeoff = d, risen = d;
+			m[0] += JUMP_PUSH;
+			m[1] = JUMP_POWER;
+			for (int i = 0; i <= hopAir; i++) {
+				land = d;
+				d += glide(m);
+				if (i < RISE_TICKS) risen = d;
+			}
+			downs.add(new Touchdown(landed, takeoff, risen, standing && downs.isEmpty()));
+		}
+		return downs;
+	}
+
+	/**
+	 * One tick of a glide along the lane, {@code motion} being the speed along it and the vertical speed: at the pitch
+	 * Recast flies (diving while rising, levelled out once falling; the last pitch flown, if a hook flies it otherwise).
+	 * Returns how far along it went.
+	 */
+	private double glide(double[] motion) {
+		double pitch = HOP.hooked() ? flownPitch : motion[1] > DIVE_UNTIL_Y ? 90 : 4;
+		double cos = Math.cos(Math.toRadians(pitch)), lift = cos * cos;
+		motion[1] += mc.player.getGravity() * (-1 + lift * 0.75);
+		if (motion[1] < 0) {
+			double push = motion[1] * -0.1 * lift;
+			motion[0] += push;
+			motion[1] += push;
+		}
+		motion[0] *= GLIDE_DRAG;
+		motion[1] *= 0.98;
+		return motion[0];
 	}
 
 	/**
