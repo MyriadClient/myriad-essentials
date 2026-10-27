@@ -60,7 +60,7 @@ import java.util.function.Predicate;
  * The highway is fixed when you turn it on (where you face, rounded as Elytra Fly's Snap says: the nearest 45° by
  * default; through the middle of the block you stand on), so looking around never steers; drifting off that line turns the flight a little back onto it. Far enough ahead
  * to stop in time (it grows with your speed) it watches for anything in the way: a block (an ender chest, a portal, a
- * wall), chunks that haven't loaded, and where the hops ahead come down, a hole (even a block deep) or a ceiling low
+ * wall), chunks that haven't loaded, and where the hops ahead come down, a hole (two blocks deep) or a ceiling low
  * enough for the jump to hit; one the hops pass over isn't in the way. It then stops jumping and lands, as you would, and
  * Obstacles decides what happens next. Clear hands over to Baritone, with a goal at the first clear spot past it, which
  * gets you there however it can (walking round, mining, placing, never through a nether portal: standing in one, you're
@@ -1204,7 +1204,7 @@ public class Recast extends GlideMode {
 	 * The first thing in the lane within {@code range}: blocks the player's hitbox would run into sliding along it (a
 	 * little narrower than the hitbox, so brushing a wall doesn't count; from just above the floor to a standing
 	 * player's height), chunks that haven't loaded, and, where the hops ahead come down ({@link #touchdowns}), nothing to
-	 * land on (a hole a block deep is one you'd drop into) or a ceiling low enough for the jump to hit. A hole or a low
+	 * land on for two blocks down (a hole you'd land in and not hop out of) or a ceiling low enough for the jump to hit. A hole or a low
 	 * ceiling that the hops pass over isn't in the way. A ceiling is walked under rather than mined; it's what's ahead
 	 * unless one of the others comes just after it. Null if it's clear.
 	 */
@@ -1224,8 +1224,10 @@ public class Recast extends GlideMode {
 				first = new Obstruction(Hazard.BLOCKS, d, hits);
 			}
 		}
-		// A landing stands on the floor's own layer, anywhere under the hitbox; a hop's start rises standing.
-		AABB support = new AABB(box.minX, floor - 0.45, box.minZ, box.maxX, floor - 0.05, box.maxZ);
+		// A landing needs something to stand on within two blocks down, anywhere under the hitbox: a dip a block deep it
+		// hops out of, and stopping for each (they're everywhere on worn highways, and fast hops come down often) costs
+		// more than the rare landing in one. A hop's start rises standing.
+		AABB support = new AABB(box.minX, floor - 2, box.minZ, box.maxX, floor - 0.5, box.maxZ);
 		AABB headroom = new AABB(body.minX, floor + STAND_HEIGHT, body.minZ, body.maxX, floor + JUMP_TOP, body.maxZ);
 		Obstruction ceiling = null;
 		// Stopped: anywhere near. (Bouncing, not where you are: in the air over a hole is how a hop passes it.)

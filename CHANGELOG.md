@@ -22,8 +22,9 @@ Needs Myriad 1.3.0. Unreleased.
 - **Elytra Fly**'s Recast only stops for a hole or a low ceiling it would really meet. It works out where the hops
   ahead come down and take off (each is as many ticks in the air as the last, flown by the glide's own maths; within
   0.2 of a block for the next landing in tests) and checks there. A landing needs floor under you where its tick
-  starts, since a move comes down before it goes on, and a hole only a block deep counts now: landing in one is what
-  stopped you, the dip's far side taken for a wall. Anything else in the lane's floor is flown over. A ceiling only
+  starts, since a move comes down before it goes on, and two blocks deep, as before (a dip a block deep, common on worn
+  highways, isn't worth stopping for at every hop that would come down in it). Anything else in the lane's floor is
+  flown over. A ceiling only
   gets in the way of the start of a hop, its first three ticks, which you rise standing, to 2.55 above the floor at
   most; anything from 2.6 up never does (2.9 before). Stopped, everything in the next 16 blocks still counts, as
   before, and a stop once begun is finished before it decides again. On the Grim test server: six single-block holes
