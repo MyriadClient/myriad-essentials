@@ -16,6 +16,10 @@ Needs Myriad 1.3.0. Unreleased.
   turns its corner (a degree or so of yaw decides which half goes first), and keeps the way round where that corner
   misses both. Passing an ender chest on a 2b2t-wide diagonal leaves a quarter of a block to spare, and it does it at
   full speed. It watches 56 blocks ahead for this (stops still start where they did).
+- Recast no longer gets stuck handing over to Baritone 20 times a second. Standing off the lane's line beside a block,
+  with the line itself clear, the spot past it Baritone was sent to was where you already stood: done at once, it
+  bounced, saw the block, and handed over again. The spot is now at least 2 blocks ahead, and a hand-over that ends
+  without moving you counts as Baritone not getting past (Clear mines instead; Stop waits).
 - **Line**: the lane runs through the middle of the blocks you start on (Middle, as before), or along the edge between
   two of them (Between Blocks), your feet over both, so a hole one block wide in either is no obstacle.
 - For addon developers: `Recast.Hop` carries the yaw a tick of the bounce flies (`yaw()`, `withYaw`), as it does the

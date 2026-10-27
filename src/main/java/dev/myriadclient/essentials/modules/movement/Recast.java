@@ -358,7 +358,11 @@ public class Recast extends GlideMode {
 	private @Nullable Job<Void> handoff;
 	/** With Baritone: your pitch when it took over (to look that way again after), and its settings before. */
 	private float handoffPitch;
+	/** Where you stood when Baritone took over. */
+	private Vec3 handoffFrom = Vec3.ZERO;
 	private Object breakBefore, placeBefore, throwawayBefore, avoidBefore;
+	/** With Baritone: the spot it takes you to is at least this far ahead along the lane. */
+	private static final double HANDOFF_MIN_AHEAD = 2;
 	/** With Baritone: ticks without getting closer, and without Baritone going, that mean it can't get there. */
 	private static final int PATH_STALL = 300, PATH_START = 40;
 	/** How far along the lane you were each of the last {@link #STUCK_TICKS} ticks spent trying to move. */
@@ -1067,13 +1071,16 @@ public class Recast extends GlideMode {
 			blocked(why + " and Baritone can't get past");
 			return;
 		}
-		Vec3 target = clearSpotPast(along(mc.player.position()) + distance);
+		// A little ahead at least: standing off the line beside what's in the way, with the line itself clear, the spot
+		// past it would be where you stand, and Baritone would be done before it moved you back onto the line.
+		Vec3 target = clearSpotPast(along(mc.player.position()) + Math.max(distance, HANDOFF_MIN_AHEAD));
 		if (target == null) {
 			baritoneFailed = true;
 			blocked(why + " and there's nowhere to bounce from past it");
 			return;
 		}
 		handoffPitch = mc.player.getXRot();
+		handoffFrom = mc.player.position();
 		breakBefore = Baritone.setSetting("allowBreak", true);
 		placeBefore = Baritone.setSetting("allowPlace", true);
 		// Never through a nether portal: it walks through them otherwise, and stopping in one takes you to another dimension.
@@ -1130,6 +1137,8 @@ public class Recast extends GlideMode {
 		Job<Void> h = handoff;
 		if (h == null || h.state().isActive()) return;
 		handoff = null;
+		// Done without moving you: it can't take you anywhere this obstacle isn't, so handing over again would only repeat.
+		if (h.state() == Job.State.DONE && mc.player.position().distanceTo(handoffFrom) < 1) baritoneFailed = true;
 		if (h.state() == Job.State.DONE) {
 			// As the lane was fixed: along it, the camera's own way round so it doesn't spin.
 			mc.player.setYRot(mc.player.getYRot() + Mth.wrapDegrees(lane - mc.player.getYRot()));
