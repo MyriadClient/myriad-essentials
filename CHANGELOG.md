@@ -51,6 +51,10 @@ Needs Myriad 1.3.0. Unreleased.
   portals to the blocks it avoids meanwhile (it walked through them, and on the test server took the tester to the
   Nether past a lit portal across the lane), and standing in one however you got there, you're walked out of it the
   shortest way first, before it takes you anywhere.
+- **Inventory Move** no longer stops Baritone (or Auto Walk) when a screen opens: your inventory, a chest, a wheel.
+  It put the movement keys you held in place of the input, so with none held you stood still, Baritone's path still
+  running and not saying it had paused. The keys you hold are now added to it. Checked in the dev client: a Baritone
+  goto at the same 5.9 blocks a second with a wheel or the inventory open, where it was stopped.
 
 ## 1.3.1
 

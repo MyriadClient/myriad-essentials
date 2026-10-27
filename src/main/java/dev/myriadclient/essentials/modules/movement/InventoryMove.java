@@ -43,17 +43,20 @@ public class InventoryMove extends Module {
 		return !(screen.getFocused() instanceof EditBox);
 	}
 
-	/** Before other input handlers (and the rotation move fix), so they see these keys. */
+	/**
+	 * Before other input handlers (and the rotation move fix), so they see these keys. Added to what the input already
+	 * has: Baritone and Auto Walk keep walking you with a screen open, as they do without one.
+	 */
 	@Subscribe(priority = Priority.HIGH)
 	private void onInput(InputEvent e) {
 		if (!active()) return;
-		e.forward = down(mc.options.keyUp);
-		e.backward = down(mc.options.keyDown);
-		e.left = down(mc.options.keyLeft);
-		e.right = down(mc.options.keyRight);
-		e.jump = down(mc.options.keyJump);
-		e.sprint = down(mc.options.keySprint);
-		if (sneak.get()) e.sneak = down(mc.options.keyShift);
+		e.forward |= down(mc.options.keyUp);
+		e.backward |= down(mc.options.keyDown);
+		e.left |= down(mc.options.keyLeft);
+		e.right |= down(mc.options.keyRight);
+		e.jump |= down(mc.options.keyJump);
+		e.sprint |= down(mc.options.keySprint);
+		if (sneak.get()) e.sneak |= down(mc.options.keyShift);
 	}
 
 	@Subscribe
