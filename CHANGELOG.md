@@ -30,6 +30,9 @@ Needs Myriad 1.3.0. Unreleased.
   before, and a stop once begun is finished before it decides again. On the Grim test server: six single-block holes
   on the line, 2 passed in 20 s before and all 6 in 25 s now, none landed in; a roof of trapdoors 2.81 up bounced
   under at full speed, walked before.
+- **Nametags**' dropped items stay by their pile: a row per kind of item with its icon, most first, stacked on screen
+  a row apart just above the pile, eight rows at most (the last "+N more"). They were stacked in the world, a quarter
+  block apart, so a pile of many kinds stood in a column blocks tall, far from what it named (and further up close).
 - **Elytra Fly**'s Recast stops nearer what it stops for: it keeps bouncing while a stop begun later would still end
   3 blocks short of it (a stop comes down at the hop's landing, then slides on up to 9 ticks of its speed, measured),
   where it braked as soon as it saw it, a lookahead that grows with speed (60 blocks at 4 a tick). Baritone, taking

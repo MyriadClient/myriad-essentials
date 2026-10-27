@@ -39,6 +39,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -92,6 +93,8 @@ public class Nametags extends Module {
 	private final BoolSetting mobs = sgOthers.bool("Mobs").description("Name and health over mobs.").build();
 	private final BoolSetting items = sgOthers.bool("Items").description("Names and counts over dropped items.").defaultValue(true).build();
 	private final BoolSetting groupItems = sgOthers.bool("Group Items").description("One tag per item type for items lying together.").defaultValue(true).visible(items::get).build();
+	/** Rows a pile of items shows at most, the last saying how many more kinds there are. */
+	private static final int MAX_ITEM_ROWS = 8;
 	private final DoubleSetting itemRange = sgOthers.decimal("Item Range").defaultValue(32).range(1, 128).decimals(0).visible(items::get).build();
 	private final BoolSetting pearls = sgOthers.bool("Pearls").description("Who threw each ender pearl.").defaultValue(true).build();
 
@@ -322,18 +325,37 @@ public class Nametags extends Module {
 			x /= g.size();
 			y /= g.size();
 			z /= g.size();
+			// One row per kind of item, its icon first, most first; stacked on screen just above the pile, a row apart
+			// (spaced in the world, a big pile's column stood blocks tall, far from what it named).
 			Map<String, Integer> counts = new LinkedHashMap<>();
-			for (ItemEntity it : g) counts.merge(it.getItem().getHoverName().getString(), it.getItem().getCount(), Integer::sum);
-			int row = 0;
-			for (Map.Entry<String, Integer> en : counts.entrySet()) {
-				String text = en.getValue() > 1 ? en.getKey() + " x" + en.getValue() : en.getKey();
-				label(c, new Vec3(x, y + 0.3 + row++ * 0.28, z), List.of(new WorldLabel.Segment(text, nameColor.argb())));
+			Map<String, ItemStack> icons = new LinkedHashMap<>();
+			for (ItemEntity it : g) {
+				String name = it.getItem().getHoverName().getString();
+				counts.merge(name, it.getItem().getCount(), Integer::sum);
+				icons.putIfAbsent(name, it.getItem().copyWithCount(1));
+			}
+			List<Map.Entry<String, Integer>> rows = new ArrayList<>(counts.entrySet());
+			rows.sort(Map.Entry.<String, Integer>comparingByValue().reversed());
+			Vec3 at = new Vec3(x, y + 0.3, z);
+			float lift = 0;
+			for (int i = 0; i < rows.size() && i < MAX_ITEM_ROWS; i++) {
+				Map.Entry<String, Integer> en = rows.get(i);
+				boolean more = i == MAX_ITEM_ROWS - 1 && rows.size() > MAX_ITEM_ROWS;
+				String text = more ? "+" + (rows.size() - i) + " more" : en.getValue() > 1 ? en.getKey() + " x" + en.getValue() : en.getKey();
+				List<WorldLabel.Segment> segments = more ? List.of(new WorldLabel.Segment(text, nameColor.argb()))
+					: List.of(WorldLabel.Segment.item(icons.get(en.getKey())), new WorldLabel.Segment(text, nameColor.argb()));
+				c.push();
+				c.translate(0, -lift);
+				WorldLabel.Placed placed = label(c, at, segments);
+				c.pop();
+				if (placed == null) break;
+				lift += placed.height() + 1;
 			}
 		}
 	}
 
-	private void label(Canvas c, Vec3 at, List<WorldLabel.Segment> segments) {
-		WorldLabel.draw(c, at, scale.getFloat() * 0.9f * WorldLabel.distanceScale(at), segments,
+	private WorldLabel.@Nullable Placed label(Canvas c, Vec3 at, List<WorldLabel.Segment> segments) {
+		return WorldLabel.draw(c, at, scale.getFloat() * 0.9f * WorldLabel.distanceScale(at), segments,
 			background.get() ? WorldLabel.Background.ROUNDED : WorldLabel.Background.NONE, fill.argb(), 0, true);
 	}
 }
