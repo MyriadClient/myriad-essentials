@@ -1590,6 +1590,27 @@ def t_elytra_recast_steer_round():
     return x > 4340 and y > 200.5 and abs(z - 0.5) < 0.5, f"x={x:.0f} (chest at 4100, wall at 4200, hole at 4300), y={y:.1f}, {z - 0.5:+.2f} off the line"
 
 
+def t_elytra_recast_steer_round_cluster():
+    # Steer Round, with Stop: two ender chests on the line 10 blocks apart. Coming back to the line between them would
+    # run into the second: it stays out at the side past both, without stopping.
+    recast_highway("setblock 4100 201 0 ender_chest", "setblock 4110 201 0 ender_chest")
+    client(".set elytra_fly obstacles stop", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 240", ".toggle elytra_fly off", "wait 20", timeout=90)
+    x, y, z = position()
+    return x > 4250 and y > 200.5 and abs(z - 0.5) < 0.5, f"x={x:.0f} (chests at 4100 and 4110), y={y:.1f}, {z - 0.5:+.2f} off the line"
+
+
+def t_elytra_recast_handoff_cluster():
+    # Clear with Baritone, Steer Round off: three ender chests close together on the line. Baritone takes you to where
+    # bouncing can go on, past all three at once (one walk of about 6 s); to just past the first (then again for each)
+    # it would creep a few blocks per hand-over and be well short of this in 20 s.
+    recast_highway("setblock 4100 201 0 ender_chest", "setblock 4104 201 0 ender_chest", "setblock 4108 201 0 ender_chest", end=4800)
+    if not has_baritone(): return True, "skipped: Baritone isn't installed in the dev client (run/mods)"
+    client(".set elytra_fly obstacles clear", ".set elytra_fly steer_round false", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 400",
+        ".toggle elytra_fly off", "wait 20", timeout=90)
+    x, y, _ = position()
+    return x > 4280 and y > 200.5, f"x={x:.0f} in 20 s (chests at 4100, 4104, 4108), y={y:.1f}"
+
+
 def t_elytra_recast_steer_round_diagonal():
     # Steer Round on the diagonal, with Stop: an ender chest on the line, bounced round between the rails (a diagonal
     # move takes the corner of an L, so this is the tight one).
@@ -2036,6 +2057,8 @@ TESTS = [
     ("recast between blocks", t_elytra_recast_between_blocks),
     ("recast steer round", t_elytra_recast_steer_round),
     ("recast steer round diagonal", t_elytra_recast_steer_round_diagonal),
+    ("recast steer round cluster", t_elytra_recast_steer_round_cluster),
+    ("recast handoff cluster", t_elytra_recast_handoff_cluster),
     ("recast spare elytras", t_elytra_recast_spare_elytras),
     ("recast full hotbar", t_elytra_recast_full_hotbar),
     ("recast fill hole", t_elytra_recast_fill_hole),

@@ -16,6 +16,12 @@ Needs Myriad 1.3.0. Unreleased.
   turns its corner (a degree or so of yaw decides which half goes first), and keeps the way round where that corner
   misses both. Passing an ender chest on a 2b2t-wide diagonal leaves a quarter of a block to spare, and it does it at
   full speed. It watches 56 blocks ahead for this (stops still start where they did).
+- **Steer Round** goes round things close together: where coming back to the lane between them would run into the
+  next, it stays at the side past them all (up to 24 blocks longer); and with a way round under way, something further
+  on gets its own way round at once, from where you are. Ways round are planned for a bounce's cruising speed (one
+  planned while still gathering speed came too late for steering to follow) and at the pace a glide can move across.
+- With Baritone, the spot it takes you to past something in the lane is one with 16 blocks clear after it, as far as
+  a start from standing looks: not just past the first thing in the way, then again for each of a cluster.
 - Recast no longer gets stuck handing over to Baritone 20 times a second. Standing off the lane's line beside a block,
   with the line itself clear, the spot past it Baritone was sent to was where you already stood: done at once, it
   bounced, saw the block, and handed over again. The spot is now at least 2 blocks ahead, and a hand-over that ends

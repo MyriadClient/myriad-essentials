@@ -239,16 +239,18 @@ public class Recast extends GlideMode {
 	 * The way round is checked for the whole hitbox and this much more each side, and for steering this far either side
 	 * of it (beside something on a diagonal, between it and a rail, there can be only a quarter of a block to spare);
 	 * it's beside what it goes round from this far before it to this far after, eases across (and back) at this much a
-	 * tick to the side (the glide turns your speed only a tenth of the way to where you look each tick, so it can't be
-	 * sudden; the most it moves across in a tick is this), and goes up to this far from the line, in steps of this;
-	 * what's ahead is watched this far for it.
+	 * tick to the side, planned for at least this speed (the glide turns your speed only a tenth of the way to where you
+	 * look each tick, so it can't be sudden: about 0.15 to 0.18 a tick across at most, measured; the most counted is this), and goes up to this far from the line, in steps of this;
+	 * what's ahead is watched this far for it. With more in the way soon after, it stays at the side up to this much
+	 * longer (in steps of this) rather than coming back between.
 	 */
 	private static final double ROUND_GAIN = 0.25, ROUND_MAX_SPEED = 0.5, ROUND_DAMPING = 2, ROUND_FROM = 1, ROUND_MARGIN = 0.05,
-		ROUND_SLACK = 0.1, ROUND_CLEARANCE = 1.5, ROUND_EASE = 0.15, ROUND_MAX_ACROSS = 0.4, ROUND_MAX_SIDE = 2.5, ROUND_STEP = 0.05, ROUND_LOOK_AHEAD = 56;
+		ROUND_SLACK = 0.1, ROUND_CLEARANCE = 1.5, ROUND_EASE = 0.15, ROUND_MAX_ACROSS = 0.4, ROUND_MAX_HOLD = 24, ROUND_HOLD_STEP = 2, ROUND_PLAN_SPEED = 2.5, ROUND_MAX_SIDE = 2.5, ROUND_STEP = 0.05, ROUND_LOOK_AHEAD = 56;
 	private static final float ROUND_MAX_TURN = 20;
 	/**
 	 * How much larger the half of a move that goes first is made, so a slightly different glide doesn't swap them; and
-	 * the most the yaw is turned for it (more would push you sideways).
+	 * the most the yaw is turned for it, for a tick: enough to swap the halves while steering back to the line (about
+	 * 13 degrees then), and only a tenth of a block sideways, where catching the rail stops that half of the move.
 	 */
 	private static final double CORNER_MARGIN = 0.01;
 	private static final float CORNER_MAX_TURN = 4;
@@ -1233,12 +1235,24 @@ public class Recast extends GlideMode {
 	 * ceiling).
 	 */
 	private Vec3 clearSpotPast(double from) {
-		for (double height : new double[]{JUMP_TOP, STAND_HEIGHT}) {
-			for (double t = Math.ceil(from); t < from + PASS_SEARCH; t++) {
-				if (standable(pointOnLine(t), height) && standable(pointOnLine(t + 1), height)) return pointOnLine(t);
+		// Where bouncing can start again: clear for as far as a start from standing looks (it would only stop again
+		// otherwise, a few blocks on, for the next thing in the way). Failing that, anywhere to stand past it.
+		for (int run : new int[]{(int) START_SPAN, 1}) {
+			for (double height : new double[]{JUMP_TOP, STAND_HEIGHT}) {
+				for (double t = Math.ceil(from); t < from + PASS_SEARCH; t++) {
+					if (clearRun(t, run, height)) return pointOnLine(t);
+				}
 			}
 		}
 		return null;
+	}
+
+	/** Whether there's room to stand on the line from {@code t} along it to {@code run} blocks further. */
+	private boolean clearRun(double t, int run, double height) {
+		for (int k = 0; k <= run; k++) {
+			if (!standable(pointOnLine(t + k), height)) return false;
+		}
+		return true;
 	}
 
 	private boolean standable(Vec3 feet, double height) {
@@ -1303,7 +1317,13 @@ public class Recast extends GlideMode {
 		if (round != null && a >= round.end()) round = null;
 		boolean roundable = ahead != null && (ahead.hazard() == Hazard.BLOCKS || ahead.hazard() == Hazard.HOLE);
 		if (round != null) {
-			if (roundClear(round, speed, 0)) return ahead != null && a + ahead.distance() < round.end() ? null : ahead;
+			if (roundClear(round, speed, 0)) {
+				if (ahead == null || a + ahead.distance() < round.end()) return null;
+				// Something further on: the way round it from where this one goes, without coming back to the line first.
+				Round next = roundable ? planRound(ahead, range, speed) : null;
+				if (next != null) round = next;
+				return next != null ? null : ahead;
+			}
 			Round again = roundable ? planRound(ahead, range, speed) : null;
 			if (again != null || ahead == null || canStop(ahead)) {
 				round = again;
@@ -1332,22 +1352,38 @@ public class Recast extends GlideMode {
 			double in = near - ROUND_CLEARANCE, start = Math.max(a, in - easeLength(s - off, speed));
 			// Not far enough to ease across without turning harder than steering does.
 			if (in - start < easeLength(s - off, speed) * 0.75) continue;
-			double out = far + ROUND_CLEARANCE;
-			Round r = new Round(off, s, start, in, out, out + easeLength(s, speed));
-			// Clear whenever within a tick the moves fall, so it stays clear as you go, and a little either side of it.
-			if (!roundClear(r, speed, 0) || !roundClear(r, speed, 0.25) || !roundClear(r, speed, 0.5) || !roundClear(r, speed, 0.75)) continue;
-			Round wide = new Round(off, s + ROUND_SLACK, start, in, out, r.end()), narrow = new Round(off, s - ROUND_SLACK, start, in, out, r.end());
-			if (!roundClear(wide, speed, 0) || !roundClear(wide, speed, 0.5) || !roundClear(narrow, speed, 0) || !roundClear(narrow, speed, 0.5)) continue;
-			Obstruction beside = scanAhead(Math.max(range, r.end() - a), s, -0.2, Vec3.ZERO);
-			if (beside != null && a + beside.distance() < r.end()) continue;
-			return r;
+			// Cheaply first: beside it at this side all the way past it.
+			if (scanAhead(far + ROUND_CLEARANCE - a, s, ROUND_MARGIN, Vec3.ZERO) != null) continue;
+			// Back to the line just past it, or, where more is in the way soon after (a cluster, a second block
+			// further on), staying out at the side longer, past that too.
+			for (double out = far + ROUND_CLEARANCE; out <= far + ROUND_CLEARANCE + ROUND_MAX_HOLD; out += ROUND_HOLD_STEP) {
+				Round r = new Round(off, s, start, in, out, out + easeLength(s, speed));
+				if (roundSafe(r, speed, range, a)) return r;
+			}
 		}
 		return null;
 	}
 
-	/** How far along the lane easing {@code across} blocks to the side takes, at {@code speed}. */
+	/**
+	 * Whether {@code r} is clear whenever within a tick the moves fall (so it stays clear as you go) and a little either
+	 * side of it, with something to land on and room to jump where the hops beside it come down.
+	 */
+	private boolean roundSafe(Round r, double speed, double range, double a) {
+		if (!roundClear(r, speed, 0) || !roundClear(r, speed, 0.25) || !roundClear(r, speed, 0.5) || !roundClear(r, speed, 0.75)) return false;
+		Round wide = new Round(r.from(), r.side() + ROUND_SLACK, r.start(), r.in(), r.out(), r.end());
+		Round narrow = new Round(r.from(), r.side() - ROUND_SLACK, r.start(), r.in(), r.out(), r.end());
+		if (!roundClear(wide, speed, 0) || !roundClear(wide, speed, 0.5) || !roundClear(narrow, speed, 0) || !roundClear(narrow, speed, 0.5)) return false;
+		Obstruction beside = scanAhead(Math.max(range, r.end() - a), r.side(), -0.2, Vec3.ZERO);
+		return beside == null || a + beside.distance() >= r.end();
+	}
+
+	/**
+	 * How far along the lane easing {@code across} blocks to the side takes, at {@code speed}: at least a bounce's
+	 * cruising speed (a plan made while still gathering speed is flown faster, and an ease planned for the slower speed
+	 * would be steeper than steering can follow).
+	 */
 	private static double easeLength(double across, double speed) {
-		return Math.abs(across) / ROUND_EASE * speed;
+		return Math.abs(across) / ROUND_EASE * Math.max(speed, ROUND_PLAN_SPEED);
 	}
 
 	/** How far along the lane what's ahead ends: past it, the way where you are is clear (or has a floor) again. */
@@ -1441,7 +1477,7 @@ public class Recast extends GlideMode {
 	 * the corner of an L, up to a block or more to the side of the straight way at a bounce's speed: onto something
 	 * beside the lane, or a rail, which stops that half of the move. Which way it turns the corner is the yaw's to choose
 	 * (the glide turns your speed towards where you look), so when only one way is clear, {@code yaw} is turned (as
-	 * little as does it, a few degrees at most) to the side that makes it the move's larger half.
+	 * little as does it, for that tick) to the side that makes it the move's larger half.
 	 */
 	private float cornerSafe(float yaw, boolean ground) {
 		var p = mc.player;
