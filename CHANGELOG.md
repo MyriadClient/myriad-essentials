@@ -5,7 +5,7 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 ## 1.4.0
 
-Needs Myriad 1.3.0. Unreleased.
+Needs Myriad 1.3.0.
 
 - **Chat** (Render), a module: chat in the theme's font and colours, filtered, repeats stacked (x2, x3), up to 10,000
   messages kept, shown only while open if you like, and Minecraft's own Chat Settings (size, width, heights,
