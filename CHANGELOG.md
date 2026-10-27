@@ -5,7 +5,7 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 ## 1.4.1
 
-Needs Myriad 1.3.0. Unreleased.
+Needs Myriad 1.3.0.
 
 - **The game starts again with Meteor installed.** Extra Tab and Meteor's Better Tab both changed Minecraft's limit of
   80 players in the tab list, the same way, and only one mod can change a number like that: the game crashed while
