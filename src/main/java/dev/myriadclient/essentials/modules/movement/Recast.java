@@ -15,6 +15,7 @@ import dev.myriadclient.api.service.Breaking;
 import dev.myriadclient.api.service.Notifications;
 import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.service.Rotations;
+import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.util.Baritone;
 import dev.myriadclient.api.util.Interactions;
@@ -77,8 +78,8 @@ import java.util.function.Predicate;
  * Anything higher, something in the way at head height, water or lava, or a deeper drop stops it, landing in front:
  * it clears nothing there, and bounces on once you look somewhere clear.
  * <p>
- * For addon developers: each tick of a bounce goes through the {@link #HOP} hook, which can change the pitch it flies,
- * whether it jumps and when the glide starts; {@link #PASS_THROUGH} says which blocks don't count as in its way.
+ * For addon developers: each tick of a bounce goes through the {@link #HOP} hook, which can change the pitch and yaw it
+ * flies, whether it jumps and when the glide starts; {@link #PASS_THROUGH} says which blocks don't count as in its way.
  *
  * <pre>{@code
  * ctx.hook(Recast.HOP)
@@ -90,27 +91,38 @@ public class Recast extends GlideMode {
 	/**
 	 * One tick of a bounce, for {@link #HOP}: on the ground (for how many ticks) or in the air (for how many), the
 	 * floor's height, the way the lane runs, whether it follows terrain; and what Recast does with it: the pitch it flies,
-	 * whether it jumps (on the ground), and whether each glide starts on the hop's last tick in the air, swapping nothing,
-	 * instead of as it rises (with No Durability's chestplate swaps).
+	 * whether it jumps (on the ground), whether each glide starts on the hop's last tick in the air, swapping nothing,
+	 * instead of as it rises (with No Durability's chestplate swaps), and the yaw it flies (the lane's, turned a little
+	 * back towards its line when you've drifted; NaN for Recast's own).
 	 */
 	public record Hop(boolean onGround, int groundTicks, int airTicks, double floorY, Vec3 lane, boolean terrain, float pitch,
-					  boolean jump, boolean lateStart) {
+					  boolean jump, boolean lateStart, float yaw) {
+		/** Recast's own yaw. */
+		public Hop(boolean onGround, int groundTicks, int airTicks, double floorY, Vec3 lane, boolean terrain, float pitch, boolean jump,
+				   boolean lateStart) {
+			this(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart, Float.NaN);
+		}
+
 		public Hop withPitch(float pitch) {
-			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart);
+			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart, yaw);
 		}
 
 		public Hop withJump(boolean jump) {
-			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart);
+			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart, yaw);
 		}
 
 		public Hop withLateStart(boolean lateStart) {
-			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart);
+			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart, yaw);
+		}
+
+		public Hop withYaw(float yaw) {
+			return new Hop(onGround, groundTicks, airTicks, floorY, lane, terrain, pitch, jump, lateStart, yaw);
 		}
 	}
 
 	/** How Recast flies a tick of its bounce: the input is its own plan, the caller is Recast. */
 	public static final Hook<Hop, Hop> HOP = Hook.of("myriad-essentials:recast_hop", "Recast hop",
-		"How Recast flies each tick of a bounce: its pitch, whether it jumps, when the glide starts.");
+		"How Recast flies each tick of a bounce: its pitch and yaw, whether it jumps, when the glide starts.");
 
 	/** Whether Recast looks through the block at a position when it checks the way ahead (default: no). */
 	public static final Hook<BlockPos, Boolean> PASS_THROUGH = Hook.of("myriad-essentials:recast_pass_through", "Recast pass-through",
@@ -128,6 +140,10 @@ public class Recast extends GlideMode {
 		HIGHWAY, TERRAIN
 	}
 
+	public enum Line {
+		MIDDLE, BETWEEN_BLOCKS
+	}
+
 	private final EnumSetting<Ground> ground = sgGeneral.oneOf("Ground", Ground.HIGHWAY)
 		.description("Highway: a lane fixed as you turn it on, kept at its height, stopping at any block or hole in it to clear it. Terrain: steers where you look and follows the ground, hopping up steps of a block, stopping at anything higher, water, or a drop of more than two.")
 		.visible(this::chosen).build();
@@ -136,6 +152,12 @@ public class Recast extends GlideMode {
 		.visible(() -> chosen() && !terrain()).build();
 	private final EnumSetting<IfBlocked> ifBlocked = sgGeneral.oneOf("If Blocked", IfBlocked.WAIT)
 		.description("When the way can't be cleared (with Stop, anything in the lane): wait there, or disconnect.").visible(() -> chosen() && !terrain()).build();
+	private final EnumSetting<Line> line = sgGeneral.oneOf("Line", Line.MIDDLE)
+		.description("Where across the highway the lane runs. Middle: through the middle of the blocks you start on. Between Blocks: along the edge between two of them (on the side you stand), your feet over both, so a hole one block wide in either doesn't get in the way.")
+		.visible(() -> chosen() && !terrain()).build();
+	private final BoolSetting steerRound = sgGeneral.bool("Steer Round")
+		.description("Turn aside mid-bounce round a block or a hole in the lane that has room beside it (inside a highway's rails), and back onto the lane after it, instead of stopping for it.")
+		.defaultValue(true).visible(() -> chosen() && !terrain()).build();
 
 	private enum State {
 		IDLE, BOUNCING, BRAKING, WALKING, MINING, PATHING, WAITING, BLOCKED, UNDER, FILLING, HUNGRY
@@ -212,6 +234,24 @@ public class Recast extends GlideMode {
 	 */
 	private static final double STEER_GAIN = 0.15, STEER_MAX_SPEED = 0.25, STEER_DAMPING = 1.5;
 	private static final float STEER_MAX_TURN = 10;
+	/**
+	 * Steering round something (see {@link Round}), or this far off the line: steering the same, quicker and steadier.
+	 * The way round is checked for the whole hitbox and this much more each side, and for steering this far either side
+	 * of it (beside something on a diagonal, between it and a rail, there can be only a quarter of a block to spare);
+	 * it's beside what it goes round from this far before it to this far after, eases across (and back) at this much a
+	 * tick to the side (the glide turns your speed only a tenth of the way to where you look each tick, so it can't be
+	 * sudden; the most it moves across in a tick is this), and goes up to this far from the line, in steps of this;
+	 * what's ahead is watched this far for it.
+	 */
+	private static final double ROUND_GAIN = 0.25, ROUND_MAX_SPEED = 0.5, ROUND_DAMPING = 2, ROUND_FROM = 1, ROUND_MARGIN = 0.05,
+		ROUND_SLACK = 0.1, ROUND_CLEARANCE = 1.5, ROUND_EASE = 0.15, ROUND_MAX_ACROSS = 0.4, ROUND_MAX_SIDE = 2.5, ROUND_STEP = 0.05, ROUND_LOOK_AHEAD = 56;
+	private static final float ROUND_MAX_TURN = 20;
+	/**
+	 * How much larger the half of a move that goes first is made, so a slightly different glide doesn't swap them; and
+	 * the most the yaw is turned for it (more would push you sideways).
+	 */
+	private static final double CORNER_MARGIN = 0.01;
+	private static final float CORNER_MAX_TURN = 4;
 	/** With Baritone: this far off the line, walk back to it; and how far past an obstacle to look for room. */
 	private static final double RECENTRE_DISTANCE = 3, PASS_SEARCH = 48;
 	/** This far below the lane's height, standing, you've come off the highway. */
@@ -279,6 +319,39 @@ public class Recast extends GlideMode {
 	/** The lane's direction (where you faced, snapped; NaN until fixed) and a point on its line. */
 	private float lane = Float.NaN;
 	private Vec3 lineOrigin;
+	/**
+	 * Steering round something: off the line by {@code side} from {@code in} to {@code out} along the lane, eased out to
+	 * it from {@code from} (where you were) starting at {@code start}, and back onto the line by {@code end}. As little
+	 * and as briefly as goes round it.
+	 */
+	private record Round(double from, double side, double start, double in, double out, double end) {
+		double offAt(double a) {
+			if (a <= start) return from;
+			if (a >= end) return 0;
+			if (a < in) return from + (side - from) * ease((a - start) / (in - start));
+			if (a <= out) return side;
+			return side * ease((end - a) / (end - out));
+		}
+
+		/** How fast {@link #offAt} changes along the lane, per block. */
+		double slopeAt(double a) {
+			if (a <= start || a >= end || a > in && a <= out) return 0;
+			if (a < in) return (side - from) * easeSlope((a - start) / (in - start)) / (in - start);
+			return -side * easeSlope((end - a) / (end - out)) / (end - out);
+		}
+
+		private static double ease(double t) {
+			t = Mth.clamp(t, 0, 1);
+			return t * t * (3 - 2 * t);
+		}
+
+		private static double easeSlope(double t) {
+			t = Mth.clamp(t, 0, 1);
+			return 6 * t * (1 - t);
+		}
+	}
+
+	private @Nullable Round round;
 	private BlockPos mining;
 	private int portalWait;
 	/** With Baritone: the job taking you past an obstacle (Elytra Fly's, shown in the Jobs window), while it runs. */
@@ -321,6 +394,7 @@ public class Recast extends GlideMode {
 		hopGround = 1;
 		hopStarted = false;
 		lane = Float.NaN;
+		round = null;
 		rise = null;
 		lastPos = null;
 		travelled = 0;
@@ -456,11 +530,15 @@ public class Recast extends GlideMode {
 		lastPos = pos;
 
 		double range = state == State.BOUNCING ? lookAhead() : Math.max(lookAhead(), terrain() ? TERRAIN_RESUME : RESUME_LOOK_AHEAD);
+		// Steering round needs to see what's ahead in time to ease across to it (seen sooner, stops still start as late).
+		if (state == State.BOUNCING && !terrain() && steerRound.get()) range = Math.max(range, ROUND_LOOK_AHEAD);
 		Obstruction ahead;
 		if (forcedBlock) ahead = new Obstruction(Hazard.STUCK, 0, List.of());
 		// Well off the highway or below it (a setback, the way round something, a fall): back onto it first.
 		else if (!terrain() && mc.player.onGround() && offLane()) ahead = new Obstruction(Hazard.OFF_LANE, 0, List.of());
-		else ahead = terrain() ? scanTerrain(range) : scanAhead(range);
+		else ahead = terrain() ? scanTerrain(range) : scanAhead(range, Double.NaN, -0.2, Vec3.ZERO);
+		if (state == State.BOUNCING && !terrain() && steerRound.get()) ahead = steerRound(ahead, range);
+		else round = null;
 		// Seen far off, it isn't dealt with yet: the bounce goes on while a stop begun later would still end short of it.
 		// Whatever is past it is Baritone's to walk, the slow part, so the nearer it stops, the better.
 		if (ahead != null && state == State.BOUNCING && !terrain() && stopsShortOf(ahead)) ahead = null;
@@ -532,7 +610,7 @@ public class Recast extends GlideMode {
 		}
 		Hop hop = hop(ground);
 		flownPitch = hop.pitch();
-		spoof(steeredYaw(), hop.pitch());
+		spoof(Float.isNaN(hop.yaw()) ? steeredYaw() : hop.yaw(), hop.pitch());
 		if (ground) wantJump = hop.jump();
 
 		boolean gliding = elytraOpen();
@@ -609,7 +687,7 @@ public class Recast extends GlideMode {
 	/** This tick of the bounce: Recast's own, unless a {@link #HOP} hook flies it differently. */
 	private Hop hop(boolean ground) {
 		float pitch = mc.player.getDeltaMovement().y > DIVE_UNTIL_Y && !climbing() ? 90 : 4;
-		Hop asked = new Hop(ground, groundTicks, airTicks, groundY, laneDir(), terrain(), pitch, true, false);
+		Hop asked = new Hop(ground, groundTicks, airTicks, groundY, laneDir(), terrain(), pitch, true, false, cornerSafe(steeredYaw(), ground));
 		if (!HOP.hooked()) return asked;
 		Hop hooked = HOP.call(this, asked, h -> h);
 		return hooked != null ? hooked : asked;
@@ -737,6 +815,13 @@ public class Recast extends GlideMode {
 		Vec3 v = p.getDeltaMovement();
 		double stop = downs.get(next).land() + Math.hypot(v.x, v.z) * SLIDE_TICKS;
 		return stop < ahead.distance() - (ahead.hazard() == Hazard.UNLOADED ? UNLOADED_STAND_OFF : STAND_OFF);
+	}
+
+	/** Whether a stop begun now still ends short of {@code ahead}. */
+	private boolean canStop(Obstruction ahead) {
+		List<Touchdown> downs = touchdowns(ahead.distance());
+		if (downs.isEmpty()) return false;
+		return downs.get(0).land() + mc.player.getDeltaMovement().horizontalDistance() * SLIDE_TICKS < ahead.distance();
 	}
 
 	/** Food at 6 or less (Minecraft's line for sprinting), and nothing eating or about to. */
@@ -1177,6 +1262,127 @@ public class Recast extends GlideMode {
 		var p = mc.player;
 		lane = Mth.wrapDegrees(fly.snap(p.getYRot()));
 		lineOrigin = new Vec3(p.getBlockX() + 0.5, p.getY(), p.getBlockZ() + 0.5);
+		if (line.get() == Line.BETWEEN_BLOCKS) lineOrigin = lineOrigin.add(betweenBlocks(offLine(p.position()) >= 0 ? 1 : -1));
+	}
+
+	/**
+	 * Between Blocks: from the line through the middle of the blocks to the nearest along their edges, to {@code sign}'s
+	 * side. Along x or z, half a block across; on a diagonal (already through their corners) half a block along x, onto
+	 * the line through the middles of their edges. Other directions keep the middle.
+	 */
+	private Vec3 betweenBlocks(int sign) {
+		Vec3 across = across();
+		float a = Mth.positiveModulo(lane, 90);
+		if (a < 1 || a > 89) return new Vec3(Math.round(across.x), 0, Math.round(across.z)).scale(0.5 * sign);
+		if (Math.abs(a - 45) < 1) return new Vec3(Math.signum(across.x) * 0.5 * sign, 0, 0);
+		return Vec3.ZERO;
+	}
+
+	/** Square to the lane, the way {@link #offLine} counts positive. */
+	private Vec3 across() {
+		Vec3 dir = laneDir();
+		return new Vec3(-dir.z, 0, dir.x);
+	}
+
+	/**
+	 * Something in the lane ahead (a block, a hole) with room beside it: steers round it instead ({@link #round}).
+	 * While one goes on, what it goes round isn't in the way; if its way stops being clear, a new one is found from where
+	 * you are, or what's ahead is dealt with as usual. Returns what's still to be dealt with.
+	 */
+	private @Nullable Obstruction steerRound(@Nullable Obstruction ahead, double range) {
+		double a = along(mc.player.position()), speed = Math.max(0.5, mc.player.getDeltaMovement().horizontalDistance());
+		if (round != null && a >= round.end()) round = null;
+		boolean roundable = ahead != null && (ahead.hazard() == Hazard.BLOCKS || ahead.hazard() == Hazard.HOLE);
+		if (round != null) {
+			if (roundClear(round, speed, 0)) return ahead != null && a + ahead.distance() < round.end() ? null : ahead;
+			Round again = roundable ? planRound(ahead, range, speed) : null;
+			if (again != null || ahead == null || canStop(ahead)) {
+				round = again;
+				return again != null ? null : ahead;
+			}
+			// Too late to stop for it: the way round is still the best way on.
+			return null;
+		}
+		if (!roundable) return ahead;
+		round = planRound(ahead, range, speed);
+		return round != null ? null : ahead;
+	}
+
+	/**
+	 * The way round {@code ahead} that leaves the line least, or null if there's none: beside it from just before it to
+	 * just after, eased out to that as late as it can be and back as soon as it's past, and clear all the way (see
+	 * {@link #roundClear}), with something to land on and room to jump where the hops beside it come down.
+	 */
+	private @Nullable Round planRound(Obstruction ahead, double range, double speed) {
+		Vec3 pos = mc.player.position();
+		double a = along(pos), off = offLine(pos), near = a + ahead.distance(), far = obstacleEnd(ahead);
+		List<Double> sides = new ArrayList<>();
+		for (double s = -ROUND_MAX_SIDE; s <= ROUND_MAX_SIDE + 1e-6; s += ROUND_STEP) sides.add(s);
+		sides.sort(Comparator.comparingDouble((Double s) -> Math.abs(s)).thenComparingDouble(s -> Math.abs(s - off)));
+		for (double s : sides) {
+			double in = near - ROUND_CLEARANCE, start = Math.max(a, in - easeLength(s - off, speed));
+			// Not far enough to ease across without turning harder than steering does.
+			if (in - start < easeLength(s - off, speed) * 0.75) continue;
+			double out = far + ROUND_CLEARANCE;
+			Round r = new Round(off, s, start, in, out, out + easeLength(s, speed));
+			// Clear whenever within a tick the moves fall, so it stays clear as you go, and a little either side of it.
+			if (!roundClear(r, speed, 0) || !roundClear(r, speed, 0.25) || !roundClear(r, speed, 0.5) || !roundClear(r, speed, 0.75)) continue;
+			Round wide = new Round(off, s + ROUND_SLACK, start, in, out, r.end()), narrow = new Round(off, s - ROUND_SLACK, start, in, out, r.end());
+			if (!roundClear(wide, speed, 0) || !roundClear(wide, speed, 0.5) || !roundClear(narrow, speed, 0) || !roundClear(narrow, speed, 0.5)) continue;
+			Obstruction beside = scanAhead(Math.max(range, r.end() - a), s, -0.2, Vec3.ZERO);
+			if (beside != null && a + beside.distance() < r.end()) continue;
+			return r;
+		}
+		return null;
+	}
+
+	/** How far along the lane easing {@code across} blocks to the side takes, at {@code speed}. */
+	private static double easeLength(double across, double speed) {
+		return Math.abs(across) / ROUND_EASE * speed;
+	}
+
+	/** How far along the lane what's ahead ends: past it, the way where you are is clear (or has a floor) again. */
+	private double obstacleEnd(Obstruction ahead) {
+		Vec3 dir = laneDir();
+		AABB box = mc.player.getBoundingBox();
+		double floor = floorY();
+		AABB body = new AABB(box.minX, floor + FLOOR_CLEARANCE, box.minZ, box.maxX, floor + STAND_HEIGHT, box.maxZ);
+		AABB support = new AABB(box.minX, floor - 2, box.minZ, box.maxX, floor - 0.5, box.maxZ);
+		double d = ahead.distance();
+		for (int i = 0; i < 64; i++, d += SWEEP_STEP / 2) {
+			boolean clear = ahead.hazard() == Hazard.HOLE ? blocksIn(support.move(dir.scale(d)), null) : !blocksIn(body.move(dir.scale(d)), null);
+			if (clear) break;
+		}
+		return along(mc.player.position()) + d;
+	}
+
+	/**
+	 * Whether {@code round}'s way is clear, tick by tick from where you are at {@code speed} (the first tick only
+	 * {@code phase} of one): the hitbox (with room to spare) through each tick's move, and on a diagonal through the
+	 * corner it takes (see {@link #cornerSafe}): the way you're easing to the side if you are (that's the larger half
+	 * then), either way otherwise (the yaw picks one).
+	 */
+	private boolean roundClear(Round round, double speed, double phase) {
+		var p = mc.player;
+		Vec3 pos = p.position(), dir = laneDir(), across = across();
+		double a0 = along(pos), off0 = offLine(pos), floor = floorY();
+		AABB box = p.getBoundingBox();
+		AABB body = new AABB(box.minX - ROUND_MARGIN, floor + FLOOR_CLEARANCE, box.minZ - ROUND_MARGIN, box.maxX + ROUND_MARGIN, floor + STAND_HEIGHT,
+			box.maxZ + ROUND_MARGIN);
+		double offPrev = off0, aPrev = a0;
+		for (double a = a0 + (phase > 0 ? phase * speed : speed); aPrev < round.end(); aPrev = a, a += speed) {
+			// Behind the way (steering follows it a little late), it catches up only as fast as a glide moves across.
+			double offNext = offPrev + Mth.clamp(round.offAt(a) - offPrev, -ROUND_MAX_ACROSS, ROUND_MAX_ACROSS);
+			Vec3 from = dir.scale(aPrev - a0).add(across.scale(offPrev - off0)), to = dir.scale(a - a0).add(across.scale(offNext - off0));
+			double mx = to.x - from.x, mz = to.z - from.z;
+			AABB at = body.move(from);
+			boolean xFirst = !blocksIn(at.expandTowards(mx, 0, 0), null) && !blocksIn(at.move(mx, 0, 0).expandTowards(0, 0, mz), null);
+			boolean zFirst = !blocksIn(at.expandTowards(0, 0, mz), null) && !blocksIn(at.move(0, 0, mz).expandTowards(mx, 0, 0), null);
+			double lead = Math.abs(mx) - Math.abs(mz);
+			if (lead > CORNER_MARGIN ? !xFirst : lead < -CORNER_MARGIN ? !zFirst : !xFirst && !zFirst) return false;
+			offPrev = offNext;
+		}
+		return true;
 	}
 
 	/** How far {@code pos} is along the lane from where it was fixed. */
@@ -1209,11 +1415,50 @@ public class Recast extends GlideMode {
 	private float steeredYaw() {
 		if (terrain()) return mc.player.getYRot();
 		Vec3 dir = laneDir(), v = mc.player.getDeltaMovement();
-		double off = offLine(mc.player.position());
+		Vec3 pos = mc.player.position();
+		double a = along(pos), off = offLine(pos) - (round != null ? round.offAt(a) : 0);
+		boolean hard = round != null || Math.abs(off) > ROUND_FROM;
+		double gain = hard ? ROUND_GAIN : STEER_GAIN, most = hard ? ROUND_MAX_SPEED : STEER_MAX_SPEED;
+		float turn = hard ? ROUND_MAX_TURN : STEER_MAX_TURN;
 		double sideways = v.x * -dir.z + v.z * dir.x, forwards = Math.max(0.5, v.x * dir.x + v.z * dir.z);
-		double want = Mth.clamp(-off * STEER_GAIN, -STEER_MAX_SPEED, STEER_MAX_SPEED);
-		double aim = want + (want - sideways) * STEER_DAMPING;
-		return lane + Mth.clamp((float) Math.toDegrees(Math.atan2(aim, forwards)), -STEER_MAX_TURN, STEER_MAX_TURN);
+		// Steering round, the way's own drift to the side as well (so it's followed, not chased).
+		double want = (round != null ? round.slopeAt(a) * forwards : 0) + Mth.clamp(-off * gain, -most, most);
+		double aim = want + (want - sideways) * (hard ? ROUND_DAMPING : STEER_DAMPING);
+		return lane + Mth.clamp((float) Math.toDegrees(Math.atan2(aim, forwards)), -turn, turn);
+	}
+
+	/**
+	 * On a diagonal, a tick's move goes along x and along z one after the other (the larger first), so the hitbox takes
+	 * the corner of an L, up to a block or more to the side of the straight way at a bounce's speed: onto something
+	 * beside the lane, or a rail, which stops that half of the move. Which way it turns the corner is the yaw's to choose
+	 * (the glide turns your speed towards where you look), so when only one way is clear, {@code yaw} is turned (as
+	 * little as does it, a few degrees at most) to the side that makes it the move's larger half.
+	 */
+	private float cornerSafe(float yaw, boolean ground) {
+		var p = mc.player;
+		Vec3 dir = laneDir();
+		if (terrain() || Math.abs(Math.abs(dir.x) - Math.abs(dir.z)) > 0.05) return yaw;
+		Vec3 v = p.getDeltaMovement();
+		double vy = ground ? JUMP_POWER : v.y;
+		AABB box = p.getBoundingBox().deflate(1e-4);
+		box = box.move(0, Math.max(vy, groundY - box.minY + 1e-4), 0);
+		double dx = v.x, dz = v.z;
+		boolean xFirst = p.level().noCollision(p, box.expandTowards(dx, 0, 0)) && p.level().noCollision(p, box.move(dx, 0, 0).expandTowards(0, 0, dz));
+		boolean zFirst = p.level().noCollision(p, box.expandTowards(0, 0, dz)) && p.level().noCollision(p, box.move(0, 0, dz).expandTowards(dx, 0, 0));
+		if (xFirst == zFirst) return yaw;
+		// The move's halves once the glide has turned your speed a tenth of the way towards where you look (and the
+		// jump's push, on the ground): find the nearest yaw that makes the clear way's first half the larger, with room.
+		double speed = Math.hypot(dx, dz) + (ground ? JUMP_PUSH : 0);
+		for (float turn = 0; turn <= CORNER_MAX_TURN; turn += 0.5f) {
+			for (float t : new float[]{yaw + turn, yaw - turn}) {
+				Vec3 look = Vec3.directionFromRotation(0, t);
+				double nx = dx * 0.9 + look.x * speed * 0.1 + (ground ? look.x * JUMP_PUSH : 0);
+				double nz = dz * 0.9 + look.z * speed * 0.1 + (ground ? look.z * JUMP_PUSH : 0);
+				double lead = Math.abs(nx) - Math.abs(nz);
+				if (xFirst ? lead > CORNER_MARGIN : -lead > CORNER_MARGIN) return t;
+			}
+		}
+		return yaw;
 	}
 
 	/** How far ahead to watch: enough to stop from this speed. */
@@ -1256,17 +1501,20 @@ public class Recast extends GlideMode {
 	 * ceiling that the hops pass over isn't in the way. A ceiling is walked under rather than mined; it's what's ahead
 	 * unless one of the others comes just after it. Null if it's clear.
 	 */
-	private Obstruction scanAhead(double range) {
+	private Obstruction scanAhead(double range, double sideways, double widen, Vec3 corner) {
 		Vec3 dir = laneDir(), step = dir.scale(SWEEP_STEP);
 		AABB box = mc.player.getBoundingBox();
+		// Along the lane from where you are; or from this far to the side of its line (where you're steering to).
+		if (!Double.isNaN(sideways)) box = box.move(across().scale(sideways - offLine(mc.player.position())));
 		double floor = floorY();
-		AABB body = new AABB(box.minX + 0.2, floor + FLOOR_CLEARANCE, box.minZ + 0.2, box.maxX - 0.2, floor + STAND_HEIGHT, box.maxZ - 0.2);
+		// The hitbox widened by {@code widen} each side (narrowed, if less than 0), and stretched by {@code corner}.
+		AABB body = new AABB(box.minX - widen, floor + FLOOR_CLEARANCE, box.minZ - widen, box.maxX + widen, floor + STAND_HEIGHT, box.maxZ + widen);
 		Obstruction first = null;
 		List<BlockPos> hits = new ArrayList<>();
 		for (double d = 0; d <= range && first == null; d += SWEEP_STEP) {
 			Vec3 at = dir.scale(d);
 			if (!loaded(mc.player.position().add(at))) first = new Obstruction(Hazard.UNLOADED, d, List.of());
-			else if (blocksIn(body.move(at).expandTowards(step), hits)) {
+			else if (blocksIn(body.move(at).expandTowards(step).expandTowards(corner), hits)) {
 				Vec3 eye = mc.player.getEyePosition();
 				hits.sort(Comparator.comparingDouble(pos -> pos.distToCenterSqr(eye)));
 				first = new Obstruction(Hazard.BLOCKS, d, hits);

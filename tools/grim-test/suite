@@ -129,7 +129,8 @@ def settle(x, y, z, timeout=5.0):
 
 # Respawned with every module off (.panic), then Elytra Swap back on for Elytra Fly's flights (No Durability, its
 # setting before it became a module, was on by default) but not for flying yourself.
-FRESH = ("closescreen", "respawn", ".panic", ".set elytra_swap when_you_fly false", ".toggle elytra_swap on")
+FRESH = ("closescreen", "respawn", ".panic", ".set elytra_swap when_you_fly false", ".toggle elytra_swap on",
+         ".set elytra_fly line middle", ".set elytra_fly steer_round true")
 
 
 def reset(x=1000.5, y=100, z=0.5, yaw=-90, pitch=0, arena=True):
@@ -1439,6 +1440,8 @@ def t_elytra_no_durability_landing():
 
 # 2b2t's highways: obsidian 9 across with a one-block rail along each edge, so 7 to walk between the rails.
 RAIL = 4
+# Its diagonals are a block wider each side, counted the same way (along z for each x).
+DIAGONAL_RAIL = RAIL + 1
 
 
 def recast_highway(*setup, end=4400):
@@ -1472,7 +1475,7 @@ def t_elytra_recast_obstacles():
     # Baritone. Never in it.
     recast_highway("setblock 4150 201 0 ender_chest", "fill 4250 198 -1 4250 200 1 air",
         f"item replace entity {P} hotbar.0 with netherite_pickaxe[enchantments={{efficiency:5}}]")
-    client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 400", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".set elytra_fly obstacles clear", ".set elytra_fly steer_round false", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 400", ".toggle elytra_fly off", "wait 20", timeout=90)
     x, y, _ = position()
     mined = "passed" in cmd("execute if block 4150 201 0 air")
     baritone = has_baritone()
@@ -1504,21 +1507,21 @@ DIAGONAL_X0 = 7000
 
 
 def diagonal_highway(*setup, length=500):
-    """2b2t's diagonal (+X +Z): for each x from DIAGONAL_X0, the highway's cross-section (RAIL) along z, centred on
+    """2b2t's diagonal (+X +Z): for each x from DIAGONAL_X0, its cross-section (DIAGONAL_RAIL) along z, centred on
     z = x - DIAGONAL_X0, so the rails are staircases of blocks touching at their corners. The tester at its start facing
     along it, then `setup` commands."""
     x0 = DIAGONAL_X0
     client(*FRESH, "wait 20")
     cmd("forceload remove all")
-    chunks = {((x0 + i + dx) >> 4, (i + dz) >> 4) for i in range(-8, length + 8) for dx in (-8, 8) for dz in (-8, 8)}
+    chunks = {((x0 + i + dx) >> 4, (i + dz) >> 4) for i in range(-9, length + 9) for dx in (-9, 9) for dz in (-9, 9)}
     forceload(*chunks)
     cmd(f"tp {P} {x0}.5 201 0.5 -45 0")
     time.sleep(2)
     lane = []
     for i in range(-5, length):
         x = x0 + i
-        lane += [f"fill {x} 200 {i - 6} {x} 206 {i + 6} air", f"fill {x} 200 {i - RAIL} {x} 200 {i + RAIL} obsidian",
-            f"setblock {x} 201 {i - RAIL} obsidian", f"setblock {x} 201 {i + RAIL} obsidian"]
+        lane += [f"fill {x} 200 {i - 7} {x} 206 {i + 7} air", f"fill {x} 200 {i - DIAGONAL_RAIL} {x} 200 {i + DIAGONAL_RAIL} obsidian",
+            f"setblock {x} 201 {i - DIAGONAL_RAIL} obsidian", f"setblock {x} 201 {i + DIAGONAL_RAIL} obsidian"]
     cmd(*lane)
     cmd(f"clear {P}", f"gamemode survival {P}", f"effect clear {P}", f"effect give {P} saturation 1 20 true", f"item replace entity {P} armor.chest with elytra",
         f"tp {P} {x0}.5 201 0.5 -45 0", *setup)
@@ -1530,8 +1533,8 @@ def diagonal_strip(at, width, y1, y2, block):
     """Fills across the diagonal at `at` blocks along it: the cells with x + z (from its start) at 2*at to 2*at + width
     - 1, between the rails, from y1 to y2."""
     x0, cmds = DIAGONAL_X0, []
-    for i in range(at - RAIL - width, at + RAIL + width):
-        for z in range(i - RAIL + 1, i + RAIL):
+    for i in range(at - DIAGONAL_RAIL - width, at + DIAGONAL_RAIL + width):
+        for z in range(i - DIAGONAL_RAIL + 1, i + DIAGONAL_RAIL):
             if 2 * at <= i + z < 2 * at + width:
                 cmds.append(f"fill {x0 + i} {y1} {z} {x0 + i} {y2} {z} {block}")
     return cmds
@@ -1558,13 +1561,45 @@ def t_elytra_recast_diagonal_obstacles():
     diagonal_highway(f"setblock {x0 + 120} 201 120 ender_chest", f"fill {x0 + 200} 201 201 {x0 + 200} 202 201 obsidian",
         *diagonal_strip(300, 4, 198, 200, "air"),
         f"item replace entity {P} hotbar.0 with netherite_pickaxe[enchantments={{efficiency:5}}]", length=420)
-    client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 700", ".toggle elytra_fly off", "wait 20", timeout=120)
+    client(".set elytra_fly obstacles clear", ".set elytra_fly steer_round false", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 700", ".toggle elytra_fly off", "wait 20", timeout=120)
     x, y, z = position()
     along, off = (x - x0 + z) / 2, (x - x0 - z) / 1.414
     cmd("forceload remove all")
     mined = "passed" in cmd(f"execute if block {x0 + 120} 201 120 air")
     ok = along > 310 and y > 200.5 and abs(off) < 2.2
     return ok, f"{along * 1.414:.0f} blocks along (hole at {300 * 1.414:.0f}), {off:+.2f} off the line, y={y:.1f}, chest {'mined' if mined else 'walked round'}, {'Baritone' if has_baritone() else 'no Baritone'}"
+
+
+def t_elytra_recast_between_blocks():
+    # Line Between Blocks: holes a block wide and two deep in the middle row, every 9 blocks, with Stop. Along the edge
+    # between that row and the next, your feet are over both: none of them is in the way, and none is fallen into.
+    recast_highway(*(f"fill {hx} 198 0 {hx} 200 0 air" for hx in range(4030, 4390, 9)))
+    client(".set elytra_fly line between_blocks", ".set elytra_fly obstacles stop", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 300",
+        ".toggle elytra_fly off", "wait 20", timeout=90)
+    x, y, z = position()
+    return x > 4300 and y > 200.5 and abs(z - 1) < 0.25, f"x={x:.0f} past 40 holes (from 4030), y={y:.1f}, z={z:.2f} (the edge at 1)"
+
+
+def t_elytra_recast_steer_round():
+    # Steer Round, with Stop (so nothing is walked round or cleared): an ender chest on the line, a wall three wide
+    # across the middle and a hole two wide and three deep, each with room beside it inside the rails. Bounced round
+    # each without stopping, back on the line after.
+    recast_highway("setblock 4100 201 0 ender_chest", "fill 4200 201 -1 4200 202 1 obsidian", "fill 4300 198 0 4301 200 1 air")
+    client(".set elytra_fly obstacles stop", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 300", ".toggle elytra_fly off", "wait 20", timeout=90)
+    x, y, z = position()
+    return x > 4340 and y > 200.5 and abs(z - 0.5) < 0.5, f"x={x:.0f} (chest at 4100, wall at 4200, hole at 4300), y={y:.1f}, {z - 0.5:+.2f} off the line"
+
+
+def t_elytra_recast_steer_round_diagonal():
+    # Steer Round on the diagonal, with Stop: an ender chest on the line, bounced round between the rails (a diagonal
+    # move takes the corner of an L, so this is the tight one).
+    x0 = DIAGONAL_X0
+    diagonal_highway(f"setblock {x0 + 150} 201 150 ender_chest", length=400)
+    client(".set elytra_fly obstacles stop", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 300", ".toggle elytra_fly off", "wait 20", timeout=90)
+    x, y, z = position()
+    along, off = (x - x0 + z) / 2, (x - x0 - z) / 1.414
+    cmd("forceload remove all")
+    return along > 250 and y > 200.5 and abs(off) < 0.6, f"{along * 1.414:.0f} blocks along (chest at {150 * 1.414:.0f}), {off:+.2f} off the line, y={y:.1f}"
 
 
 def has_baritone():
@@ -1674,7 +1709,7 @@ def t_elytra_recast_portal():
     recast_highway("fill 4090 200 -5 4110 200 5 obsidian", "fill 4100 200 -1 4100 204 2 obsidian", "fill 4100 201 0 4100 203 1 nether_portal[axis=z]",
                    f"item replace entity {P} hotbar.0 with netherite_pickaxe")
     if not has_baritone(): return True, "skipped: Baritone isn't installed in the dev client (run/mods)"
-    client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 500", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".set elytra_fly obstacles clear", ".set elytra_fly steer_round false", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 500", ".toggle elytra_fly off", "wait 20", timeout=90)
     x, y, _ = position()
     dim = data("Dimension")
     portal = passed("if block 4100 202 0 nether_portal")
@@ -1696,7 +1731,7 @@ def t_elytra_recast_terrain():
 def t_elytra_recast_disconnect():
     # Stop with If Blocked Disconnect: a chest in the lane logs you out (then the tester joins again).
     recast_highway("setblock 4100 201 0 ender_chest")
-    client(".set elytra_fly obstacles stop", ".set elytra_fly if_blocked disconnect", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 160", timeout=60)
+    client(".set elytra_fly obstacles stop", ".set elytra_fly if_blocked disconnect", ".set elytra_fly steer_round false", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 160", timeout=60)
     left = not online()
     # Grim's flags count up to the disconnect: joining again, its first look at you measures the move from where you left.
     flagged = flags()
@@ -1709,7 +1744,7 @@ def t_elytra_recast_walk_round():
     # Baritone installed: an ender chest and a bedrock pillar in the lane are walked round (the chest left alone).
     recast_highway("setblock 4100 201 0 ender_chest", "fill 4160 201 0 4160 202 0 bedrock", f"item replace entity {P} hotbar.0 with netherite_pickaxe")
     if not has_baritone(): return True, "skipped: Baritone isn't installed in the dev client (run/mods)"
-    client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 500", ".toggle elytra_fly off", "wait 20", timeout=90)
+    client(".set elytra_fly obstacles clear", ".set elytra_fly steer_round false", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 500", ".toggle elytra_fly off", "wait 20", timeout=90)
     x, y, _ = position()
     chest = "passed" in cmd("execute if block 4100 201 0 ender_chest")
     return chest and x > 4170 and y > 200.5, f"chest {'left' if chest else 'mined'}, x={x:.0f}, y={y:.1f}"
@@ -1998,6 +2033,9 @@ TESTS = [
     ("recast low ceiling", t_elytra_recast_low_ceiling),
     ("recast diagonal", t_elytra_recast_diagonal),
     ("recast diagonal obstacles", t_elytra_recast_diagonal_obstacles),
+    ("recast between blocks", t_elytra_recast_between_blocks),
+    ("recast steer round", t_elytra_recast_steer_round),
+    ("recast steer round diagonal", t_elytra_recast_steer_round_diagonal),
     ("recast spare elytras", t_elytra_recast_spare_elytras),
     ("recast full hotbar", t_elytra_recast_full_hotbar),
     ("recast fill hole", t_elytra_recast_fill_hole),

@@ -3,6 +3,26 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.5.0
+
+Needs Myriad 1.3.0. Unreleased.
+
+- **Elytra Fly**'s Recast **steers round** a block or a hole in the lane that has room beside it, instead of stopping for
+  it (Steer Round, on by default; off, it stops as before). It eases out as late and as little as goes round it, stays
+  beside it only while passing, and eases straight back onto the lane. The way round is checked tick by tick before it
+  commits, so it doesn't brush what it goes round or a highway's rail. On a diagonal that takes care: a tick's move goes
+  along x and along z one after the other, so the hitbox takes the corner of an L, more than a block to the side at a
+  bounce's speed, and it's that corner that would catch a rail or the block beside it. Recast picks which way each move
+  turns its corner (a degree or so of yaw decides which half goes first), and keeps the way round where that corner
+  misses both. Passing an ender chest on a 2b2t-wide diagonal leaves a quarter of a block to spare, and it does it at
+  full speed. It watches 56 blocks ahead for this (stops still start where they did).
+- **Line**: the lane runs through the middle of the blocks you start on (Middle, as before), or along the edge between
+  two of them (Between Blocks), your feet over both, so a hole one block wide in either is no obstacle.
+- For addon developers: `Recast.Hop` carries the yaw a tick of the bounce flies (`yaw()`, `withYaw`), as it does the
+  pitch; the old constructor still works (Recast's own yaw).
+- The Grim test suite's highways are as wide as 2b2t's: 7 blocks between one-block rails, and diagonals a block wider
+  each side. New scenarios for diagonal obstacles, Steer Round (straight and diagonal) and Between Blocks.
+
 ## 1.4.1
 
 Needs Myriad 1.3.0.
