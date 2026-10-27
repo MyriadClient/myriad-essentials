@@ -1437,15 +1437,21 @@ def t_elytra_no_durability_landing():
     return hp >= 20 and y < 152 and x > 5000, f"landed at y={y:.1f} after {x - 5000:.0f} blocks, health {hp:.1f}"
 
 
+# 2b2t's highways: obsidian 9 across with a one-block rail along each edge, so 7 to walk between the rails.
+RAIL = 4
+
+
 def recast_highway(*setup, end=4400):
-    """A 3-wide obsidian highway at y=200 from x=4000 to `end`, the tester on it facing east, then `setup` commands."""
+    """A highway as 2b2t's (RAIL) at y=200 from x=4000 to `end`, the tester on it facing east, then `setup` commands."""
     client(*FRESH, "wait 20")
     forceload_area(3990, -8, end, 8)
     cmd(f"tp {P} 4000.5 201 0.5 -90 0")
     time.sleep(1.5)
-    # In pieces: a fill takes at most 32768 blocks.
-    for x in range(3990, end, 400):
-        cmd(f"fill {x} 200 -3 {min(x + 399, end)} 206 3 air", f"fill {x} 200 -1 {min(x + 399, end)} 200 1 obsidian")
+    # In pieces: a fill takes at most 32768 blocks (one that asks for more fails, leaving the last test's blocks).
+    for x in range(3990, end, 200):
+        x2 = min(x + 199, end)
+        cmd(f"fill {x} 200 -6 {x2} 206 6 air", f"fill {x} 200 -{RAIL} {x2} 200 {RAIL} obsidian",
+            f"fill {x} 201 -{RAIL} {x2} 201 -{RAIL} obsidian", f"fill {x} 201 {RAIL} {x2} 201 {RAIL} obsidian")
     cmd(f"clear {P}", f"gamemode survival {P}", f"effect clear {P}",
         f"effect give {P} saturation 1 20 true", f"item replace entity {P} armor.chest with elytra", f"tp {P} 4000.5 201 0.5 -90 0", *setup)
     time.sleep(1)
@@ -1494,30 +1500,71 @@ def t_elytra_recast_no_durability():
     return 0 <= damage <= 1 and x - 4000 > 300, f"elytra damage {damage} after {x - 4000:.0f} blocks of bouncing (30 s)"
 
 
-def t_elytra_recast_diagonal():
-    # 2b2t's diagonals: a 3-wide band along x=z. The server misses more landings here, so Elytra Swap's cut matters
-    # most; 15 s of bouncing with the chestplate in the main inventory mustn't wear the elytra.
-    x0, length = 7000, 500
+DIAGONAL_X0 = 7000
+
+
+def diagonal_highway(*setup, length=500):
+    """2b2t's diagonal (+X +Z): for each x from DIAGONAL_X0, the highway's cross-section (RAIL) along z, centred on
+    z = x - DIAGONAL_X0, so the rails are staircases of blocks touching at their corners. The tester at its start facing
+    along it, then `setup` commands."""
+    x0 = DIAGONAL_X0
     client(*FRESH, "wait 20")
     cmd("forceload remove all")
-    chunks = {((x0 + i + dx) >> 4, (i + dz) >> 4) for i in range(-8, length + 8) for dx in (-6, 6) for dz in (-6, 6)}
+    chunks = {((x0 + i + dx) >> 4, (i + dz) >> 4) for i in range(-8, length + 8) for dx in (-8, 8) for dz in (-8, 8)}
     forceload(*chunks)
     cmd(f"tp {P} {x0}.5 201 0.5 -45 0")
     time.sleep(2)
     lane = []
     for i in range(-5, length):
-        lane += [f"fill {x0 + i} 200 {i - 4} {x0 + i} 206 {i + 4} air", f"fill {x0 + i} 200 {i - 1} {x0 + i} 200 {i + 1} obsidian"]
+        x = x0 + i
+        lane += [f"fill {x} 200 {i - 6} {x} 206 {i + 6} air", f"fill {x} 200 {i - RAIL} {x} 200 {i + RAIL} obsidian",
+            f"setblock {x} 201 {i - RAIL} obsidian", f"setblock {x} 201 {i + RAIL} obsidian"]
     cmd(*lane)
     cmd(f"clear {P}", f"gamemode survival {P}", f"effect clear {P}", f"effect give {P} saturation 1 20 true", f"item replace entity {P} armor.chest with elytra",
-        f"item replace entity {P} inventory.5 with diamond_chestplate", f"tp {P} {x0}.5 201 0.5 -45 0")
+        f"tp {P} {x0}.5 201 0.5 -45 0", *setup)
     time.sleep(1)
     mark()
+
+
+def diagonal_strip(at, width, y1, y2, block):
+    """Fills across the diagonal at `at` blocks along it: the cells with x + z (from its start) at 2*at to 2*at + width
+    - 1, between the rails, from y1 to y2."""
+    x0, cmds = DIAGONAL_X0, []
+    for i in range(at - RAIL - width, at + RAIL + width):
+        for z in range(i - RAIL + 1, i + RAIL):
+            if 2 * at <= i + z < 2 * at + width:
+                cmds.append(f"fill {x0 + i} {y1} {z} {x0 + i} {y2} {z} {block}")
+    return cmds
+
+
+def t_elytra_recast_diagonal():
+    # 2b2t's diagonals: the server misses more landings here, so Elytra Swap's cut matters most; 15 s of bouncing with
+    # the chestplate in the main inventory mustn't wear the elytra.
+    x0 = DIAGONAL_X0
+    diagonal_highway(f"item replace entity {P} inventory.5 with diamond_chestplate")
     client(".toggle elytra_swap on", ".set elytra_fly obstacles stop", "wait 10",
         ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 300", ".toggle elytra_fly off", "wait 20", timeout=90)
     x, y, z = position()
     worn = elytra_damage()
     cmd("forceload remove all")
     return worn == 0 and x - x0 > 200 and y > 200.5, f"elytra damage {worn} after {(x - x0) * 1.414:.0f} blocks of diagonal, {abs(x - x0 - z + 0.5) / 1.414:.2f} off the line"
+
+
+def t_elytra_recast_diagonal_obstacles():
+    # Obstacles on the diagonal, Clear: an ender chest on the line (walked round between the rails with Baritone, or
+    # mined), a pillar two high beside the line, and a 3-deep hole across everything between the rails (flown over, or
+    # stopped before or crossed with Baritone). Never in the hole, never off the highway.
+    x0 = DIAGONAL_X0
+    diagonal_highway(f"setblock {x0 + 120} 201 120 ender_chest", f"fill {x0 + 200} 201 201 {x0 + 200} 202 201 obsidian",
+        *diagonal_strip(300, 4, 198, 200, "air"),
+        f"item replace entity {P} hotbar.0 with netherite_pickaxe[enchantments={{efficiency:5}}]", length=420)
+    client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 700", ".toggle elytra_fly off", "wait 20", timeout=120)
+    x, y, z = position()
+    along, off = (x - x0 + z) / 2, (x - x0 - z) / 1.414
+    cmd("forceload remove all")
+    mined = "passed" in cmd(f"execute if block {x0 + 120} 201 120 air")
+    ok = along > 310 and y > 200.5 and abs(off) < 2.2
+    return ok, f"{along * 1.414:.0f} blocks along (hole at {300 * 1.414:.0f}), {off:+.2f} off the line, y={y:.1f}, chest {'mined' if mined else 'walked round'}, {'Baritone' if has_baritone() else 'no Baritone'}"
 
 
 def has_baritone():
@@ -1570,14 +1617,15 @@ def t_elytra_recast_full_hotbar():
 
 
 def t_elytra_recast_fill_hole():
-    # A 3-deep hole across the lane, within the first hops (which can come down anywhere): Clear fills it at floor level
-    # with blocks from the hotbar (without Baritone), or Baritone bridges it with them, and bounces on.
-    recast_highway("fill 4006 197 -1 4007 200 1 air", f"item replace entity {P} hotbar.2 with obsidian 64")
+    # A 3-deep hole across the lane, within the first hops: flown over where no hop comes down in it, otherwise Clear
+    # fills it at floor level with blocks from the hotbar (without Baritone), or Baritone bridges it with them.
+    recast_highway(f"fill 4006 197 -{RAIL - 1} 4007 200 {RAIL - 1} air", f"item replace entity {P} hotbar.2 with obsidian 64")
     client(".set elytra_fly obstacles clear", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 400", ".toggle elytra_fly off", "wait 20", timeout=90)
     x, y, _ = position()
     filled = sum(passed(f"if block {bx} 200 {bz} obsidian") for bx in (4006, 4007) for bz in (-1, 0, 1))
     above = sum(passed(f"if block {bx} 201 {bz} obsidian") for bx in range(4000, 4012) for bz in (-1, 0, 1))
-    return filled >= 2 and above == 0 and x > 4150 and y > 200.5, f"{filled}/6 hole blocks filled, {above} placed above the floor, x={x:.0f}, y={y:.1f}"
+    how = f"{filled}/6 hole blocks filled" if filled else "flown over"
+    return above == 0 and x > 4150 and y > 200.5, f"{how}, {above} placed above the floor, x={x:.0f}, y={y:.1f}"
 
 
 def t_elytra_recast_holes_flown_over():
@@ -1650,8 +1698,11 @@ def t_elytra_recast_disconnect():
     recast_highway("setblock 4100 201 0 ender_chest")
     client(".set elytra_fly obstacles stop", ".set elytra_fly if_blocked disconnect", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 160", timeout=60)
     left = not online()
+    # Grim's flags count up to the disconnect: joining again, its first look at you measures the move from where you left.
+    flagged = flags()
     client("wait 40", "connect localhost:25565", "wait 100", ".set elytra_fly if_blocked wait", ".set elytra_fly obstacles clear", ".toggle elytra_fly off", timeout=60)
-    return left, "disconnected" if left else "still online"
+    mark()
+    return left and not flagged, ("disconnected" if left else "still online") + (f", flagged before it: {', '.join(flagged)}" if flagged else "")
 
 
 def t_elytra_recast_walk_round():
@@ -1946,6 +1997,7 @@ TESTS = [
     ("recast no durability", t_elytra_recast_no_durability),
     ("recast low ceiling", t_elytra_recast_low_ceiling),
     ("recast diagonal", t_elytra_recast_diagonal),
+    ("recast diagonal obstacles", t_elytra_recast_diagonal_obstacles),
     ("recast spare elytras", t_elytra_recast_spare_elytras),
     ("recast full hotbar", t_elytra_recast_full_hotbar),
     ("recast fill hole", t_elytra_recast_fill_hole),
