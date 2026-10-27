@@ -5,7 +5,7 @@ release says which core it needs (`myriad_version` in `gradle.properties`, the `
 
 ## 1.5.0
 
-Needs Myriad 1.3.0. Unreleased.
+Needs Myriad 1.3.0.
 
 - **Elytra Fly**'s Recast **steers round** a block or a hole in the lane that has room beside it, instead of stopping for
   it (Steer Round, on by default; off, it stops as before). It eases out as late and as little as goes round it, stays
