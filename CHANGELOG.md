@@ -30,6 +30,10 @@ Needs Myriad 1.3.0. Unreleased.
   before, and a stop once begun is finished before it decides again. On the Grim test server: six single-block holes
   on the line, 2 passed in 20 s before and all 6 in 25 s now, none landed in; a roof of trapdoors 2.81 up bounced
   under at full speed, walked before.
+- **Elytra Fly**'s Recast stops nearer what it stops for: it keeps bouncing while a stop begun later would still end
+  3 blocks short of it (a stop comes down at the hop's landing, then slides on up to 9 ticks of its speed, measured),
+  where it braked as soon as it saw it, a lookahead that grows with speed (60 blocks at 4 a tick). Baritone, taking
+  you past, walks that much less.
 - **Elytra Fly**'s Recast stops when you're too hungry to sprint (food 6 or less, with nothing eating), says so, and
   bounces on once you've eaten. The bounce's push forward is the sprint jump's: it hopped on the spot instead, took
   that for being stuck and handed you to Baritone over and over (seen on 2b2t with Auto Eat off).

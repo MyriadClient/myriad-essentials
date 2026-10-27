@@ -186,6 +186,11 @@ public class Recast extends GlideMode {
 	private static final double GLIDE_DRAG = 0.99;
 	/** A jump's vertical speed. */
 	private static final double JUMP_POWER = 0.42;
+	/**
+	 * A stop ends this far short of what it stops for, or of chunks that haven't loaded; and slides on after landing
+	 * up to this many ticks of the speed it came down at (measured: 3.6 to 8.2, the glide lasting a little on the ground).
+	 */
+	private static final double STAND_OFF = 3, UNLOADED_STAND_OFF = 6, SLIDE_TICKS = 9;
 	/** How far to look for a way out of a nether portal you stand in, in blocks. */
 	private static final double PORTAL_EXIT = 3;
 	/**
@@ -454,6 +459,9 @@ public class Recast extends GlideMode {
 		// Well off the highway or below it (a setback, the way round something, a fall): back onto it first.
 		else if (!terrain() && mc.player.onGround() && offLane()) ahead = new Obstruction(Hazard.OFF_LANE, 0, List.of());
 		else ahead = terrain() ? scanTerrain(range) : scanAhead(range);
+		// Seen far off, it isn't dealt with yet: the bounce goes on while a stop begun later would still end short of it.
+		// Whatever is past it is Baritone's to walk, the slow part, so the nearer it stops, the better.
+		if (ahead != null && state == State.BOUNCING && !terrain() && stopsShortOf(ahead)) ahead = null;
 		if (ahead != null) {
 			handleObstacle(ahead);
 			return;
@@ -709,6 +717,23 @@ public class Recast extends GlideMode {
 		spoofing = false;
 		Vec3 v = p.getDeltaMovement();
 		return v.x * v.x + v.z * v.z < 0.03 * 0.03;
+	}
+
+	/**
+	 * Whether a stop begun next tick would still end {@link #STAND_OFF} short of {@code ahead}: it brakes by diving to
+	 * land, so it comes down at this hop's landing at the latest (on the ground, at the end of the hop it jumps into
+	 * now), then slides a little. Things that aren't in the lane (stuck, off it) are dealt with at once.
+	 */
+	private boolean stopsShortOf(Obstruction ahead) {
+		if (ahead.hazard() != Hazard.BLOCKS && ahead.hazard() != Hazard.HOLE && ahead.hazard() != Hazard.CEILING
+			&& ahead.hazard() != Hazard.UNLOADED) return false;
+		List<Touchdown> downs = touchdowns(ahead.distance());
+		var p = mc.player;
+		int next = p.onGround() ? 1 : 0;
+		if (downs.size() <= next) return false;
+		Vec3 v = p.getDeltaMovement();
+		double stop = downs.get(next).land() + Math.hypot(v.x, v.z) * SLIDE_TICKS;
+		return stop < ahead.distance() - (ahead.hazard() == Hazard.UNLOADED ? UNLOADED_STAND_OFF : STAND_OFF);
 	}
 
 	/** Food at 6 or less (Minecraft's line for sprinting), and nothing eating or about to. */
@@ -1245,8 +1270,8 @@ public class Recast extends GlideMode {
 			}
 		}
 		// A landing needs something to stand on within two blocks down, anywhere under the hitbox: a dip a block deep it
-		// hops out of, and stopping for each (they're everywhere on worn highways, and fast hops come down often) costs
-		// more than the rare landing in one. A hop's start rises standing.
+		// hops out of, and stopping for each (they're everywhere on worn highways) costs more than the rare landing in
+		// one. A hop's start rises standing.
 		AABB support = new AABB(box.minX, floor - 2, box.minZ, box.maxX, floor - 0.5, box.maxZ);
 		AABB headroom = new AABB(body.minX, floor + STAND_HEIGHT, body.minZ, body.maxX, floor + JUMP_TOP, body.maxZ);
 		Obstruction ceiling = null;
