@@ -3,9 +3,17 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
-## 1.3.2
+## 1.4.0
 
-Needs Myriad 1.2.0. Unreleased.
+Needs Myriad 1.3.0. Unreleased.
+
+- **Chat** (Render), a module: chat in the theme's font and colours, filtered, repeats stacked (x2, x3), up to 10,000
+  messages kept, shown only while open if you like, and Minecraft's own Chat Settings (size, width, heights,
+  opacities, line spacing, what's shown) kept in step with it. It was Myriad core's Theme → Preferences → Chat until
+  core 1.3; the first time it loads it takes what you'd set there and turns on, so chat looks as it did. Off, chat is
+  Minecraft's. In the theme's font its rows are 11 pixels, where Minecraft's are 9 (Line Spacing on top): the font
+  reaches 7.5 above its baseline and 2.5 below, so in Minecraft's rows accents ran into the line above and descenders
+  into the line below, and the last line hung out of the box. Only accents on capitals still reach the row above.
 
 - **Elytra Fly**'s Recast only stops for a hole or a low ceiling it would really meet. It works out where the hops
   ahead come down and take off (each is as many ticks in the air as the last, flown by the glide's own maths; within

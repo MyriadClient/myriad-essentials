@@ -51,6 +51,7 @@ import dev.myriadclient.essentials.modules.player.Reach;
 import dev.myriadclient.essentials.modules.player.Replenish;
 import dev.myriadclient.essentials.modules.player.WallInteract;
 import dev.myriadclient.essentials.modules.render.BlockESP;
+import dev.myriadclient.essentials.modules.render.Chat;
 import dev.myriadclient.essentials.modules.render.BlockHighlight;
 import dev.myriadclient.essentials.modules.render.EntityESP;
 import dev.myriadclient.essentials.modules.render.FreeLook;
@@ -109,7 +110,7 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerModules(world, new Scaffold(), new AirPlace(), new PacketMine(), new Reach(), new WallInteract());
 		ctx.registerModules(player, new InventoryTweaks(), new Replenish(), new MiddleClick(), new AutoReconnect());
 		ctx.registerModules(render, new EntityESP(), new Tracers(), new Nametags(), new StorageESP(), new BlockESP(), new BlockHighlight(), new FullBright(),
-			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips());
+			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips(), new Chat());
 		ctx.registerModules(automation, autoEat, new AutoTool(), new AutoWalk(), new AutoMend(), new AutoSort(), new Printer(), new AutoPortal());
 		// Baritone's settings, made from Baritone's own list, with its path and goal drawn: only when it's installed.
 		List<Baritone.SettingInfo> baritone = Baritone.settings();
