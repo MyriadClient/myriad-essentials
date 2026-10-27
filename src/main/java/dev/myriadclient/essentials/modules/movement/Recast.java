@@ -138,7 +138,7 @@ public class Recast extends GlideMode {
 		.description("When the way can't be cleared (with Stop, anything in the lane): wait there, or disconnect.").visible(() -> chosen() && !terrain()).build();
 
 	private enum State {
-		IDLE, BOUNCING, BRAKING, WALKING, MINING, PATHING, WAITING, BLOCKED, UNDER, FILLING
+		IDLE, BOUNCING, BRAKING, WALKING, MINING, PATHING, WAITING, BLOCKED, UNDER, FILLING, HUNGRY
 	}
 
 	/** What's ahead in the lane, and how far along it. CEILING: too low to hop under, but room to walk. */
@@ -332,6 +332,7 @@ public class Recast extends GlideMode {
 			case PATHING -> "Baritone";
 			case WAITING -> "Loading";
 			case BLOCKED -> "Blocked";
+			case HUNGRY -> "Hungry";
 			case BOUNCING -> pauseTicks > 0 ? "Flagged" : terrain() ? "Terrain" : String.format("%.0f°", lane);
 			case IDLE -> null;
 		};
@@ -368,7 +369,7 @@ public class Recast extends GlideMode {
 	/** Whether it has you on foot for now (walking round or clearing something, waiting): no gliding meanwhile. */
 	boolean onFoot() {
 		return switch (state) {
-			case PATHING, WALKING, MINING, FILLING, UNDER, BLOCKED, WAITING -> true;
+			case PATHING, WALKING, MINING, FILLING, UNDER, BLOCKED, WAITING, HUNGRY -> true;
 			case IDLE, BOUNCING, BRAKING -> false;
 		};
 	}
@@ -426,6 +427,19 @@ public class Recast extends GlideMode {
 			return;
 		}
 		if (Float.isNaN(lane)) fixLine();
+		// Too hungry to sprint: the bounce's push forward is the sprint jump's, so it would only hop on the spot (and take
+		// that for stuck). It stops, says so, and goes on once you've eaten; eating, it bounces on meanwhile.
+		if (tooHungry()) {
+			if ((state == State.BOUNCING || state == State.BRAKING) && !brake()) {
+				state = State.BRAKING;
+				return;
+			}
+			stand();
+			if (state != State.HUNGRY) status("Too hungry to sprint: bouncing goes on once you've eaten (Auto Eat does it for you)", true);
+			state = State.HUNGRY;
+			return;
+		}
+		if (state == State.HUNGRY) state = State.IDLE;
 		if (mc.player.onGround()) {
 			groundY = mc.player.getY();
 			if (Double.isNaN(laneY)) laneY = groundY;
@@ -695,6 +709,12 @@ public class Recast extends GlideMode {
 		spoofing = false;
 		Vec3 v = p.getDeltaMovement();
 		return v.x * v.x + v.z * v.z < 0.03 * 0.03;
+	}
+
+	/** Food at 6 or less (Minecraft's line for sprinting), and nothing eating or about to. */
+	private boolean tooHungry() {
+		var p = mc.player;
+		return p.getFoodData().getFoodLevel() <= 6 && !p.getAbilities().mayfly && !p.isUsingItem() && !AutoEat.wantsToEat();
 	}
 
 	/** Standing in front of an obstacle: no flight, nothing pressed. */

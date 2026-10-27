@@ -30,6 +30,9 @@ Needs Myriad 1.3.0. Unreleased.
   before, and a stop once begun is finished before it decides again. On the Grim test server: six single-block holes
   on the line, 2 passed in 20 s before and all 6 in 25 s now, none landed in; a roof of trapdoors 2.81 up bounced
   under at full speed, walked before.
+- **Elytra Fly**'s Recast stops when you're too hungry to sprint (food 6 or less, with nothing eating), says so, and
+  bounces on once you've eaten. The bounce's push forward is the sprint jump's: it hopped on the spot instead, took
+  that for being stuck and handed you to Baritone over and over (seen on 2b2t with Auto Eat off).
 - **Elytra Fly**'s Recast never takes you through a nether portal: Baritone, taking you past something, adds nether
   portals to the blocks it avoids meanwhile (it walked through them, and on the test server took the tester to the
   Nether past a lit portal across the lane), and standing in one however you got there, you're walked out of it the

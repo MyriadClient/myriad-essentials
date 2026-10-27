@@ -1603,6 +1603,23 @@ def t_elytra_recast_high_roof():
     return x - 4000 > 200, f"{x - 4000:.0f} blocks in 10 s"
 
 
+def t_elytra_recast_hungry():
+    # Too hungry to sprint (food drained to 6 or less, Auto Eat off): it stops and waits, rather than hopping on the
+    # spot, taking that for stuck and calling Baritone; fed again, it bounces on.
+    recast_highway()
+    client(".set elytra_fly obstacles clear", ".toggle auto_eat off", "wait 10", ".set elytra_fly type recast", ".toggle elytra_fly on", "wait 60", timeout=30)
+    cmd(f"effect clear {P}", f"effect give {P} hunger 12 255 true")
+    client("wait 280", timeout=30)
+    x1 = position()[0]
+    food = data("foodLevel")
+    client("wait 60", timeout=20)
+    x2 = position()[0]
+    cmd(f"effect give {P} saturation 2 20 true")
+    client("wait 200", ".toggle elytra_fly off", "wait 20", timeout=30)
+    x3 = position()[0]
+    return abs(x2 - x1) < 1 and x3 - x2 > 30, f"food {food}: stood still {abs(x2 - x1):.1f} blocks, then {x3 - x2:.0f} blocks once fed"
+
+
 def t_elytra_recast_portal():
     # Baritone installed: a lit nether portal across the lane in an obsidian wall, a way round on either side. Baritone
     # walks round it, never through it: the tester is still in the overworld and past it.
@@ -1935,6 +1952,7 @@ TESTS = [
     ("recast holes flown over", t_elytra_recast_holes_flown_over),
     ("recast high roof", t_elytra_recast_high_roof),
     ("recast portal", t_elytra_recast_portal),
+    ("recast hungry", t_elytra_recast_hungry),
     ("recast walk round", t_elytra_recast_walk_round),
     ("recast back on lane", t_elytra_recast_back_on_lane),
     ("recast disconnect", t_elytra_recast_disconnect),
