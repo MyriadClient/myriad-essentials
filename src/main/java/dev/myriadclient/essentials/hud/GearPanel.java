@@ -4,11 +4,15 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.render.Canvas;
 import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.setting.BoolSetting;
+import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
+import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.ui.Rect;
 import dev.myriadclient.api.ui.hud.HudPanel;
+import dev.myriadclient.api.ui.hud.HudStyle;
 import dev.myriadclient.api.ui.hud.ItemHud;
+import dev.myriadclient.api.util.ItemInfo;
 import dev.myriadclient.api.util.Slots;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
@@ -19,11 +23,16 @@ import java.util.List;
 
 /**
  * What you hold and wear: your main hand and off hand, then your armour, helmet first, each with its durability as the
- * uses left, a percentage or a bar. Stacks in your hands show their count.
+ * uses left, a percentage or a bar. Stacks in your hands show their count. The text is in the durability's colour or one
+ * of your own. Registered under the id {@code myriad-essentials:armor}, its name before, so HUDs placed then keep it.
  */
-public final class ArmorPanel extends HudPanel {
+public final class GearPanel extends HudPanel {
 	public enum Layout {
 		HORIZONTAL, VERTICAL
+	}
+
+	public enum TextColor {
+		DURABILITY, CUSTOM
 	}
 
 	private static final EquipmentSlot[] ARMOR = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
@@ -37,12 +46,16 @@ public final class ArmorPanel extends HudPanel {
 		.visible(() -> durability.get() != ItemHud.Durability.NONE).build();
 	private final DoubleSetting textScale = sgGeneral.decimal("Text Scale").description("Size of the durability, relative to the HUD text.").defaultValue(0.8)
 		.range(0.5, 1.5).decimals(2).visible(() -> ItemHud.showsPercent(durability.get())).build();
+	private final EnumSetting<TextColor> textColor = sgGeneral.oneOf("Text Color", TextColor.DURABILITY)
+		.description("Durability: green to red as it wears, counts in the theme's text. Custom: one colour for all of it.").build();
+	private final ColorSetting color = sgGeneral.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.TEXT))
+		.visible(() -> textColor.get() == TextColor.CUSTOM).build();
 	private final BoolSetting skipEmpty = sgGeneral.bool("Skip Empty").description("Close up gaps left by empty slots.").build();
 	private final BoolSetting avoidAir = sgGeneral.bool("Avoid Air Bar").description("Move up while the air bubbles are showing, like vanilla HUD rows.").defaultValue(true).build();
 	private final BoolSetting shadow = sgGeneral.bool("Shadow").defaultValue(true).build();
 
-	public ArmorPanel() {
-		super("Armor", "\uf132");
+	public GearPanel() {
+		super("Gear", "\uf132");
 	}
 
 	private List<ItemStack> stacks() {
@@ -104,12 +117,32 @@ public final class ArmorPanel extends HudPanel {
 			float x = layout.get() == Layout.HORIZONTAL ? i * slot : 0;
 			float y = (layout.get() == Layout.HORIZONTAL ? 0 : i * (slot + ph)) + yShift;
 			float ix = x + pad, iy = y + ph + pad;
+			c.item(stack, ix, iy, size, false);
 			// A stack in a hand (blocks, crystals, totems) shows its count; gear its durability, below.
-			c.item(stack, ix, iy, size, !stack.isDamageableItem());
-			if (!stack.isDamageableItem() || durability.get() == ItemHud.Durability.NONE) continue;
-			if (hideUndamaged.get() && !stack.isDamaged()) continue;
+			if (!stack.isDamageableItem()) {
+				if (stack.getCount() > 1) count(c, stack.getCount(), ix, iy, size);
+				continue;
+			}
+			if (durability.get() == ItemHud.Durability.NONE || hideUndamaged.get() && !stack.isDamaged()) continue;
 			if (durability.get() == ItemHud.Durability.BAR || durability.get() == ItemHud.Durability.BOTH) ItemHud.bar(c, stack, ix, iy, size);
-			if (ItemHud.showsPercent(durability.get())) ItemHud.durabilityText(c, durability.get(), stack, ix, y, size, textSize(c), shadow.get());
+			if (ItemHud.showsPercent(durability.get())) durabilityText(c, stack, ix, y, size);
 		}
+	}
+
+	/** The uses left or the percentage, centred over the item at x, top at y. */
+	private void durabilityText(Canvas c, ItemStack stack, float x, float y, float size) {
+		float p = ItemHud.percent(stack), ts = textSize(c);
+		String text = durability.get() == ItemHud.Durability.NUMBER ? String.valueOf(ItemInfo.durability(stack)) : Math.round(p * 100) + "%";
+		int argb = textColor.get() == TextColor.CUSTOM ? color.argb() : ItemHud.durabilityColor(p);
+		HudStyle.draw(c, FontFamily.SANS, ts, text, x + (size - c.textWidth(FontFamily.SANS, ts, text)) / 2, y, argb, shadow.get());
+	}
+
+	/** A stack's count in the item's bottom right corner, as Minecraft puts it. */
+	private void count(Canvas c, int n, float x, float y, float size) {
+		String text = String.valueOf(n);
+		float ts = c.defaultFontSize() * scale.getFloat();
+		int argb = textColor.get() == TextColor.CUSTOM ? color.argb() : Myriad.ui().theme().text.argb();
+		HudStyle.draw(c, FontFamily.SANS_BOLD, ts, text, x + size - c.textWidth(FontFamily.SANS_BOLD, ts, text),
+			y + size - c.textHeight(FontFamily.SANS_BOLD, ts) + 1, argb, shadow.get());
 	}
 }

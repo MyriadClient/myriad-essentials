@@ -22,8 +22,8 @@ In six windows, one per tag; each module's settings explain its options.
 | Automation | **Auto Eat** (pauses Baritone), **Auto Tool** (silent; borrows tools from your inventory and puts them back; tools worn down to Preserve are left alone, by mining too), **Auto Walk** (Elytra Fly's Control flies forward with it too), **Auto Mend** (throws bottles o' enchanting at your feet until your Mending gear is mended, wearing and holding inventory pieces in turn, then puts everything back), **Auto Sort** (sorts chests, barrels and shulker boxes as you open them, in item, name or count order), **Printer** (builds Litematica schematics around you as you move, every block facing the way the schematic has it; see below), **Auto Portal** (a Nether portal, lit, where you right-click with obsidian or in front of you on a tap bind) |
 
 HUD elements: Watermark (with the logo), Module List, Looking At (what the crosshair is on, with a bar as it's broken),
-Coordinates (digits grouped in thousands), Armor (your hands and armour, durability as the uses left), Biome, Binds, Chest Count, Direction, Effects, FPS, HP,
-Player Count, Speed, Totems, TPS. Baritone options do nothing when Baritone isn't installed.
+Coordinates (digits grouped in thousands), Gear (your hands and armour, durability as the uses left), Biome, Binds, Chest Count, Direction (yaw and pitch if you like), Effects, FPS, HP,
+Player Count, RAM, Speed, Totems, TPS. Baritone options do nothing when Baritone isn't installed.
 
 Modules behave differently on a server running Grim (2b2t) and on one with only the vanilla checks: Myriad's
 anti-cheat profile (Auto, Grim, Vanilla) decides, and Essentials stays Grim-safe either way.

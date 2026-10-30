@@ -5,7 +5,12 @@ import dev.myriadclient.api.ui.hud.HudStyle;
 import dev.myriadclient.api.ui.hud.TextHudPanel;
 import net.minecraft.util.Mth;
 
-/** Which way you're facing, with the axis it runs along ("North -Z"). */
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+
+/** Which way you're facing, with the axis it runs along ("North -Z"), and if you like your yaw and pitch. */
 public final class DirectionPanel extends TextHudPanel {
 	private static final String[] CARDINAL = {"South", "West", "North", "East"};
 	private static final String[] CARDINAL_AXIS = {"+Z", "-X", "-Z", "+X"};
@@ -14,6 +19,8 @@ public final class DirectionPanel extends TextHudPanel {
 
 	private final BoolSetting interCardinal = sgGeneral.bool("Intercardinal").description("Include North East, South West and so on.").build();
 	private final BoolSetting axis = sgGeneral.bool("Axis").description("Show the coordinate direction (-Z, +X…).").defaultValue(true).build();
+	private final BoolSetting showYaw = sgGeneral.bool("Yaw").description("Show your yaw in degrees, as F3 does.").build();
+	private final BoolSetting showPitch = sgGeneral.bool("Pitch").description("Show your pitch in degrees, looking up negative.").build();
 
 	public DirectionPanel() {
 		super("Direction", "", HudStyle.Mode.TEXT);
@@ -34,6 +41,12 @@ public final class DirectionPanel extends TextHudPanel {
 			name = CARDINAL[i];
 			ax = CARDINAL_AXIS[i];
 		}
-		out.add(name, axis.get() ? ax : "");
+		float pitch = preview() ? 0 : mc.player.getXRot();
+		List<String> parts = new ArrayList<>(6);
+		parts.add(axis.get() ? name + " " : name);
+		parts.add(axis.get() ? ax : "");
+		if (showYaw.get()) Collections.addAll(parts, "  Yaw ", String.format(Locale.ROOT, "%.1f", yaw));
+		if (showPitch.get()) Collections.addAll(parts, "  Pitch ", String.format(Locale.ROOT, "%.1f", pitch));
+		out.parts(parts.toArray(String[]::new));
 	}
 }
