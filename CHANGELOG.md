@@ -3,6 +3,17 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.6.0
+
+Needs Myriad 1.3.0.
+
+- A **RAM** HUD element: the memory the game is using against the most it may use (`RAM 1843 / 4096 MB`), as a
+  percentage, or both. Read twice a second, so it holds still.
+- **Direction** shows your **Yaw** and **Pitch** too, in degrees as F3 has them, each an option (off by default).
+- The **Armor** HUD element is now **Gear**: it showed your hands as well as your armour. It stays where you put it; its
+  options go back to their defaults once. **Text Color**: Durability (green to red, as before) or Custom, a colour of
+  your own for the durability and the stack counts alike. Counts are drawn in the theme's font now, like the rest.
+
 ## 1.5.0
 
 Needs Myriad 1.3.0.
