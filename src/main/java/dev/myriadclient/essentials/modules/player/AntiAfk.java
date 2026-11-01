@@ -23,7 +23,7 @@ import net.minecraft.world.InteractionHand;
  * without moving you or your view. Walking, flying, mining or clicking starts the wait again, so it only acts when
  * you're really away. The swing always goes; the sneak waits where crouching would do harm.
  */
-public class AutoAfk extends Module {
+public class AntiAfk extends Module {
 	private static final int SNEAK_TICKS = 10;
 	/** Blocks in a tick, squared: a tick moving faster along the ground is you going somewhere, not bobbing in water. */
 	private static final double MOVING_SQR = 0.1 * 0.1;
@@ -38,8 +38,8 @@ public class AutoAfk extends Module {
 	private int sneakLeft;
 	private double lastX, lastZ;
 
-	public AutoAfk() {
-		super(Tags.AUTOMATION, "Auto AFK", "Swing and crouch while you're away, so the server doesn't kick you for idling.");
+	public AntiAfk() {
+		super(Tags.AUTOMATION, "Anti AFK", "Swing and crouch while you're away, so the server doesn't kick you for idling.");
 	}
 
 	@Override
