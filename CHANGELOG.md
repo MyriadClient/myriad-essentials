@@ -3,6 +3,13 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## Unreleased
+
+- **Auto AFK** keeps the server from kicking you for idling: after a while of doing nothing (**Delay**, a minute by
+  default) it swings your hand and taps sneak, each an option, without moving you or your view. Walking, flying, mining
+  or clicking starts the wait again, and the sneak holds off where crouching would do harm: riding, in water or lava,
+  gliding, on a ladder, using an item or in the air.
+
 ## 1.6.0
 
 Needs Myriad 1.3.0.

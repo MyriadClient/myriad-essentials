@@ -284,6 +284,22 @@ def t_auto_reconnect():
     return back, "back on the server" if back else "not back after 15 s"
 
 
+def t_auto_afk():
+    # Polled in steps, since the delay is real time and a client in the background ticks slower.
+    def polled(ticks):
+        return [step for _ in range(ticks // 6) for step in ("wait 6", "status")]
+    # Standing still for the delay (10 s): the sneak tap comes.
+    reset()
+    client(".set auto_afk swing true", ".set auto_afk sneak true", ".set auto_afk delay 10")
+    idle = client(".toggle auto_afk on", *polled(300), ".toggle auto_afk off", timeout=60)
+    # Walking for longer than the delay, there and back: no tap.
+    reset(x=982.5)
+    walked = client(".toggle auto_afk on", "hold forward 180", *polled(180), "look 90 0", "hold forward 180", *polled(180), "release", ".toggle auto_afk off", timeout=60)
+    tapped, stayed = "sneaking=true" in idle, "sneaking=true" not in walked
+    bad = flags()
+    return tapped and stayed and not bad, f"tapped when idle={tapped}, none while walking={stayed}, flags={bad}"
+
+
 def t_offhand():
     reset()
     cmd(f"item replace entity {P} inventory.5 with totem_of_undying")
@@ -1976,6 +1992,7 @@ TESTS = [
     ("no_slow webs", t_no_slow_webs),
     ("no_slow webs after a tap", t_no_slow_webs_after_tap),
     ("auto_reconnect", t_auto_reconnect),
+    ("auto_afk", t_auto_afk),
     ("offhand", t_offhand),
     ("auto_armor", t_auto_armor),
     ("offhand sprinting", t_offhand_sprinting),
