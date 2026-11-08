@@ -287,6 +287,13 @@ public class Recast extends GlideMode {
 	private double laneY = Double.NaN;
 	/** Baritone found no way past this obstacle; mine or fill instead until bouncing goes on. */
 	private boolean baritoneFailed;
+	/** The hand-off running is for being stuck, not for anything seen in the lane. */
+	private boolean stuckHandoff;
+	/** Where Baritone couldn't get you past being stuck, with the lane looking clear; ticks waited there. */
+	private @Nullable Vec3 stuckAt;
+	private int stuckWait;
+	/** Setbacks during the hand-off since it last got closer. */
+	private int pathSetbacks;
 	private int pauseTicks;
 	private double groundY;
 	/** Ticks since you last touched the ground, and on the ground since you landed. */
@@ -367,6 +374,11 @@ public class Recast extends GlideMode {
 	private static final double HANDOFF_MIN_AHEAD = 2;
 	/** With Baritone: ticks without getting closer, and without Baritone going, that mean it can't get there. */
 	private static final int PATH_STALL = 300, PATH_START = 40;
+	/** With Baritone: setbacks without getting closer that mean it's walking into something it can't see. */
+	private static final int PATH_SETBACKS = 10;
+	/** Stuck where Baritone couldn't help and the lane looks clear: ticks before trying again, and how far away counts as having left. */
+	private static final int STUCK_RETRY = 1200;
+	private static final double STUCK_LEFT = 3;
 	/** How far along the lane you were each of the last {@link #STUCK_TICKS} ticks spent trying to move. */
 	private final double[] progress = new double[STUCK_TICKS];
 	private int progressCount;
@@ -391,7 +403,8 @@ public class Recast extends GlideMode {
 		if (h != null) h.cancel();
 		state = State.IDLE;
 		groundY = Double.NaN;
-		wantJump = wantForward = wantSneak = forcedBlock = warned = baritoneFailed = false;
+		wantJump = wantForward = wantSneak = forcedBlock = warned = baritoneFailed = stuckHandoff = false;
+		stuckAt = null;
 		laneY = Double.NaN;
 		letGo();
 		putElytraBack();
@@ -548,6 +561,17 @@ public class Recast extends GlideMode {
 		// Seen far off, it isn't dealt with yet: the bounce goes on while a stop begun later would still end short of it.
 		// Whatever is past it is Baritone's to walk, the slow part, so the nearer it stops, the better.
 		if (ahead != null && state == State.BOUNCING && !terrain() && stopsShortOf(ahead)) ahead = null;
+		if (stuckAt != null) {
+			// A block only the server has (a ghost of air) looks clear from here, so bouncing on would only run into it,
+			// hand over and fail again, for ever. Wait, trying again now and then, until it shows or you've left.
+			if (ahead == null && ++stuckWait < STUCK_RETRY && mc.player.position().distanceTo(stuckAt) < STUCK_LEFT) {
+				stand();
+				state = State.BLOCKED;
+				return;
+			}
+			stuckAt = null;
+			baritoneFailed = false;
+		}
 		if (ahead != null) {
 			handleObstacle(ahead);
 			return;
@@ -777,8 +801,10 @@ public class Recast extends GlideMode {
 			}
 			case STUCK -> {
 				forcedBlock = false;
-				if (baritone) handOff(1, "Stuck (or set back over and over)");
-				else blocked("Stuck (or set back over and over)");
+				if (baritone) {
+					stuckHandoff = true;
+					handOff(1, "Stuck (or set back over and over)");
+				} else blocked("Stuck (or set back over and over)");
 			}
 			case OFF_LANE -> {
 				if (baritone) handOff(0, "Off the highway");
@@ -1010,6 +1036,7 @@ public class Recast extends GlideMode {
 	 */
 	private void countSetback() {
 		long now = mc.level.getGameTime();
+		if (state == State.PATHING) pathSetbacks++;
 		setbacks.addLast(now);
 		while (!setbacks.isEmpty() && now - setbacks.peekFirst() > SETBACK_WINDOW) setbacks.removeFirst();
 		if (setbacks.size() >= SETBACK_LIMIT && state == State.BOUNCING) {
@@ -1078,6 +1105,7 @@ public class Recast extends GlideMode {
 		Vec3 target = clearSpotPast(along(mc.player.position()) + Math.max(distance, HANDOFF_MIN_AHEAD));
 		if (target == null) {
 			baritoneFailed = true;
+			if (stuckHandoff) holdStuck();
 			blocked(why + " and there's nowhere to bounce from past it");
 			return;
 		}
@@ -1121,6 +1149,12 @@ public class Recast extends GlideMode {
 		breakBefore = placeBefore = throwawayBefore = avoidBefore = null;
 	}
 
+	private void holdStuck() {
+		stuckHandoff = false;
+		stuckAt = mc.player.position();
+		stuckWait = 0;
+	}
+
 	/** Standing well to the side of the lane's line, or below its height. */
 	private boolean offLane() {
 		Vec3 pos = mc.player.position();
@@ -1140,7 +1174,15 @@ public class Recast extends GlideMode {
 		if (h == null || h.state().isActive()) return;
 		handoff = null;
 		// Done without moving you: it can't take you anywhere this obstacle isn't, so handing over again would only repeat.
-		if (h.state() == Job.State.DONE && mc.player.position().distanceTo(handoffFrom) < 1) baritoneFailed = true;
+		boolean nowhere = h.state() == Job.State.DONE && mc.player.position().distanceTo(handoffFrom) < 1;
+		if (nowhere) baritoneFailed = true;
+		if (stuckHandoff && (nowhere || h.state() == Job.State.FAILED)) {
+			baritoneFailed = true;
+			holdStuck();
+			blocked("Stuck on something the game isn't showing (a ghost block?), and Baritone can't get past");
+			return;
+		}
+		stuckHandoff = false;
 		if (h.state() == Job.State.DONE) {
 			// As the lane was fixed: along it, the camera's own way round so it doesn't spin.
 			mc.player.setYRot(mc.player.getYRot() + Mth.wrapDegrees(lane - mc.player.getYRot()));
@@ -1181,6 +1223,7 @@ public class Recast extends GlideMode {
 
 		@Override
 		public void start(JobContext ctx) {
+			pathSetbacks = 0;
 			refused = !Baritone.pathTo(Mth.floor(target.x), Mth.floor(target.y + 0.1), Mth.floor(target.z));
 		}
 
@@ -1199,10 +1242,11 @@ public class Recast extends GlideMode {
 			if (left < best - 0.5) {
 				best = left;
 				stall = 0;
+				pathSetbacks = 0;
 			}
 			// Give the pathfinder a moment to start (or to work out the next stretch) before taking it as having stopped.
 			idle = Baritone.isPathing() ? 0 : idle + 1;
-			if (++stall < PATH_STALL && idle < PATH_START) return Progress.running();
+			if (++stall < PATH_STALL && idle < PATH_START && pathSetbacks < PATH_SETBACKS) return Progress.running();
 			Baritone.stop();
 			return Progress.failed(Why.of(Why.BLOCKED, "Baritone couldn't get past"));
 		}
@@ -1761,7 +1805,8 @@ public class Recast extends GlideMode {
 	}
 
 	private boolean loaded(Vec3 pos) {
-		return mc.level.hasChunk(SectionPos.blockToSectionCoord(pos.x), SectionPos.blockToSectionCoord(pos.z));
+		// The chunk source's answer: ClientLevel's own hasChunk is always true.
+		return mc.level.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(pos.x), SectionPos.blockToSectionCoord(pos.z));
 	}
 
 	/**

@@ -404,7 +404,7 @@ public class BaritoneSettings extends Module {
 
 		/** Where a column goal stands: the ground there if its chunk is loaded, else your own height. */
 		private double columnFloor(int x, int z) {
-			if (mc.level.hasChunk(x >> 4, z >> 4)) return mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
+			if (mc.level.getChunkSource().hasChunk(x >> 4, z >> 4)) return mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
 			return mc.player.getY();
 		}
 

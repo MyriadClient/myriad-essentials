@@ -3,6 +3,18 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.7.1
+
+Needs Myriad 1.3.0.
+
+- **Recast no longer fights Baritone over a block it can't see.** A ghost block (one the server has and your game shows
+  as air) looked like a clear lane: Recast bounced into it, was set back, handed over to Baritone, which couldn't
+  get through either, and then started again, for as long as you left it on. Now Baritone gets one try, stopped sooner
+  if it's only being set back, and Recast says what's wrong and waits. It tries again once a minute, and goes on at
+  once if the block shows up or you move away. If Blocked applies as usual.
+- **Recast waits for chunks that haven't arrived.** Its check for them never fired, because Minecraft's `hasChunk` always
+  says yes on the client. Baritone Settings' floor check had the same problem.
+
 ## 1.7.0
 
 Needs Myriad 1.3.0.
