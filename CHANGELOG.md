@@ -3,6 +3,25 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.8.0
+
+Needs Myriad 1.6.0.
+
+- **Extra Tab is drawn by Myriad and no longer costs your frame rate.** It adjusted Minecraft's list, whose work grows
+  with every row, every frame: sorting, measuring and laying out each name, and placing thousands of separate pieces.
+  It's now one rounded panel in your theme (a flat, Minecraft-style one with Themed Screens off), worked out once a tick
+  and drawn in a handful of batches, with every face in one texture. With 1000 made-up players and their own skins, Tab
+  held, same machine and world: 18.2 ms a frame (55 FPS) before, 1.8 to 3.4 ms (290 to 545 FPS) after, over several runs;
+  with 200, 3.3 ms before, 1.9 to 2.0 ms after (0.8 to 1.2 ms with the list closed). Names keep their colours but not bold or italic.
+- **Extra Tab: choose what's shown.** Heads, ping (off, bars or number) and the server's score can each be turned off,
+  beside the header and footer. Sort is new: the server's order, friends first (you, friends, then enemies), by name or by
+  ping. Enemies (`.enemy`) are picked out in their own colour. If the columns run out of room, more rows are fitted in,
+  and what still doesn't fit shows as "+N more". The list covers HUD elements instead of being covered by them.
+- **Module List: Line Spacing.** Extra room between the lines, the background kept whole.
+- **Chat's Shown no longer turns chat off in Minecraft's settings.** Each setting of it was also copied to Minecraft's own
+  Chat option, and with that on Hidden a server ignores your commands. Shown now only changes what you see. If it had
+  left Minecraft's option off, it's turned back on, once.
+
 ## 1.7.1
 
 Needs Myriad 1.3.0.

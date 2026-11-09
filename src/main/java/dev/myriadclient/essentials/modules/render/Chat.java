@@ -33,10 +33,11 @@ import java.util.regex.PatternSyntaxException;
 
 /**
  * Chat as you want it: in the theme's font and colours, filtered, repeats stacked, more of it kept. What Minecraft's own
- * Chat Settings have (size, width, heights, opacities, line spacing, what's shown) is kept in step with them while it's
- * on, each tick: a change on either side is copied to the other, so they're the same setting seen in two places. The
- * rest is the module's own, read by the chat mixins (ChatComponentMixin, ChatBackgroundMixin, ChatTextShadowMixin).
- * Off, chat is Minecraft's.
+ * Chat Settings have (size, width, heights, opacities, line spacing) is kept in step with them while it's on, each
+ * tick: a change on either side is copied to the other, so they're the same setting seen in two places. The rest is the
+ * module's own, read by the chat mixins (ChatComponentMixin, ChatBackgroundMixin, ChatTextShadowMixin). That includes
+ * what's shown, which only changes what you see: Minecraft's own Chat option also tells the server, which then ignores
+ * your commands. Off, chat is Minecraft's.
  * <p>
  * It was part of Myriad core's theme preferences until core 1.3: the first time it loads, it takes what you had set
  * there, and turns on, so chat looks as it did.
@@ -74,7 +75,7 @@ public class Chat extends Module {
 	public final BoolSetting shadow = sgLook.bool("Text Shadow").defaultValue(true).build();
 
 	private final SettingGroup sgMessages = settings.group("Messages");
-	public final EnumSetting<Shown> shown = sgMessages.oneOf("Shown", Shown.ALL).description("All messages; all, only while chat is open; "
+	public final EnumSetting<Shown> shown = sgMessages.oneOf("Shown", Shown.ALL).description("What you see, not what you can send: all messages; all, only while chat is open; "
 		+ "only commands' answers (no player chat, also a server's own <name> lines, as 2b2t sends chat); or none.").onChanged(v -> rescale()).build();
 	public final StringListSetting filters = sgMessages.stringList("Filters")
 		.description("Messages containing any of these are hidden (a pattern in /slashes/ is a regular expression; case doesn't matter).")
@@ -85,6 +86,8 @@ public class Chat extends Module {
 		.defaultValue(1000).range(100, 10000).build();
 	/** Whether what core's theme preferences had has been taken (see the class comment). */
 	private final BoolSetting carriedOver = sgMessages.bool("Carried Over").visible(() -> false).build();
+	/** Whether Minecraft's Chat option has been given back, once, after Shown stopped being kept in step with it. */
+	private final BoolSetting chatOptionFreed = sgMessages.bool("Chat Option Freed").visible(() -> false).build();
 
 	/** Chat is drawing (ChatComponentMixin): its text shadow and background follow the settings. */
 	public static boolean drawing;
@@ -92,7 +95,6 @@ public class Chat extends Module {
 	private final List<Link<?>> links = new ArrayList<>();
 	/** Each link's value here when last in step, to tell which side changed. */
 	private Object[] last = new Object[0];
-	private @Nullable Shown shownLast;
 	private int saveIn = -1;
 	private @Nullable List<String> filterSource;
 	private List<Pattern> patterns = List.of();
@@ -105,7 +107,6 @@ public class Chat extends Module {
 	@Override
 	protected void onEnable() {
 		last = new Object[links.size()];
-		shownLast = null;
 		rescale();
 	}
 
@@ -165,34 +166,25 @@ public class Chat extends Module {
 		if (links.isEmpty()) link();
 		boolean changed = false;
 		for (int i = 0; i < links.size(); i++) changed |= links.get(i).sync(mc.options, last, i);
-		changed |= syncShown(mc.options);
+		changed |= freeChatOption(mc.options);
 		if (changed) saveIn = SAVE_TICKS;
 		if (saveIn >= 0 && saveIn-- == 0) mc.options.save();
 	}
 
-	private boolean syncShown(Options o) {
-		Shown mine = shown.get();
-		Shown theirs = switch (o.chatVisibility().get()) {
-			case FULL -> Shown.ALL;
-			case SYSTEM -> Shown.COMMANDS_ONLY;
-			case HIDDEN -> Shown.HIDDEN;
-		};
-		if (shownLast == null) shownLast = mine;
-		if (mine != shownLast) {
-			o.chatVisibility().set(switch (mine) {
-				case ALL, WHILE_OPEN -> ChatVisiblity.FULL;
-				case COMMANDS_ONLY -> ChatVisiblity.SYSTEM;
-				case HIDDEN -> ChatVisiblity.HIDDEN;
-			});
-			shownLast = mine;
-			return true;
-		}
-		// Shown only while open is all of them to Minecraft.
-		if (theirs != mine && !(mine == Shown.WHILE_OPEN && theirs == Shown.ALL)) {
-			shown.set(theirs);
-			shownLast = theirs;
-		}
-		return false;
+	/**
+	 * Shown used to set Minecraft's Chat option too, and hiding chat there makes servers ignore your commands: if it
+	 * was left as Shown had set it, it goes back to on, once.
+	 */
+	private boolean freeChatOption(Options o) {
+		if (chatOptionFreed.get()) return false;
+		chatOptionFreed.set(true);
+		ChatVisiblity theirs = o.chatVisibility().get();
+		boolean setByShown = theirs == ChatVisiblity.SYSTEM && shown.get() == Shown.COMMANDS_ONLY || theirs == ChatVisiblity.HIDDEN && shown.get() == Shown.HIDDEN;
+		if (!setByShown) return false;
+		o.chatVisibility().set(ChatVisiblity.FULL);
+		// The server was told it's off when you joined.
+		o.broadcastOptions();
+		return true;
 	}
 
 	/** Chat's lines are split by the font and width they're drawn at, and shown by the filters: split again. */
@@ -265,12 +257,13 @@ public class Chat extends Module {
 	}
 
 	/**
-	 * Whether {@code message} is shown: none of the filters is in it, and with only commands' answers shown, it's no
-	 * player's chat (Minecraft hides signed chat then, but a server like 2b2t sends chat as its own lines).
+	 * Whether {@code message} is shown: chat isn't hidden, none of the filters is in it, and with only commands' answers
+	 * shown, it's no player's chat (also a server's own lines, as 2b2t sends chat).
 	 */
 	public static boolean shown(GuiMessage message) {
 		Chat m = on();
 		if (m == null) return true;
+		if (m.shown.get() == Shown.HIDDEN) return false;
 		String text = message.content().getString();
 		if (m.shown.get() == Shown.COMMANDS_ONLY && (message.source() == GuiMessageSource.PLAYER || CHAT_LINE.matcher(text).find())) return false;
 		List<Pattern> patterns = m.patterns();

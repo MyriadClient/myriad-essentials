@@ -7,6 +7,7 @@ import dev.myriadclient.api.render.Bezier;
 import dev.myriadclient.api.render.Canvas;
 import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.setting.BoolSetting;
+import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.ui.Rect;
 import dev.myriadclient.api.ui.hud.HudPanel;
@@ -30,6 +31,7 @@ public final class ModuleListPanel extends HudPanel {
 	private final EnumSetting<Sort> sort = sgGeneral.oneOf("Sort", Sort.WIDTH).build();
 	private final BoolSetting info = sgGeneral.bool("Show Info").description("Show each module's status text (mode, target, …).").defaultValue(true).build();
 	private final BoolSetting background = sgGeneral.bool("Background").defaultValue(true).build();
+	private final DoubleSetting lineSpacing = sgGeneral.decimal("Line Spacing").description("Extra room between the lines.").defaultValue(0).range(0, 10).decimals(1).build();
 
 	private final HudStyle style = new HudStyle(settings, HudStyle.Mode.GRADIENT, true);
 
@@ -37,6 +39,10 @@ public final class ModuleListPanel extends HudPanel {
 
 	public ModuleListPanel() {
 		super("Module List", "\uf03a");
+	}
+
+	private float spacing() {
+		return lineSpacing.get().floatValue();
 	}
 
 	private String info(Module m) {
@@ -68,7 +74,7 @@ public final class ModuleListPanel extends HudPanel {
 	@Override
 	public Rect preferredSize(Canvas c) {
 		float s = fontSize(c);
-		float lh = c.textHeight(FontFamily.SANS, s) + 2;
+		float lh = c.textHeight(FontFamily.SANS, s) + 2 + spacing();
 		float w = 40, h = 0;
 		for (Row r : rows(c)) {
 			w = Math.max(w, r.width + 4);
@@ -80,7 +86,9 @@ public final class ModuleListPanel extends HudPanel {
 	@Override
 	public void render(Canvas c, float w, float h, float mx, float my) {
 		float s = fontSize(c);
-		float lh = c.textHeight(FontFamily.SANS, s) + 2;
+		float gap = spacing();
+		float lh = c.textHeight(FontFamily.SANS, s) + 2 + gap;
+		float textY = 1 + gap / 2;
 		boolean right = alignRight();
 		List<Row> rows = rows(c);
 		float y = 0;
@@ -95,8 +103,8 @@ public final class ModuleListPanel extends HudPanel {
 				c.rect(x, y, rw, lh, 0x66000000);
 				c.rect(right ? x + rw - 1 : x, y, 1, lh, color);
 			}
-			float tx = x + 2 + HudStyle.draw(c, FontFamily.SANS, s, r.module.name(), x + 2, y + 1, color, style.shadow());
-			if (r.info != null) HudStyle.draw(c, FontFamily.SANS, s, r.info, tx, y + 1, style.label(), style.shadow());
+			float tx = x + 2 + HudStyle.draw(c, FontFamily.SANS, s, r.module.name(), x + 2, y + textY, color, style.shadow());
+			if (r.info != null) HudStyle.draw(c, FontFamily.SANS, s, r.info, tx, y + textY, style.label(), style.shadow());
 			c.pop();
 			y += lh * r.t;
 		}
