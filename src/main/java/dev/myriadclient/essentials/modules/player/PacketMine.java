@@ -24,6 +24,8 @@ import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Reach;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.world.InteractionHand;
 
@@ -62,6 +64,7 @@ public class PacketMine extends Module {
 	private static final RenderLook QUEUE_LOOK = RenderLook.of(HighlightStyle.OUTLINE.withOutlineWidth(1).withFill(HighlightStyle.Fill.DOTS).withFillOpacity(0.6f), 1);
 	/** The block Auto Rebreak watches: just outlined. */
 	private static final RenderLook REBREAK_LOOK = RenderLook.of(HighlightStyle.OUTLINE);
+	private static final double RENDER_INFLATE = 0.004;
 
 	private final SettingGroup sgRender = settings.group("Render");
 	private final ColorSetting startColor = sgRender.color("Start Color").description("The block being mined as it starts breaking; its opacity fades the whole look (fill, outline and glow).")
@@ -221,9 +224,15 @@ public class PacketMine extends Module {
 	private void onRender(RenderEvent e) {
 		for (BlockPos pos : mining) {
 			float progress = Myriad.breaking().progress(pos);
-			if (progress == 0) e.block(pos, QUEUE_LOOK, queueColor.argb());
-			else e.block(pos, miningLook, ColorUtil.lerp(startColor.argb(), endColor.argb(), progress));
+			if (progress == 0) e.box(renderBox(pos), QUEUE_LOOK, queueColor.argb());
+			else e.box(renderBox(pos), miningLook, ColorUtil.lerp(startColor.argb(), endColor.argb(), progress));
 		}
-		if (autoRebreak.get() && last != null && !mining.contains(last)) e.block(last, REBREAK_LOOK, rebreakColor.argb());
+		if (autoRebreak.get() && last != null && !mining.contains(last)) e.box(renderBox(last), REBREAK_LOOK, rebreakColor.argb());
+	}
+
+	/** The block's outline, a hair larger: exactly on an ESP's box of the same block, the two flicker through each other. */
+	private AABB renderBox(BlockPos pos) {
+		VoxelShape shape = mc.level.getBlockState(pos).getShape(mc.level, pos);
+		return (shape.isEmpty() ? new AABB(pos) : shape.bounds().move(pos)).inflate(RENDER_INFLATE);
 	}
 }

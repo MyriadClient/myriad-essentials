@@ -33,6 +33,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -43,7 +44,7 @@ import java.util.function.Supplier;
  * armour is about to break, when a player you haven't friended or an entity you picked comes close, or when a bed,
  * respawn anchor, end crystal or creeper nearby could kill you; or where you are: below or above a height (Hard Deck), or
  * near a spot, given by coordinates or one of your map's waypoints (Destination), for leaving a flight or a walk running
- * to somewhere. The disconnect screen says why. Singleplayer is left alone.
+ * to somewhere. The disconnect screen says why. Singleplayer and 2b2t's queue are left alone.
  * <p>
  * Falls aren't among the reasons: the server keeps you where you were, falling, and you'd land as you rejoined. The
  * same goes for leaving in the air by Hard Deck or Destination: you're in the air when you rejoin.
@@ -60,6 +61,8 @@ public class AutoDisconnect extends Module {
 	public enum Target {
 		COORDS, WAYPOINT
 	}
+
+	private static final Vec3 QUEUE_SPOT = new Vec3(0.5, 64, 0.5);
 
 	private long leftAt;
 
@@ -198,7 +201,7 @@ public class AutoDisconnect extends Module {
 
 	@Subscribe
 	private void onTick(TickEvent.Post e) {
-		if (!inGame() || mc.player.isCreative() || mc.player.isSpectator() || mc.isLocalServer() || mc.getConnection() == null) return;
+		if (!inGame() || mc.player.isCreative() || mc.player.isSpectator() || mc.isLocalServer() || mc.getConnection() == null || inQueue()) return;
 		String leaveFor = null, leaveKey = null;
 		for (Map.Entry<String, Trigger> t : triggers.entrySet()) {
 			String reason = t.getValue().enabled.getAsBoolean() ? t.getValue().check.get() : null;
@@ -211,6 +214,12 @@ public class AutoDisconnect extends Module {
 			}
 		}
 		if (leaveFor != null) leave(leaveKey, leaveFor);
+	}
+
+	/** In 2b2t's queue: a world of its own that holds you at 0, 64, 0 until your turn. Nothing there can hurt you. */
+	private boolean inQueue() {
+		var server = mc.getCurrentServer();
+		return server != null && server.ip.toLowerCase(Locale.ROOT).contains("2b2t.org") && mc.player.position().distanceTo(QUEUE_SPOT) < 1;
 	}
 
 	private @Nullable String wornOut() {

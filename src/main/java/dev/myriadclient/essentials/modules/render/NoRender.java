@@ -68,7 +68,7 @@ public class NoRender extends Module {
 		updateFilters();
 		reload();
 	}).build();
-	public final BoolSetting textureRotations = sgWorld.bool("Texture Rotations").description("Remove random block offsets (flowers, grass), which can leak coordinates.")
+	public final BoolSetting textureRotations = sgWorld.bool("Texture Rotations").description("The same texture turn on every block (stone, dirt...) and no random offsets (flowers, grass): both can leak coordinates.")
 		.onChanged(v -> reload()).build();
 
 	public NoRender() {

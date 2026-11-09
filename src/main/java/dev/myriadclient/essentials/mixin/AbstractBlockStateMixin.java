@@ -16,4 +16,10 @@ public abstract class AbstractBlockStateMixin {
 	private void essentials$noOffset(BlockPos pos, CallbackInfoReturnable<Vec3> cir) {
 		if (NoRender.hides(n -> n.textureRotations)) cir.setReturnValue(Vec3.ZERO);
 	}
+
+	/** No Render: every block picks the same of its model's random variants (which way stone or dirt is turned reveals where it is). */
+	@Inject(method = "getSeed", at = @At("HEAD"), cancellable = true)
+	private void essentials$noRotation(BlockPos pos, CallbackInfoReturnable<Long> cir) {
+		if (NoRender.hides(n -> n.textureRotations)) cir.setReturnValue(0L);
+	}
 }

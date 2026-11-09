@@ -148,6 +148,11 @@ public class BlockESP extends Module {
 		e.chunks(found);
 	}
 
+	/** Whether blocks like this are among those picked. */
+	public boolean shows(BlockState state) {
+		return blocks.get().contains(state.getBlock());
+	}
+
 	/** Calls {@code out} with every block being shown and its colour (for Tracers). Nothing while this module is off. */
 	public void forEachShown(BiConsumer<BlockPos, Integer> out) {
 		if (!isEnabled() || !inGame()) return;

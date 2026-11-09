@@ -5,6 +5,7 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.PreviewEvent;
 import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.setting.ColorSetting;
@@ -85,6 +86,10 @@ public class BlockHighlight extends Module {
 	@Subscribe(inGame = true)
 	private void onRender(RenderEvent e) {
 		BlockPos pos = target();
-		if (pos != null) e.below().block(pos, look, color.argb());
+		if (pos == null) return;
+		// A block Block ESP is showing keeps that look.
+		BlockESP esp = Modules.active(BlockESP.class);
+		if (esp != null && esp.shows(mc.level.getBlockState(pos))) return;
+		e.below().block(pos, look, color.argb());
 	}
 }

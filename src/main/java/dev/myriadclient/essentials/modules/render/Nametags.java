@@ -47,6 +47,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Readable name tags, drawn through walls:
@@ -93,6 +94,17 @@ public class Nametags extends Module {
 	private final BoolSetting mobs = sgOthers.bool("Mobs").description("Name and health over mobs.").build();
 	private final BoolSetting items = sgOthers.bool("Items").description("Names and counts over dropped items.").defaultValue(true).build();
 	private final BoolSetting groupItems = sgOthers.bool("Group Items").description("One tag per item type for items lying together.").defaultValue(true).visible(items::get).build();
+	/** Vanilla's: how many ticks an item lies on the ground. */
+	private static final int ITEM_LIFETIME = 6000;
+	/** First seen this young and moving faster than a tick of gravity, an item has just been dropped, and its age here is its age. */
+	private static final int ITEM_JUST_DROPPED_TICKS = 10;
+	private static final double ITEM_MOVING_SQR = 0.0036;
+	/** The game time each item despawns at, worked out once when it's first seen; {@link #AGE_UNKNOWN} if it wasn't seen dropped. */
+	private final Map<ItemEntity, Long> despawnsAt = new WeakHashMap<>();
+	private static final long AGE_UNKNOWN = -1;
+	private final BoolSetting despawnTimer = sgOthers.bool("Despawn Timer")
+		.description("How long until an item despawns, for items you saw dropped. One already lying there when you arrived shows none: the server doesn't say how old it is.")
+		.visible(items::get).build();
 	/** Rows a pile of items shows at most, the last saying how many more kinds there are. */
 	private static final int MAX_ITEM_ROWS = 8;
 	private final DoubleSetting itemRange = sgOthers.decimal("Item Range").defaultValue(32).range(1, 128).decimals(0).visible(items::get).build();
@@ -329,9 +341,12 @@ public class Nametags extends Module {
 			// (spaced in the world, a big pile's column stood blocks tall, far from what it named).
 			Map<String, Integer> counts = new LinkedHashMap<>();
 			Map<String, ItemStack> icons = new LinkedHashMap<>();
+			Map<String, Long> soonest = new LinkedHashMap<>();
 			for (ItemEntity it : g) {
 				String name = it.getItem().getHoverName().getString();
 				counts.merge(name, it.getItem().getCount(), Integer::sum);
+				// Any of them of unknown age, and none of the row's time can be trusted.
+				if (despawnTimer.get()) soonest.merge(name, despawnsAt(it), (a, b) -> a == AGE_UNKNOWN || b == AGE_UNKNOWN ? AGE_UNKNOWN : Math.min(a, b));
 				icons.putIfAbsent(name, it.getItem().copyWithCount(1));
 			}
 			List<Map.Entry<String, Integer>> rows = new ArrayList<>(counts.entrySet());
@@ -342,6 +357,8 @@ public class Nametags extends Module {
 				Map.Entry<String, Integer> en = rows.get(i);
 				boolean more = i == MAX_ITEM_ROWS - 1 && rows.size() > MAX_ITEM_ROWS;
 				String text = more ? "+" + (rows.size() - i) + " more" : en.getValue() > 1 ? en.getKey() + " x" + en.getValue() : en.getKey();
+				Long end = soonest.get(en.getKey());
+				if (!more && end != null && end != AGE_UNKNOWN) text += "  " + timeLeft(end);
 				List<WorldLabel.Segment> segments = more ? List.of(new WorldLabel.Segment(text, nameColor.argb()))
 					: List.of(WorldLabel.Segment.item(icons.get(en.getKey())), new WorldLabel.Segment(text, nameColor.argb()));
 				c.push();
@@ -352,6 +369,17 @@ public class Nametags extends Module {
 				lift += placed.height() + 1;
 			}
 		}
+	}
+
+	private long despawnsAt(ItemEntity item) {
+		return despawnsAt.computeIfAbsent(item, it -> it.getAge() <= ITEM_JUST_DROPPED_TICKS && it.getDeltaMovement().lengthSqr() > ITEM_MOVING_SQR
+			? mc.level.getGameTime() - it.getAge() + ITEM_LIFETIME : AGE_UNKNOWN);
+	}
+
+	/** What's left until game time {@code end}, as minutes and seconds. */
+	private String timeLeft(long end) {
+		long seconds = Math.max(0, end - mc.level.getGameTime()) / 20;
+		return seconds / 60 + (seconds % 60 < 10 ? ":0" : ":") + seconds % 60;
 	}
 
 	private WorldLabel.@Nullable Placed label(Canvas c, Vec3 at, List<WorldLabel.Segment> segments) {

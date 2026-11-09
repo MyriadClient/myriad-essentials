@@ -214,6 +214,18 @@ public class Recast extends GlideMode {
 	 * most of it).
 	 */
 	private static final double STAND_OFF = 3, UNLOADED_STAND_OFF = 6, SLIDE_TICKS = 4;
+	/** Chunks ahead: how far to count them, the ticks of flight (this hop and a stop from the next) and the road beyond them to keep. */
+	private static final double ROAD_MAX = 192, ROAD_STOP_TICKS = 15, ROAD_CUSHION = 14;
+	/** The most extra ticks a landing stays on the ground, and how many ticks of travel short of the road each costs. */
+	private static final int PACE_MAX_TICKS = 3;
+	private static final double PACE_TICKS_SHORT = 4;
+	/**
+	 * How fast the server is sending the road: the end of what's loaded, sampled this often over this long (ticks), and not
+	 * judged from less than the third; how far past that speed still counts as keeping up (blocks a tick), and the extra
+	 * ticks on the ground each block a tick of outrunning it costs.
+	 */
+	private static final int ROAD_SAMPLE_TICKS = 4, ROAD_WINDOW_TICKS = 50, ROAD_MIN_SPAN_TICKS = 24;
+	private static final double ROAD_SPEED_MARGIN = 0.25, PACE_TICKS_OVER = 2;
 	/** How far to look for a way out of a nether portal you stand in, in blocks. */
 	private static final double PORTAL_EXIT = 3;
 	/**
@@ -245,8 +257,19 @@ public class Recast extends GlideMode {
 	 * longer (in steps of this) rather than coming back between.
 	 */
 	private static final double ROUND_GAIN = 0.25, ROUND_MAX_SPEED = 0.5, ROUND_DAMPING = 2, ROUND_FROM = 1, ROUND_MARGIN = 0.05,
-		ROUND_SLACK = 0.1, ROUND_CLEARANCE = 1.5, ROUND_EASE = 0.15, ROUND_MAX_ACROSS = 0.4, ROUND_MAX_HOLD = 24, ROUND_HOLD_STEP = 2, ROUND_PLAN_SPEED = 2.5, ROUND_MAX_SIDE = 2.5, ROUND_STEP = 0.05, ROUND_LOOK_AHEAD = 56;
+		ROUND_SLACK = 0.1, ROUND_CLEARANCE = 1.5, ROUND_EASE = 0.15, ROUND_MAX_ACROSS = 0.4, ROUND_MAX_HOLD = 24, ROUND_HOLD_STEP = 2, ROUND_PLAN_SPEED = 2.5, ROUND_MAX_SIDE = 3, ROUND_STEP = 0.05, ROUND_LOOK_AHEAD = 56;
 	private static final float ROUND_MAX_TURN = 20;
+	/** Going round a low ceiling, this much more each side: a near miss the glide never feels is a hit to a standing hitbox. */
+	private static final double ROUND_CEILING_MARGIN = 0.3;
+	/** Above this speed (blocks a tick), this much more room each side for every block a tick faster. */
+	private static final double ROUND_FAST = 3, ROUND_FAST_MARGIN = 0.1;
+	/** Fast, more room each side when planning a way round than it takes to keep to it: the room wanted grows with the speed. */
+	private static final double ROUND_PLAN_ROOM = 0.15;
+	/** Going along a rail: the room kept from it, how far beyond the hitbox it's looked for, and how high it has to reach. */
+	private static final double ROUND_RAIL_ROOM = 0.02, ROUND_RAIL_PROBE = 0.1, ROUND_RAIL_HEIGHT = 0.5;
+	/** Looking for a way round: how many ticks before it's needed, how far apart the sides that get the full look, and how many. */
+	private static final double ROUND_PLAN_EARLY = 4, ROUND_TRY_STEP = 0.2, ROUND_STOP_TICKS = 16;
+	private static final int ROUND_MAX_TRIES = 6, ROUND_MAX_MORE = 3;
 	/**
 	 * How much larger the half of a move that goes first is made, so a slightly different glide doesn't swap them; and
 	 * the most the yaw is turned for it, for a tick: enough to swap the halves while steering back to the line (about
@@ -298,6 +321,12 @@ public class Recast extends GlideMode {
 	private double groundY;
 	/** Ticks since you last touched the ground, and on the ground since you landed. */
 	private int airTicks, groundTicks;
+	/** Extra ticks on the ground this landing, to let the chunks ahead catch up (see {@link #paceTicks}). */
+	private int paceTicks;
+	/** The end of the loaded road along the lane, and the game time, oldest first (see {@link #roadSpeed}). */
+	private final ArrayDeque<double[]> roadEnds = new ArrayDeque<>();
+	/** This stop is for chunks that haven't come: if they do first, it's called off (see the tick). */
+	private boolean brakingForChunks;
 	/** The last hop's ticks in the air and on the ground (the jump's tick the last of them): the ones ahead are the same. */
 	private int hopAir = HOP_TICKS - 1, hopGround = 1;
 	/** The pitch this tick of the bounce was flown at. */
@@ -331,9 +360,15 @@ public class Recast extends GlideMode {
 	/**
 	 * Steering round something: off the line by {@code side} from {@code in} to {@code out} along the lane, eased out to
 	 * it from {@code from} (where you were) starting at {@code start}, and back onto the line by {@code end}. As little
-	 * and as briefly as goes round it.
+	 * and as briefly as goes round it. All the way clear to {@code top} over the floor: standing height, or the top of a
+	 * jump going round a low ceiling.
 	 */
-	private record Round(double from, double side, double start, double in, double out, double end) {
+	private record Round(double from, double side, double start, double in, double out, double end, double top, double margin, boolean hugsRail) {
+		/** The same way with less room each side: what it was planned with keeps it from being given up over a tick's change of speed. */
+		Round kept() {
+			return new Round(from, side, start, in, out, end, top, Math.max(0, margin - ROUND_PLAN_ROOM), hugsRail);
+		}
+
 		double offAt(double a) {
 			if (a <= start) return from;
 			if (a >= end) return 0;
@@ -397,6 +432,7 @@ public class Recast extends GlideMode {
 
 	@Override
 	protected void resetFlight() {
+		roadEnds.clear();
 		Job<Void> h = handoff;
 		handoff = null;
 		// Its cancel stops Baritone, and puts Baritone's settings back as it ends.
@@ -462,7 +498,7 @@ public class Recast extends GlideMode {
 		return holdGlide && !yieldSprint && p != null && p.getFoodData().hasEnoughFood() && !p.hasEffect(MobEffects.BLINDNESS);
 	}
 
-	/** In the air with a click waiting, sprint is let go of for it (see {@link #holdsSprint}). */
+	/** In the air with a click waiting, sprint is let go of (see {@link #holdsSprint}). */
 	private boolean yieldSprint;
 
 	/** Whether it has you on foot for now (walking round or clearing something, waiting): no gliding meanwhile. */
@@ -560,7 +596,9 @@ public class Recast extends GlideMode {
 		else round = null;
 		// Seen far off, it isn't dealt with yet: the bounce goes on while a stop begun later would still end short of it.
 		// Whatever is past it is Baritone's to walk, the slow part, so the nearer it stops, the better.
-		if (ahead != null && state == State.BOUNCING && !terrain() && stopsShortOf(ahead)) ahead = null;
+		// Chunks that come while you're still stopping for them: called off from the ground, at what speed the landing left.
+		boolean callOff = state == State.BRAKING && brakingForChunks && mc.player.onGround();
+		if (ahead != null && (state == State.BOUNCING || callOff) && !terrain() && stopsShortOf(ahead)) ahead = null;
 		if (stuckAt != null) {
 			// A block only the server has (a ghost of air) looks clear from here, so bouncing on would only run into it,
 			// hand over and fail again, for ever. Wait, trying again now and then, until it shows or you've left.
@@ -578,9 +616,10 @@ public class Recast extends GlideMode {
 		}
 		// A stop once begun is finished before bouncing goes on: braking's dive isn't a hop, so where the hops would come
 		// down isn't known again until you stand.
-		if (state == State.BRAKING && !brake()) return;
+		if (state == State.BRAKING && !callOff && !brake()) return;
 		if (state != State.BOUNCING && !readyToBounce()) return;
 		if (state != State.BOUNCING) {
+			brakingForChunks = false;
 			stopMining();
 			Myriad.placement().cancel(this);
 			state = State.BOUNCING;
@@ -624,6 +663,7 @@ public class Recast extends GlideMode {
 
 	/** One tick of the bounce itself. */
 	private void bounce() {
+		sampleRoad();
 		Myriad.elytra().glideHold().arm(this);
 		// Vanilla waits 10 ticks between held jumps; jump the tick you touch down.
 		Interactions.setJumpCooldown(0);
@@ -637,6 +677,7 @@ public class Recast extends GlideMode {
 		if (ground) {
 			hopStarted = false;
 			groundY = mc.player.getY();
+			if (groundTicks == 1) paceTicks = paceTicks();
 		}
 		Hop hop = hop(ground);
 		flownPitch = hop.pitch();
@@ -676,7 +717,13 @@ public class Recast extends GlideMode {
 		// the server's glide of a tick says it glides and then that it stopped a tick apart, and a start between the two
 		// would be a second start to Grim.
 		boolean answered = !late && AntiCheat.inEffect().simulatesGlide() || Myriad.elytra().glideHold().stoppedSinceStart(this);
-		if (cleared && answered && !ground && airTicks >= 2 && (exposed || settled && startDue)) {
+		if (late && exposed && !ground) {
+			// Grim already has the glide stopped, and a start this far through a hop is set back (2b2t, live): the rest of
+			// the hop goes as the fall it expects, and the next landing starts again as usual.
+			Myriad.elytra().glideHold().release(this);
+			holdGlide = false;
+			mc.player.stopFallFlying();
+		} else if (cleared && answered && !ground && airTicks >= 2 && (exposed || settled && startDue)) {
 			// The server stopped the glide (at the landing, or when the chestplate went on) and the client kept it up:
 			// start it again now you're back in the air, the held ping answers first (on the tick jump goes down) so
 			// Grim sees the stop, then the start.
@@ -717,7 +764,7 @@ public class Recast extends GlideMode {
 	/** This tick of the bounce: Recast's own, unless a {@link #HOP} hook flies it differently. */
 	private Hop hop(boolean ground) {
 		float pitch = mc.player.getDeltaMovement().y > DIVE_UNTIL_Y && !climbing() ? 90 : 4;
-		Hop asked = new Hop(ground, groundTicks, airTicks, groundY, laneDir(), terrain(), pitch, true, false, cornerSafe(steeredYaw(), ground));
+		Hop asked = new Hop(ground, groundTicks, airTicks, groundY, laneDir(), terrain(), pitch, !ground || groundTicks > paceTicks, false, cornerSafe(steeredYaw(), ground));
 		if (!HOP.hooked()) return asked;
 		Hop hooked = HOP.call(this, asked, h -> h);
 		return hooked != null ? hooked : asked;
@@ -753,6 +800,7 @@ public class Recast extends GlideMode {
 		if (state == State.BOUNCING || state == State.BRAKING) {
 			if (!brake()) {
 				state = State.BRAKING;
+				brakingForChunks = ahead.hazard() == Hazard.UNLOADED;
 				return;
 			}
 		}
@@ -1359,9 +1407,10 @@ public class Recast extends GlideMode {
 	private @Nullable Obstruction steerRound(@Nullable Obstruction ahead, double range) {
 		double a = along(mc.player.position()), speed = Math.max(0.5, mc.player.getDeltaMovement().horizontalDistance());
 		if (round != null && a >= round.end()) round = null;
-		boolean roundable = ahead != null && (ahead.hazard() == Hazard.BLOCKS || ahead.hazard() == Hazard.HOLE);
+		// Round a low ceiling only where a hook flies the hops: Recast's own walk under it, which is flagged less.
+		boolean roundable = ahead != null && (ahead.hazard() == Hazard.BLOCKS || ahead.hazard() == Hazard.HOLE || ahead.hazard() == Hazard.CEILING && HOP.hooked());
 		if (round != null) {
-			if (roundClear(round, speed, 0)) {
+			if (roundClear(round.kept(), speed, 0)) {
 				if (ahead == null || a + ahead.distance() < round.end()) return null;
 				// Something further on: the way round it from where this one goes, without coming back to the line first.
 				Round next = roundable ? planRound(ahead, range, speed) : null;
@@ -1388,24 +1437,113 @@ public class Recast extends GlideMode {
 	 */
 	private @Nullable Round planRound(Obstruction ahead, double range, double speed) {
 		Vec3 pos = mc.player.position();
-		double a = along(pos), off = offLine(pos), near = a + ahead.distance(), far = obstacleEnd(ahead);
+		double a = along(pos), off = offLine(pos), near = a + ahead.distance(), far = obstacleEnd(ahead), top = ahead.hazard() == Hazard.CEILING ? JUMP_TOP : STAND_HEIGHT;
+		double margin = (speed > ROUND_FAST ? ROUND_PLAN_ROOM : 0) + (ahead.hazard() == Hazard.CEILING ? ROUND_CEILING_MARGIN : roundMargin(speed));
 		List<Double> sides = new ArrayList<>();
 		for (double s = -ROUND_MAX_SIDE; s <= ROUND_MAX_SIDE + 1e-6; s += ROUND_STEP) sides.add(s);
 		sides.sort(Comparator.comparingDouble((Double s) -> Math.abs(s)).thenComparingDouble(s -> Math.abs(s - off)));
+		double[] tried = new double[ROUND_MAX_TRIES];
+		int tries = 0;
+		boolean sideFound = false;
+		sides:
 		for (double s : sides) {
 			double in = near - ROUND_CLEARANCE, start = Math.max(a, in - easeLength(s - off, speed));
 			// Not far enough to ease across without turning harder than steering does.
 			if (in - start < easeLength(s - off, speed) * 0.75) continue;
-			// Cheaply first: beside it at this side all the way past it.
-			if (scanAhead(far + ROUND_CLEARANCE - a, s, ROUND_MARGIN, Vec3.ZERO) != null) continue;
-			// Back to the line just past it, or, where more is in the way soon after (a cluster, a second block
-			// further on), staying out at the side longer, past that too.
-			for (double out = far + ROUND_CLEARANCE; out <= far + ROUND_CLEARANCE + ROUND_MAX_HOLD; out += ROUND_HOLD_STEP) {
-				Round r = new Round(off, s, start, in, out, out + easeLength(s, speed));
-				if (roundSafe(r, speed, range, a)) return r;
+			// Cheapest first, for most sides end here: the stretch it takes up, at this side.
+			if (blockedBeside(ahead, s - off, near - a, far - a, top, margin)) continue;
+			// The nearest side that could do: nothing more to work out until it's nearly time to ease out to it, or to stop.
+			if (!sideFound && ahead.distance() > Math.max(easeLength(s - off, speed) + ROUND_PLAN_EARLY * speed, speed * ROUND_STOP_TICKS + UNLOADED_STAND_OFF)) return null;
+			sideFound = true;
+			// Sides next to each other pass or fail together: a few, well apart, get the full look.
+			for (int i = 0; i < tries; i++) if (Math.abs(s - tried[i]) < ROUND_TRY_STEP) continue sides;
+			if (tries == ROUND_MAX_TRIES) break;
+			tried[tries++] = s;
+			double firstOut = far + ROUND_CLEARANCE;
+			// Beside it at this side all the way past it, and whether there's more to stay out for after it.
+			Obstruction further = scanAhead(firstOut + ROUND_MAX_HOLD - a, s, margin, Vec3.ZERO);
+			if (further != null && a + further.distance() < firstOut) continue;
+			// Back to the line just past it; a little longer, as a tick's move is long when fast; or, where more stands on
+			// the line soon after (a cluster, a second block further on), past that too.
+			double out = firstOut;
+			for (int more = 0; more <= ROUND_MAX_MORE && !Double.isNaN(out); more++) {
+				for (double o = out; o <= out + speed * 2; o += ROUND_HOLD_STEP) {
+					Round r = new Round(off, s, start, in, o, o + easeLength(s, speed), top, margin, false);
+					if (roundSafe(r, speed, range, a)) return r;
+				}
+				double next = endOnLine(out, out + easeLength(s, speed) + ROUND_MAX_HOLD, a, off, top, margin);
+				out = Double.isNaN(next) ? Double.NaN : next + ROUND_CLEARANCE;
 			}
 		}
+		return ahead.hazard() == Hazard.BLOCKS ? railRound(ahead, range, speed, a, off, near, far) : null;
+	}
+
+	/**
+	 * With no room to go round it freely, on a straight lane: a gap barely wider than you beside an unbroken rail. Steered
+	 * right up against the rail, which holds you there however fast (a side you're touching needs no room to spare).
+	 */
+	private @Nullable Round railRound(Obstruction ahead, double range, double speed, double a, double off, double near, double far) {
+		Vec3 dir = laneDir(), across = across();
+		if (Math.abs(dir.x) > 0.01 && Math.abs(dir.z) > 0.01) return null;
+		AABB box = mc.player.getBoundingBox();
+		double floor = floorY();
+		AABB body = new AABB(box.minX, floor + FLOOR_CLEARANCE, box.minZ, box.maxX, floor + STAND_HEIGHT, box.maxZ);
+		double past = far + ROUND_CLEARANCE - a;
+		for (int sign : new int[]{1, -1}) {
+			// How far out the hitbox goes, just past it, before it meets the rail.
+			double s = 0;
+			while (Math.abs(s) < ROUND_MAX_SIDE && !blocksIn(body.inflate(ROUND_RAIL_ROOM).move(dir.scale(past).add(across.scale(s + sign * ROUND_STEP - off))), null)) s += sign * ROUND_STEP;
+			if (Math.abs(s) >= ROUND_MAX_SIDE || Math.abs(s) < ROUND_STEP) continue;
+			double in = near - ROUND_CLEARANCE, start = Math.max(a, in - easeLength(s - off, speed)), out = far + ROUND_CLEARANCE;
+			if (in - start < easeLength(s - off, speed) * 0.75 || !railUnbroken(body, s - off + sign * ROUND_RAIL_PROBE, start - a, out - a)) continue;
+			Round r = new Round(off, s, start, in, out, out + easeLength(s, speed), STAND_HEIGHT, ROUND_RAIL_ROOM, true);
+			if (roundSafe(r, speed, range, a)) return r;
+		}
 		return null;
+	}
+
+	/** Whether something solid stands at foot height all along the lane from {@code from} to {@code to}, {@code sideways} of you. */
+	private boolean railUnbroken(AABB body, double sideways, double from, double to) {
+		Vec3 dir = laneDir();
+		AABB probe = body.setMaxY(body.minY + ROUND_RAIL_HEIGHT).move(across().scale(sideways));
+		for (double d = from; d <= to; d += 1) {
+			if (!blocksIn(probe.move(dir.scale(d)), null)) return false;
+		}
+		return true;
+	}
+
+	/** Along the lane, where the next thing on the line itself between {@code from} and {@code limit} ends; NaN if nothing's there. */
+	private double endOnLine(double from, double limit, double a, double off, double top, double margin) {
+		Vec3 dir = laneDir();
+		AABB box = mc.player.getBoundingBox().move(across().scale(-off));
+		double floor = floorY();
+		AABB body = new AABB(box.minX - margin, floor + FLOOR_CLEARANCE, box.minZ - margin, box.maxX + margin, floor + top, box.maxZ + margin);
+		boolean found = false;
+		for (double d = from; d <= limit; d += SWEEP_STEP) {
+			boolean blocked = blocksIn(body.move(dir.scale(d - a)), null);
+			if (found && !blocked) return d;
+			found |= blocked;
+		}
+		return found ? limit : Double.NaN;
+	}
+
+	/** Whether the hitbox {@code sideways} of where you are meets something between {@code from} and {@code to} along the lane. */
+	private boolean blockedBeside(Obstruction ahead, double sideways, double from, double to, double top, double margin) {
+		Vec3 dir = laneDir();
+		AABB box = mc.player.getBoundingBox().move(across().scale(sideways));
+		double floor = floorY();
+		if (ahead.hazard() == Hazard.HOLE) {
+			AABB support = new AABB(box.minX, floor - 2, box.minZ, box.maxX, floor - 0.5, box.maxZ);
+			for (double d = from; d <= to; d += SWEEP_STEP) {
+				if (!blocksIn(support.move(dir.scale(d)), null)) return true;
+			}
+			return false;
+		}
+		AABB body = new AABB(box.minX - margin, floor + FLOOR_CLEARANCE, box.minZ - margin, box.maxX + margin, floor + top, box.maxZ + margin);
+		for (double d = from; d <= to; d += SWEEP_STEP) {
+			if (blocksIn(body.move(dir.scale(d)), null)) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -1414,11 +1552,18 @@ public class Recast extends GlideMode {
 	 */
 	private boolean roundSafe(Round r, double speed, double range, double a) {
 		if (!roundClear(r, speed, 0) || !roundClear(r, speed, 0.25) || !roundClear(r, speed, 0.5) || !roundClear(r, speed, 0.75)) return false;
-		Round wide = new Round(r.from(), r.side() + ROUND_SLACK, r.start(), r.in(), r.out(), r.end());
-		Round narrow = new Round(r.from(), r.side() - ROUND_SLACK, r.start(), r.in(), r.out(), r.end());
-		if (!roundClear(wide, speed, 0) || !roundClear(wide, speed, 0.5) || !roundClear(narrow, speed, 0) || !roundClear(narrow, speed, 0.5)) return false;
+		Round wide = new Round(r.from(), r.side() + ROUND_SLACK, r.start(), r.in(), r.out(), r.end(), r.top(), r.margin(), r.hugsRail());
+		Round narrow = new Round(r.from(), r.side() - Math.signum(r.hugsRail() ? r.side() : 1) * ROUND_SLACK, r.start(), r.in(), r.out(), r.end(), r.top(), r.margin(), r.hugsRail());
+		if (!r.hugsRail() && (!roundClear(wide, speed, 0) || !roundClear(wide, speed, 0.5))) return false;
+		if (!roundClear(narrow, speed, 0) || !roundClear(narrow, speed, 0.5)) return false;
 		Obstruction beside = scanAhead(Math.max(range, r.end() - a), r.side(), -0.2, Vec3.ZERO);
-		return beside == null || a + beside.distance() >= r.end();
+		// Chunks not here yet past the thing itself are for later: stopped for, or there by then, as on the line.
+		return beside == null || a + beside.distance() >= (beside.hazard() == Hazard.UNLOADED ? r.out() : r.end());
+	}
+
+	/** The room kept each side going round something: more when fast, where steering follows the way less closely. */
+	private static double roundMargin(double speed) {
+		return ROUND_MARGIN + Math.max(0, speed - ROUND_FAST) * ROUND_FAST_MARGIN;
 	}
 
 	/**
@@ -1437,9 +1582,14 @@ public class Recast extends GlideMode {
 		double floor = floorY();
 		AABB body = new AABB(box.minX, floor + FLOOR_CLEARANCE, box.minZ, box.maxX, floor + STAND_HEIGHT, box.maxZ);
 		AABB support = new AABB(box.minX, floor - 2, box.minZ, box.maxX, floor - 0.5, box.maxZ);
+		AABB headroom = new AABB(box.minX, floor + STAND_HEIGHT, box.minZ, box.maxX, floor + JUMP_TOP, box.maxZ);
 		double d = ahead.distance();
 		for (int i = 0; i < 64; i++, d += SWEEP_STEP / 2) {
-			boolean clear = ahead.hazard() == Hazard.HOLE ? blocksIn(support.move(dir.scale(d)), null) : !blocksIn(body.move(dir.scale(d)), null);
+			boolean clear = switch (ahead.hazard()) {
+				case HOLE -> blocksIn(support.move(dir.scale(d)), null);
+				case CEILING -> !blocksIn(headroom.move(dir.scale(d)), null);
+				default -> !blocksIn(body.move(dir.scale(d)), null);
+			};
 			if (clear) break;
 		}
 		return along(mc.player.position()) + d;
@@ -1456,8 +1606,8 @@ public class Recast extends GlideMode {
 		Vec3 pos = p.position(), dir = laneDir(), across = across();
 		double a0 = along(pos), off0 = offLine(pos), floor = floorY();
 		AABB box = p.getBoundingBox();
-		AABB body = new AABB(box.minX - ROUND_MARGIN, floor + FLOOR_CLEARANCE, box.minZ - ROUND_MARGIN, box.maxX + ROUND_MARGIN, floor + STAND_HEIGHT,
-			box.maxZ + ROUND_MARGIN);
+		double margin = round.margin();
+		AABB body = new AABB(box.minX - margin, floor + FLOOR_CLEARANCE, box.minZ - margin, box.maxX + margin, floor + round.top(), box.maxZ + margin);
 		double offPrev = off0, aPrev = a0;
 		for (double a = a0 + (phase > 0 ? phase * speed : speed); aPrev < round.end(); aPrev = a, a += speed) {
 			// Behind the way (steering follows it a little late), it catches up only as fast as a glide moves across.
@@ -1550,6 +1700,61 @@ public class Recast extends GlideMode {
 		return yaw;
 	}
 
+	/** How far along the lane the chunks are loaded from where you are, blocks, up to {@code limit}. */
+	private double roadAhead(double limit) {
+		Vec3 pos = mc.player.position(), dir = laneDir();
+		double road = 0;
+		while (road < limit && road < ROAD_MAX && loaded(pos.add(dir.scale(road)))) road += 8;
+		return road;
+	}
+
+	/** The road a stop from {@code speed} needs and {@link #ROAD_CUSHION} more, or all a view distance can ever show. */
+	private double roadWanted(double speed) {
+		return Math.min(speed * ROAD_STOP_TICKS + UNLOADED_STAND_OFF + ROAD_CUSHION, mc.options.getEffectiveRenderDistance() * 16.0 - 8);
+	}
+
+	private void sampleRoad() {
+		long now = mc.level.getGameTime();
+		// Back from a stop: while you stood, the end of the road stood too, and says nothing about how fast it's sent.
+		if (!roadEnds.isEmpty() && now - (long) roadEnds.peekLast()[1] > ROAD_SAMPLE_TICKS * 3) roadEnds.clear();
+		if (!roadEnds.isEmpty() && now - (long) roadEnds.peekLast()[1] < ROAD_SAMPLE_TICKS) return;
+		roadEnds.addLast(new double[]{along(mc.player.position()) + roadAhead(ROAD_MAX), now});
+		while (now - (long) roadEnds.peekFirst()[1] > ROAD_WINDOW_TICKS) roadEnds.removeFirst();
+	}
+
+	/** How fast the end of the loaded road has been moving along the lane, blocks a tick; NaN until there's enough to tell. */
+	private double roadSpeed() {
+		if (roadEnds.size() < 2) return Double.NaN;
+		double[] first = roadEnds.peekFirst(), last = roadEnds.peekLast();
+		return last[1] - first[1] < ROAD_MIN_SPAN_TICKS ? Double.NaN : (last[0] - first[0]) / (last[1] - first[1]);
+	}
+
+	/**
+	 * Extra ticks to stay on the ground this landing, so the bounce settles at what the server sends instead of stopping at
+	 * the end of what's loaded and starting again from nothing: none with road enough, or with it coming faster than you're
+	 * going (it grows back by itself); more the shorter it is for the speed, and the further you're outrunning it.
+	 */
+	private int paceTicks() {
+		// Without No Durability (or a hook flying the hops) the server glides you on the ground meanwhile, which is flagged.
+		if (terrain() || !chestSwaps() && !HOP.hooked()) return 0;
+		double speed = mc.player.getDeltaMovement().horizontalDistance(), wanted = roadWanted(speed), road = roadAhead(wanted), sending = roadSpeed();
+		if (road >= wanted || speed < 0.1 || speed <= sending) return 0;
+		double over = Double.isNaN(sending) ? 0 : speed - sending;
+		return Math.min(PACE_MAX_TICKS, 1 + (int) ((wanted - road) / (speed * PACE_TICKS_SHORT) + over * PACE_TICKS_OVER));
+	}
+
+	/** Whether the bounce is on its way to a stop. */
+	public boolean stopping() {
+		return state == State.BRAKING;
+	}
+
+	/** Whether there's road to go faster into: loaded well past what a stop needs, and arriving about as fast as you're going. */
+	public boolean roadToSpare() {
+		if (mc.player == null || terrain()) return false;
+		double speed = mc.player.getDeltaMovement().horizontalDistance(), wanted = roadWanted(speed), sending = roadSpeed();
+		return roadAhead(wanted) >= wanted && !(speed > sending + ROAD_SPEED_MARGIN);
+	}
+
 	/** How far ahead to watch: enough to stop from this speed. */
 	private double lookAhead() {
 		Vec3 v = mc.player.getDeltaMovement();
@@ -1619,7 +1824,9 @@ public class Recast extends GlideMode {
 		double start = state == State.BOUNCING ? 0 : Math.min(START_SPAN, range);
 		for (double d = 0; state != State.BOUNCING && d <= start; d += SWEEP_STEP / 2) {
 			if (first != null && d > first.distance()) break;
-			if (!blocksIn(support.move(dir.scale(d)), null)) first = new Obstruction(Hazard.HOLE, d, List.of());
+			// Not here yet, you can't tell it's a hole: just after joining, the ground you're on hasn't come.
+			if (!loaded(mc.player.position().add(dir.scale(d)))) first = new Obstruction(Hazard.UNLOADED, d, List.of());
+			else if (!blocksIn(support.move(dir.scale(d)), null)) first = new Obstruction(Hazard.HOLE, d, List.of());
 			else if (ceiling == null && blocksIn(headroom.move(dir.scale(d)), null)) ceiling = new Obstruction(Hazard.CEILING, d, List.of());
 		}
 		// Where the hops come down is only known while they go on; stopped, what's near is what counts.

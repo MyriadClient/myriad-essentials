@@ -3,6 +3,30 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.8.1
+
+Needs Myriad 1.6.0.
+
+- **Recast steers round far more, and at full speed.** It gave up on most ways round when going fast: a way round had to be
+  loaded all the way back to the lane, further than the chunks reach at speed, and one tick's change of speed could throw
+  away the way it had just found. Now only the part past the obstacle has to be loaded, and there's more room to spare when
+  fast. It goes round holes properly, past several things in a row, and through a gap barely wider than you by running along
+  an unbroken rail (straight lanes only).
+- **No more freezes before an obstacle.** Looking for a way round could stop the game for up to 1.5 s, most of it spent on
+  ways that couldn't work. It now takes milliseconds.
+- **Recast stops less for chunks.** A stop for chunks that haven't come is called off if they arrive while you're braking,
+  and you go on at the speed you've kept. With No Durability the bounce slows to what the server is sending, by how much
+  you're outrunning it, instead of running out of road.
+- **Recast no longer leaves the server for a hole that isn't there.** Just after joining, ground that hadn't loaded yet
+  looked like a hole in the lane, which with If Blocked on Disconnect sent you straight back out.
+- **Auto Disconnect leaves 2b2t's queue alone,** and only counts on the real server.
+- **Nametags: Despawn Timer.** How long an item you saw dropped has left. One already lying there when you arrive shows
+  none, as the server doesn't say how old it is.
+- **Block Highlight leaves the blocks Block ESP is showing alone,** so they keep that look when you point at them.
+- **Packet Mine no longer flickers against Block ESP and Storage ESP** on the same block.
+- **No Render: Texture Rotations** also gives every block the same of its model's random variants (which way stone or dirt
+  is turned can reveal where it is).
+
 ## 1.8.0
 
 Needs Myriad 1.6.0.
