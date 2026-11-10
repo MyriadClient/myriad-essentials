@@ -48,6 +48,7 @@ import dev.myriadclient.essentials.modules.player.AutoReconnect;
 import dev.myriadclient.essentials.modules.player.AutoSort;
 import dev.myriadclient.essentials.modules.player.AutoTool;
 import dev.myriadclient.essentials.modules.player.InventoryTweaks;
+import dev.myriadclient.essentials.modules.player.JunkDropper;
 import dev.myriadclient.essentials.modules.player.MiddleClick;
 import dev.myriadclient.essentials.modules.player.PacketMine;
 import dev.myriadclient.essentials.modules.player.Reach;
@@ -72,6 +73,7 @@ import dev.myriadclient.essentials.modules.render.Zoom;
 import dev.myriadclient.essentials.modules.world.AirPlace;
 import dev.myriadclient.essentials.modules.world.AutoPortal;
 import dev.myriadclient.essentials.modules.world.BaritoneSettings;
+import dev.myriadclient.essentials.modules.world.Nuker;
 import dev.myriadclient.essentials.modules.world.Printer;
 import dev.myriadclient.essentials.modules.world.Scaffold;
 import dev.myriadclient.essentials.util.PearlOwners;
@@ -111,11 +113,11 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerModules(movement, elytraSwap, rotationLock);
 		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), new Velocity(), new AutoDisconnect());
 		ctx.registerModules(movement, elytraFly, new RocketBoost(), new InventoryMove(), new NoSlow());
-		ctx.registerModules(world, new Scaffold(), new AirPlace(), new PacketMine(), new Reach(), new WallInteract());
+		ctx.registerModules(world, new Scaffold(), new AirPlace(), new PacketMine(), new Nuker(), new Reach(), new WallInteract());
 		ctx.registerModules(player, new InventoryTweaks(), new Replenish(), new MiddleClick(), new AutoReconnect());
 		ctx.registerModules(render, new EntityESP(), new Tracers(), new Nametags(), new StorageESP(), new BlockESP(), new BlockHighlight(), new FullBright(),
 			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips(), new Chat(), new ExtraTab());
-		ctx.registerModules(automation, autoEat, new AutoTool(), new AutoWalk(), new AntiAfk(), new AutoMend(), new AutoSort(), new Printer(), new AutoPortal());
+		ctx.registerModules(automation, autoEat, new AutoTool(), new AutoWalk(), new AntiAfk(), new AutoMend(), new AutoSort(), new JunkDropper(), new Printer(), new AutoPortal());
 		// Baritone's settings, made from Baritone's own list, with its path and goal drawn: only when it's installed.
 		List<Baritone.SettingInfo> baritone = Baritone.settings();
 		if (!baritone.isEmpty()) ctx.registerModule(world, new BaritoneSettings(baritone));

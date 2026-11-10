@@ -3,6 +3,29 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.9.0
+
+Needs Myriad 1.7.0.
+
+- **Nuker.** Mines every block around you, nearest first, with Packet Mine's breaking settings: only the blocks you pick or
+  all but them (hit a block with Pick Bind held to add or remove its kind), keeping the floor under you or digging down, or
+  only what's ahead. It leaves blocks holding back water or lava, and storage, alone.
+- **Junk Dropper.** Throws out the items on its list whenever they turn up in your inventory. Hold Add Bind and click an
+  item to add it: left-click for any of its kind, right-click for just that one, by its custom name or, for a map, which
+  map it is. The list takes the same by hand.
+- **Inventory Tweaks: Box Grid.** Open a chest of shulker boxes and what's in each one shows in panels down the sides of the
+  screen, as many rows as fit, scrolling a row at a time. Click a panel to put that box down on the
+  swap bar; the grid stays while you're in a box from it.
+- **Auto Disconnect's report.** The disconnect screen shows when you left and how long ago, the setting that tripped, a
+  picture of your screen as you left (click it to see it bigger; Screenshot turns it off), and what was going on: your
+  health over the last seconds, totems, armour, food and effects, the nearest players and what they held, the worst that
+  could have hit you, the dimension and your height, your speed, ping and TPS. Never your coordinates, and Destination no
+  longer puts them in the reason.
+- **Recast stops shorter of trouble.** A stop before a hole allows for a hop that comes down further on than expected, and
+  is measured from where the floor ends; a stop that arriving chunks may still call off is left as late as it safely can
+  be, so they have the longest to come. Ground that hasn't loaded no longer counts as a hole. With chest swaps, the ticks a
+  landing waits are chosen so the next hop comes down clear of a short gap, and a stop never ends in one.
+
 ## 1.8.1
 
 Needs Myriad 1.6.0.

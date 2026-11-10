@@ -5,6 +5,7 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.ContainerEvent;
 import dev.myriadclient.api.event.events.ContainerScreenEvent;
 import dev.myriadclient.api.event.events.ItemTooltipEvent;
+import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.job.Why;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
@@ -18,6 +19,7 @@ import dev.myriadclient.api.util.ItemInfo;
 import dev.myriadclient.essentials.util.Layouts;
 import dev.myriadclient.essentials.util.Menus;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.network.chat.Component;
@@ -52,7 +54,7 @@ import java.util.concurrent.CompletableFuture;
  * up once you close a screen yourself, into your inventory or the container it came from (any free slot). A plain right-click stays vanilla's (half a stack). Ender chests
  * need a Silk Touch pickaxe, or breaking them would only drop obsidian.
  * Remote Ender Chest holds an ender chest open after you close it (Containers.hold), from anywhere: the inventory key
- * shows it again.
+ * shows it again. Box Grid shows what a chest's shulker boxes hold beside and below its window (see BoxGrid).
  * <p>
  * And the mouse in any inventory screen: Shift-drag shift-clicks every slot you pass, a left drag that starts on a slot
  * of the item you're carrying gathers every matching slot it passes into your stack, and the wheel moves one item at a
@@ -84,6 +86,9 @@ public class InventoryTweaks extends Module {
 	private final BoolSetting airPlace = sgGeneral.bool("Air Place").description("Put the box above your head with nothing there to click against, "
 		+ "through the off hand. 2b2t takes it; current Grim refuses it. Off, it goes above your head only under a ceiling, else beside you.")
 		.visible(() -> shulkers.get() || enderChests.get()).build();
+	private final BoolSetting boxGrid = sgGeneral.bool("Box Grid").description("With a chest open, show what every shulker box in it holds, in "
+		+ "panels beside and below the window (hover for tooltips, the wheel scrolls them a row at a time). Click one to put that box down and "
+		+ "give it a tab on the swap bar, as Mod + right-click does.").defaultValue(true).build();
 
 	private final SettingGroup sgMouse = settings.group("Mouse");
 	private final BoolSetting shiftDrag = sgMouse.bool("Shift Drag").description("Hold Shift and drag with the left button to shift-click every slot you pass.")
@@ -110,7 +115,13 @@ public class InventoryTweaks extends Module {
 
 		/** Ends vanilla's drag (spreading the carried stack) without it placing anything on release. */
 		void essentials$endVanillaDrag();
+
+		/** The window: left, top, width, height, in GUI pixels. */
+		int[] essentials$bounds();
+
 	}
+
+	private final BoxGrid grid = new BoxGrid(this);
 
 	// The drag in progress: where the button went down, with what, and the slots it has handled.
 	private @Nullable Slot pressed;
@@ -137,6 +148,29 @@ public class InventoryTweaks extends Module {
 		Myriad.containers().swapBar(this, false);
 		release();
 		letGo();
+	}
+
+	@Subscribe(inGame = true)
+	private void onTick(TickEvent.Post e) {
+		grid.tick();
+	}
+
+	/** The Box Grid, drawn after the window's slots (from ContainerScreenMixin). */
+	public static void drawGrid(ScreenAccess screen, GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		InventoryTweaks m = Modules.active(InventoryTweaks.class);
+		if (m != null && m.inGame() && m.boxGrid.get() && !(screen instanceof CreativeModeInventoryScreen)) Modules.guard(m, () -> m.grid.draw(screen, graphics, mouseX, mouseY));
+	}
+
+	/** A mouse button went down: true if it was on the Box Grid (vanilla then does nothing). */
+	public static boolean gridPress(ScreenAccess screen, double x, double y) {
+		InventoryTweaks m = Modules.active(InventoryTweaks.class);
+		return m != null && m.inGame() && m.boxGrid.get() && Modules.guard(m, () -> m.grid.press(screen, x, y), false);
+	}
+
+	/** The wheel turned: true if the Box Grid scrolled its boxes with it. */
+	public static boolean gridScroll(ScreenAccess screen, double x, double y, double amount) {
+		InventoryTweaks m = Modules.active(InventoryTweaks.class);
+		return m != null && m.inGame() && m.boxGrid.get() && Modules.guard(m, () -> m.grid.scrolled(screen, x, y, amount), false);
 	}
 
 	/**
@@ -181,9 +215,20 @@ public class InventoryTweaks extends Module {
 		boolean open = inventory && standing.isEmpty() && Myriad.containers().held().isEmpty();
 		Placement.Options options = Placement.Options.forServer().withAirPlace(airPlace.get());
 		Containers c = Myriad.containers();
-		CompletableFuture<Containers.ItemSession> down = inventory ? open ? c.openItem(this, index, OPEN_TICKS, options) : c.putDownItem(this, index, OPEN_TICKS, options)
-			: c.putDownItem(this, from, slot.index, OPEN_TICKS, options);
-		down.whenComplete((session, t) -> {
+		stand(inventory ? open ? c.openItem(this, index, OPEN_TICKS, options) : c.putDownItem(this, index, OPEN_TICKS, options)
+			: c.putDownItem(this, from, slot.index, OPEN_TICKS, options));
+		return true;
+	}
+
+	/** Puts down the box at {@code screenSlot} of the open chest {@code from}, with a tab on the swap bar (the Box Grid's click). */
+	CompletableFuture<Containers.ItemSession> putDown(Containers.View from, int screenSlot) {
+		standing.removeIf(b -> !stands(b));
+		return stand(Myriad.containers().putDownItem(this, from, screenSlot, OPEN_TICKS, Placement.Options.forServer().withAirPlace(airPlace.get())));
+	}
+
+	/** A box going down stands till you close a screen yourself (one that can't go down says why). */
+	private CompletableFuture<Containers.ItemSession> stand(CompletableFuture<Containers.ItemSession> down) {
+		return down.whenComplete((session, t) -> {
 			if (t != null) {
 				Why why = Why.of(t);
 				if (!why.is(Why.CANCELLED) && !why.is(Why.OWNER_OFF) && !why.is(Why.LEFT_WORLD)) warn(capitalized(why.detail().isEmpty() ? why.toString() : why.detail()));
@@ -192,7 +237,6 @@ public class InventoryTweaks extends Module {
 			standing.add(session);
 			session.finishWhenClosed();
 		});
-		return true;
 	}
 
 	/** Boxes this put down, until they're back. */
@@ -217,7 +261,7 @@ public class InventoryTweaks extends Module {
 	}
 
 	/** Plain storage, whose slots a box can be in and go back to. */
-	private static boolean storage(AbstractContainerMenu menu) {
+	static boolean storage(AbstractContainerMenu menu) {
 		return menu instanceof ChestMenu || menu instanceof ShulkerBoxMenu || menu instanceof HopperMenu || menu instanceof DispenserMenu;
 	}
 

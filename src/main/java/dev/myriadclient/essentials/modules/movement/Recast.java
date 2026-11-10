@@ -214,11 +214,17 @@ public class Recast extends GlideMode {
 	 * most of it).
 	 */
 	private static final double STAND_OFF = 3, UNLOADED_STAND_OFF = 6, SLIDE_TICKS = 4;
+	/** The same for a stop that chunks may yet call off: as late as it's safe, so they get the longest to arrive. */
+	private static final double CHUNK_STOP_OFF = 3, CHUNK_SLIDE_TICKS = 3;
+	/** Ticks of speed added to a stop's length for a hole, for a hop that goes further than expected. */
+	private static final double STOP_MARGIN_TICKS = 2;
 	/** Chunks ahead: how far to count them, the ticks of flight (this hop and a stop from the next) and the road beyond them to keep. */
 	private static final double ROAD_MAX = 192, ROAD_STOP_TICKS = 15, ROAD_CUSHION = 14;
 	/** The most extra ticks a landing stays on the ground, and how many ticks of travel short of the road each costs. */
 	private static final int PACE_MAX_TICKS = 3;
 	private static final double PACE_TICKS_SHORT = 4;
+	/** The longest gap along the lane (under the whole hitbox) a hop's timing is trusted to clear, in blocks. */
+	private static final double SHORT_GAP = 2;
 	/**
 	 * How fast the server is sending the road: the end of what's loaded, sampled this often over this long (ticks), and not
 	 * judged from less than the third; how far past that speed still counts as keeping up (blocks a tick), and the extra
@@ -677,7 +683,7 @@ public class Recast extends GlideMode {
 		if (ground) {
 			hopStarted = false;
 			groundY = mc.player.getY();
-			if (groundTicks == 1) paceTicks = paceTicks();
+			if (groundTicks == 1) paceTicks = timedPace(paceTicks());
 		}
 		Hop hop = hop(ground);
 		flownPitch = hop.pitch();
@@ -893,8 +899,19 @@ public class Recast extends GlideMode {
 		int next = p.onGround() ? 1 : 0;
 		if (downs.size() <= next) return false;
 		Vec3 v = p.getDeltaMovement();
-		double stop = downs.get(next).land() + Math.hypot(v.x, v.z) * SLIDE_TICKS;
-		return stop < ahead.distance() - (ahead.hazard() == Hazard.UNLOADED ? UNLOADED_STAND_OFF : STAND_OFF);
+		double speed = Math.hypot(v.x, v.z);
+		boolean chunks = ahead.hazard() == Hazard.UNLOADED;
+		// A hop can come down further on than the glide's maths has it, and over a drop that's too late to find out.
+		double slide = speed * (chunks ? CHUNK_SLIDE_TICKS : SLIDE_TICKS + (ahead.hazard() == Hazard.HOLE ? STOP_MARGIN_TICKS : 0));
+		// Each tick on the ground can still choose to stop, so only the hop itself commits you, not the wait before it.
+		double stop = downs.get(next).land() - (chunks && next == 1 ? downs.get(0).takeoff() : 0) + slide;
+		double limit = ahead.distance() - (chunks ? CHUNK_STOP_OFF : STAND_OFF);
+		// Hops clear a short gap, but a stop can't end on one: where it would have to, it ends before it instead.
+		if (timedHops()) {
+			double gap = gapBetween(limit - stop, limit);
+			if (!Double.isNaN(gap)) limit = gap - STAND_OFF;
+		}
+		return stop < limit;
 	}
 
 	/** Whether a stop begun now still ends short of {@code ahead}. */
@@ -1743,6 +1760,66 @@ public class Recast extends GlideMode {
 		return Math.min(PACE_MAX_TICKS, 1 + (int) ((wanted - road) / (speed * PACE_TICKS_SHORT) + over * PACE_TICKS_OVER));
 	}
 
+	/** Whether how long a landing stays on the ground is free to choose: the server gliding you meanwhile is flagged otherwise. */
+	private boolean timedHops() {
+		return !terrain() && (chestSwaps() || HOP.hooked());
+	}
+
+	/**
+	 * The ticks to stay on the ground, as near to {@code pace} as keeps to the floor and brings the hop down clear of a hole:
+	 * a few ticks more or less moves the landing a few blocks. If none does, as many of {@code pace} as stay on the floor.
+	 */
+	private int timedPace(int pace) {
+		if (!timedHops()) return pace;
+		int furthest = 0;
+		for (int off = 0; off <= PACE_MAX_TICKS * 2; off++) {
+			int wait = pace + ((off & 1) == 0 ? off / 2 : -(off + 1) / 2);
+			if (wait < 0 || wait > PACE_MAX_TICKS) continue;
+			double[] m = {Math.max(0, mc.player.getDeltaMovement().dot(laneDir())), 0};
+			double slid = 0;
+			for (int i = 0; i < wait; i++) slid += glide(m);
+			if (!floorThrough(0, slid)) continue;
+			if (wait <= pace) furthest = Math.max(furthest, wait);
+			m[0] += JUMP_PUSH;
+			m[1] = JUMP_POWER;
+			double d = slid, land = slid;
+			for (int i = 0; i <= hopAir; i++) {
+				land = d;
+				d += glide(m);
+			}
+			if (floorThrough(land - TOUCHDOWN_MARGIN, land + TOUCHDOWN_MARGIN + TOUCHDOWN_ERROR * land)) return wait;
+		}
+		return furthest;
+	}
+
+	/** Whether there's something to come down on all the way from {@code from} to {@code to} along the lane. */
+	private boolean floorThrough(double from, double to) {
+		return Double.isNaN(gapBetween(from, to));
+	}
+
+	/** How far along the lane the first gap in the floor is, from {@code from} to {@code to}; NaN if there's none. */
+	private double gapBetween(double from, double to) {
+		for (double d = Math.max(0, from); d <= to; d += SWEEP_STEP / 2) if (!floorAt(d)) return d;
+		return Double.NaN;
+	}
+
+	/** Whether {@code d} along the lane has anything under the hitbox within two blocks down, in a chunk that's arrived. */
+	private boolean floorAt(double d) {
+		Vec3 at = laneDir().scale(d);
+		if (!loaded(mc.player.position().add(at))) return false;
+		AABB box = mc.player.getBoundingBox();
+		double floor = floorY();
+		return blocksIn(new AABB(box.minX, floor - 2, box.minZ, box.maxX, floor - 0.5, box.maxZ).move(at), null);
+	}
+
+	/** Whether the gap at {@code d} is one a hop can be timed over: floor again close by on both sides. */
+	private boolean shortGap(double d) {
+		double back = d, on = d;
+		while (d - back <= SHORT_GAP && !floorAt(back)) back -= SWEEP_STEP / 2;
+		while (on - back <= SHORT_GAP && !floorAt(on)) on += SWEEP_STEP / 2;
+		return on - back <= SHORT_GAP;
+	}
+
 	/** Whether the bounce is on its way to a stop. */
 	public boolean stopping() {
 		return state == State.BRAKING;
@@ -1837,7 +1914,14 @@ public class Recast extends GlideMode {
 			double until = hopGround > 1 ? down.takeoff() : down.land();
 			for (double d = Math.max(start, down.land() - back); d <= until + on; d += SWEEP_STEP / 2) {
 				if (blocksIn(support.move(dir.scale(d)), null)) continue;
-				if (first == null || d < first.distance()) first = new Obstruction(Hazard.HOLE, d, List.of());
+				// Ground that hasn't come isn't a hole, only road that's still on its way.
+				Hazard under = loaded(mc.player.position().add(dir.scale(d))) ? Hazard.HOLE : Hazard.UNLOADED;
+				// A hole a hop's timing can clear (see timedPace) is settled at the landing before it.
+				if (under == Hazard.HOLE && Double.isNaN(sideways) && timedHops() && shortGap(d)) continue;
+				// Where the floor ends, not just where this hop would have come down in the gap: a stop has to end before that.
+				double edge = d;
+				if (under == Hazard.HOLE) while (edge > 0 && !blocksIn(support.move(dir.scale(edge - SWEEP_STEP / 2)), null)) edge -= SWEEP_STEP / 2;
+				if (first == null || edge < first.distance()) first = new Obstruction(under, edge, List.of());
 				break;
 			}
 			for (double d = Math.max(start, down.takeoff() - back); ceiling == null && d <= down.risen() + on; d += SWEEP_STEP / 2) {

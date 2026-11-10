@@ -164,6 +164,10 @@ public class Tooltips extends Module {
 		return hotbarIcons.get();
 	}
 
+	public boolean slotIcons() {
+		return slotIcons.get();
+	}
+
 	/** Draws the small icon over a shulker box at (x, y). */
 	public static void drawIcon(GuiGraphicsExtractor ctx, ItemStack shulker, int x, int y) {
 		ItemStack top = mostCommon(shulker);
