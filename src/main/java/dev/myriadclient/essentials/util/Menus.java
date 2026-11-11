@@ -1,5 +1,6 @@
 package dev.myriadclient.essentials.util;
 
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -37,6 +38,8 @@ public final class Menus {
 	/** The menu's own slots: those not showing the player's inventory. */
 	public static int[] containerSlots(AbstractContainerMenu menu) {
 		var inv = mc().player.getInventory();
-		return menu.slots.stream().filter(s -> s.container != inv).mapToInt(s -> s.index).toArray();
+		// The container's own slots come before yours: any after them (another mod's) aren't the container's.
+		int end = menu.slots.stream().filter(s -> s.container == inv).mapToInt(s -> s.index).findFirst().orElse(menu.slots.size());
+		return menu.slots.stream().filter(s -> s.container != inv && s.index < end).mapToInt(s -> s.index).toArray();
 	}
 }

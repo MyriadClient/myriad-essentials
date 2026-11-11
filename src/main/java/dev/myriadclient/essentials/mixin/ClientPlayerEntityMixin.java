@@ -44,4 +44,10 @@ public abstract class ClientPlayerEntityMixin {
 	private float essentials$noSlowItems(float slowed) {
 		return NoSlow.itemSpeed(slowed);
 	}
+
+	/** Closing a container from the client (a key, a feature): Inventory Tweaks' waiting Scroll Move items go first. */
+	@Inject(method = "closeContainer", at = @At("HEAD"))
+	private void essentials$beforeClose(CallbackInfo ci) {
+		dev.myriadclient.essentials.modules.player.InventoryTweaks.beforeInput();
+	}
 }

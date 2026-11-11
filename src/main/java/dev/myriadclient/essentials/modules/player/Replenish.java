@@ -15,8 +15,9 @@ import net.minecraft.world.item.ItemStack;
 import java.util.Arrays;
 
 /**
- * Keeps hotbar stacks topped up from the rest of your inventory: a stack running low is refilled with the same item,
- * and a slot you've just used up gets the same item back. Every slot that needs it at once (as far as the packet budget
+ * Keeps hotbar stacks topped up from the rest of your inventory: a stack running low is refilled with the same item
+ * (from the biggest stack of it, or, when none alone would fill it, gathered from all of them with a double click:
+ * three clicks either way), and a slot you've just used up gets the same item back (the biggest stack, one click). Every slot that needs it at once (as far as the packet budget
  * goes; the rest the next tick), the first tick there's no screen open, so it never fights you rearranging your
  * inventory. Sprinting doesn't hold it up (core gets a click past Grim in the same tick); where Grim judges the keys you
  * hold (newer versions, not 2b2t), it waits for a moment you aren't pressing any.
@@ -78,13 +79,21 @@ public class Replenish extends Module {
 		}
 		if (!stack.isStackable() || stack.getCount() * 100 > stack.getMaxStackSize() * threshold.get()) return false;
 		int from = source(stack);
-		return from >= 0 && Myriad.inventory().merge(from, slot);
+		if (from < 0) return false;
+		// No one stack fills it: the lot gathered with a double click, where core can (the hotbar slots; not the off hand).
+		int room = stack.getMaxStackSize() - stack.getCount();
+		if (mc.player.getInventory().getItem(from).getCount() < room && slot != Slots.OFF_HAND && Myriad.inventory().gather(slot)) return true;
+		return Myriad.inventory().merge(from, slot);
 	}
 
-	/** A main-inventory slot (9-35) holding the same item, or -1. */
+	/** The main-inventory slot (9-35) with the most of the same item, or -1. */
 	private int source(ItemStack like) {
 		Inventory inv = mc.player.getInventory();
-		for (int i = 9; i < 36; i++) if (ItemStack.isSameItemSameComponents(inv.getItem(i), like)) return i;
-		return -1;
+		int best = -1;
+		for (int i = 9; i < 36; i++) {
+			ItemStack s = inv.getItem(i);
+			if (ItemStack.isSameItemSameComponents(s, like) && (best < 0 || s.getCount() > inv.getItem(best).getCount())) best = i;
+		}
+		return best;
 	}
 }

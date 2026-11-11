@@ -1124,9 +1124,10 @@ def t_remote_ender_chest_box_placed_ender_chest():
 
 
 def t_remote_ender_chest_box_inventory():
-    # No Way Back: Inventory: taken out anyway, and it comes back into your inventory.
+    # No Way Back: Inventory: taken out anyway. Since core 1.7.2 a box from the held ender chest goes straight back into
+    # it from any distance (it's still held); into your inventory only once it isn't.
     where, placed, back, sc = remote_box_pass("inventory")
-    return where == "taken out, back in your inventory", f"{where}, screens {sc}"
+    return where in ("taken out, back in the ender chest", "taken out, back in your inventory"), f"{where}, screens {sc}"
 
 
 def t_remote_ender_chest_put_down():
@@ -2094,6 +2095,9 @@ TESTS = [
     ("altitude no durability", t_elytra_altitude_no_durability),
     ("altitude lock heading", t_altitude_lock_heading),
 ]
+# Checks 2b2t's Grim doesn't act on (measured there): flagged on this server, never failing a test unless it runs as
+# current Grim (GRIM_STRICT). Air placement, and on any face, one facing away from you too (2026-11-10).
+FLAGS_2B2T = set() if STRICT else {"AirLiquidPlace", "PositionPlace"}
 # Tests that toggle many modules at once; Grim's opinion of them isn't part of the result.
 FLAGS_IGNORED = {"selftest (every module)"}
 # Checks a test relaxes on purpose (see printer_pass): flagged, but not failing it.
@@ -2128,7 +2132,7 @@ def run_tests(chosen):
         except Exception as e:
             ok, detail = False, f"error: {e}"
         flagged = flags()
-        if set(flagged) - FLAGS_RELAXED.get(name, set()) and name not in FLAGS_IGNORED: ok = False
+        if set(flagged) - FLAGS_RELAXED.get(name, set()) - FLAGS_2B2T and name not in FLAGS_IGNORED: ok = False
         took = time.time() - start
         results.append((name, ok, detail, flagged, took))
         print(f"{'PASS' if ok else 'FAIL'}  {took:5.1f}s  {name:<30} {detail}" + (f"  [flags: {', '.join(flagged)}]" if flagged else ""), flush=True)

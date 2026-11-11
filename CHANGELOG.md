@@ -3,6 +3,24 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.10.0
+
+Needs Myriad 1.8.0.
+
+- **Box Grid sits beside the window.** Its rows are centred on the screen, up to six of them, so two boxes sit next to your
+  inventory instead of up at the top. It's drawn under the window's slots, the item on your cursor and tooltips, and a
+  click on it no longer counts as outside the window. The wheel over a panel only scrolls the page.
+- **Box Grid has a hook.** `InventoryTweaks.BOX_GRID` lets another addon decide what a chest's panels do. By default a
+  click still puts the box down with a swap bar tab.
+- **Scroll Move at any speed.** Each notch used to be three clicks, so fast scrolling sent more than 2b2t takes. Now the
+  slots show the result at once and the moves go out together when the wheel rests, in as few clicks as they can be. A
+  click, a key or closing the screen sends them first.
+- **Everything that can happen in a tick does.** Auto Armor puts on every better piece at once, Auto Mend wears every
+  damaged piece that has a slot of its own and puts them all back together, and Junk Dropper throws every junk stack.
+- **Replenish takes the biggest stack,** and when no one stack would fill the slot, gathers them all with a double click:
+  three clicks however many stacks there are.
+- Inventory Tweaks moves only between your inventory and the container's own slots, not slots another mod has added.
+
 ## 1.9.0
 
 Needs Myriad 1.7.0.

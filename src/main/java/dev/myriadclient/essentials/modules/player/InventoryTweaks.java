@@ -6,6 +6,7 @@ import dev.myriadclient.api.event.events.ContainerEvent;
 import dev.myriadclient.api.event.events.ContainerScreenEvent;
 import dev.myriadclient.api.event.events.ItemTooltipEvent;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.hook.Hook;
 import dev.myriadclient.api.job.Why;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
@@ -22,6 +23,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
@@ -43,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -121,7 +124,56 @@ public class InventoryTweaks extends Module {
 
 	}
 
+	/** A Box Grid panel where it's drawn: the chest slot its box came from, the box, and its 27 slots on the screen. */
+	public record GridPanel(int box, ItemStack item, List<GridCell> cells) {}
+
+	/** One slot of a Box Grid panel: its top left on the screen (GUI pixels, as a slot's), and whether it shows (wholly in view). */
+	public record GridCell(int x, int y, boolean shown) {}
+
+	/** The chest a Box Grid is for. */
+	public record GridChest(BlockPos pos) {}
+
+	/**
+	 * Someone else's Box Grid panels for a chest (see {@link #BOX_GRID}): what a press on a box's slot does, and what the
+	 * panels show.
+	 */
+	public interface GridHandler {
+		/**
+		 * A press or a middle-click on a box's slot in {@code screen}, the panels where they are: true if the handler
+		 * takes it (else a click puts the box down, as by default).
+		 */
+		boolean take(AbstractContainerScreen<?> screen, List<GridPanel> panels);
+
+		/** Each frame, the panels where they're drawn: true if the handler draws the panels' items itself. */
+		boolean frame(AbstractContainerScreen<?> screen, List<GridPanel> panels);
+
+		/** What box {@code box}'s panel shows, or null for what it held as last seen. */
+		@Nullable List<ItemStack> contents(int box);
+
+		/** Boxes out of the chest for the handler, by the chest slot they came from: they keep their panels. */
+		Map<Integer, ItemStack> boxes();
+
+		/** The box last used (by the chest slot it came from), whose panel keeps the bright outline (the rest go duller), or -1. */
+		default int lit() {
+			return -1;
+		}
+
+		/** Whether the handler still needs the chest after its screens close (the grid waits). */
+		boolean busy();
+
+		/** The grid is done with the chest: every screen closed, another chest opened, or Inventory Tweaks turned off. */
+		void done();
+	}
+
+	/**
+	 * Who handles the Box Grid's panels for a chest opened, asked once a chest's grid starts: by default (null) a click on
+	 * a box's slot puts that box down and gives it a swap bar tab, as Mod + right-click does.
+	 */
+	public static final Hook<GridChest, GridHandler> BOX_GRID = Hook.of("myriad-essentials:box_grid", "Box Grid",
+		"Who handles the Box Grid's panels for an opened chest. By default a click on one puts that box down and gives it a swap bar tab.");
+
 	private final BoxGrid grid = new BoxGrid(this);
+	private final ScrollBatch scrolled = new ScrollBatch();
 
 	// The drag in progress: where the button went down, with what, and the slots it has handled.
 	private @Nullable Slot pressed;
@@ -146,13 +198,16 @@ public class InventoryTweaks extends Module {
 	@Override
 	protected void onDisable() {
 		Myriad.containers().swapBar(this, false);
+		grid.off();
 		release();
 		letGo();
+		scrolled.send(true);
 	}
 
 	@Subscribe(inGame = true)
 	private void onTick(TickEvent.Post e) {
 		grid.tick();
+		scrolled.tick();
 	}
 
 	/** The Box Grid, drawn after the window's slots (from ContainerScreenMixin). */
@@ -162,9 +217,9 @@ public class InventoryTweaks extends Module {
 	}
 
 	/** A mouse button went down: true if it was on the Box Grid (vanilla then does nothing). */
-	public static boolean gridPress(ScreenAccess screen, double x, double y) {
+	public static boolean gridPress(ScreenAccess screen, double x, double y, int button) {
 		InventoryTweaks m = Modules.active(InventoryTweaks.class);
-		return m != null && m.inGame() && m.boxGrid.get() && Modules.guard(m, () -> m.grid.press(screen, x, y), false);
+		return m != null && m.inGame() && m.boxGrid.get() && Modules.guard(m, () -> m.grid.press(screen, x, y, button), false);
 	}
 
 	/** The wheel turned: true if the Box Grid scrolled its boxes with it. */
@@ -190,7 +245,14 @@ public class InventoryTweaks extends Module {
 
 	@Subscribe
 	private void onClick(ContainerScreenEvent.Click e) {
-		if (onSlotClick(e.slot(), e.button(), e.input())) e.cancel();
+		// (Taken already by someone else's handler.)
+		if (!e.isCancelled() && onSlotClick(e.slot(), e.button(), e.input())) e.cancel();
+	}
+
+	/** Whether {@code x, y} is on the Box Grid (a click there isn't outside the window). */
+	public static boolean gridCovers(double x, double y) {
+		InventoryTweaks m = Modules.active(InventoryTweaks.class);
+		return m != null && m.boxGrid.get() && m.grid.covers(x, y);
 	}
 
 	/** Each slot click in an inventory screen. Returns true to swallow the click. */
@@ -220,12 +282,6 @@ public class InventoryTweaks extends Module {
 		return true;
 	}
 
-	/** Puts down the box at {@code screenSlot} of the open chest {@code from}, with a tab on the swap bar (the Box Grid's click). */
-	CompletableFuture<Containers.ItemSession> putDown(Containers.View from, int screenSlot) {
-		standing.removeIf(b -> !stands(b));
-		return stand(Myriad.containers().putDownItem(this, from, screenSlot, OPEN_TICKS, Placement.Options.forServer().withAirPlace(airPlace.get())));
-	}
-
 	/** A box going down stands till you close a screen yourself (one that can't go down says why). */
 	private CompletableFuture<Containers.ItemSession> stand(CompletableFuture<Containers.ItemSession> down) {
 		return down.whenComplete((session, t) -> {
@@ -237,6 +293,12 @@ public class InventoryTweaks extends Module {
 			standing.add(session);
 			session.finishWhenClosed();
 		});
+	}
+
+	/** A click on a box's Box Grid panel, by default: the box goes down from the chest's slot {@code slot}, with a swap bar tab. */
+	void putDownFromGrid(Containers.View chest, int slot) {
+		if (Myriad.jobs().isBusy(this) || !mc.player.containerMenu.getCarried().isEmpty()) return;
+		stand(Myriad.containers().putDownItem(this, chest, slot, OPEN_TICKS, Placement.Options.forServer().withAirPlace(airPlace.get())));
 	}
 
 	/** Boxes this put down, until they're back. */
@@ -400,11 +462,14 @@ public class InventoryTweaks extends Module {
 		screen.essentials$click(slot, 0, ContainerInput.PICKUP);
 	}
 
-	/** One item from {@code slot} to the other inventory ({@code away}), or one from there into {@code slot}. */
+	/**
+	 * One item from {@code slot} to the other inventory ({@code away}), or one from there into {@code slot}: shown at
+	 * once, and moved with the rest once the wheel rests (see {@link ScrollBatch}).
+	 */
 	private boolean onScroll(ScreenAccess screen, Slot slot, boolean away) {
 		AbstractContainerMenu menu = screen.essentials$menu();
 		if (!menu.getCarried().isEmpty()) return false;
-		ItemStack item = slot.getItem();
+		ItemStack item = shown(menu, slot);
 		if (item.isEmpty()) return false;
 		Slot from, to;
 		if (away) {
@@ -417,13 +482,25 @@ public class InventoryTweaks extends Module {
 			to = slot;
 		}
 		if (from == null || to == null) return true;
-		if (!canClick()) return true;
-		// Pick the stack up, drop one where it goes, and put the rest back (a single item needs no putting back).
-		boolean single = from.getItem().getCount() == 1;
-		screen.essentials$click(from, 0, ContainerInput.PICKUP);
-		screen.essentials$click(to, single ? 0 : 1, ContainerInput.PICKUP);
-		if (!single) screen.essentials$click(from, 0, ContainerInput.PICKUP);
+		scrolled.add(screen, from, to, shown(menu, from));
 		return true;
+	}
+
+	/** What {@code slot} shows: what it holds, with Scroll Move's items on their way in and out. */
+	private ItemStack shown(AbstractContainerMenu menu, Slot slot) {
+		return scrolled.shown(menu, slot, slot.getItem());
+	}
+
+	/** What {@code slot} of {@code menu} shows (from ContainerScreenMixin, for the slot and its tooltip). */
+	public static ItemStack shownIn(ScreenAccess screen, Slot slot, ItemStack real) {
+		InventoryTweaks m = Modules.active(InventoryTweaks.class);
+		return m == null || !m.scrolled.pending() ? real : m.scrolled.shown(screen.essentials$menu(), slot, real);
+	}
+
+	/** You're about to click, press a key or close the screen: Scroll Move's waiting items go first. */
+	public static void beforeInput() {
+		InventoryTweaks m = Modules.active(InventoryTweaks.class);
+		if (m != null && m.scrolled.pending()) Modules.guard(m, () -> m.scrolled.send(true));
 	}
 
 	/** Where one of {@code item} from {@code slot} goes on the other side: a stack of it with room, else an empty slot. */
@@ -431,7 +508,7 @@ public class InventoryTweaks extends Module {
 		Slot empty = null;
 		for (Slot s : menu.slots) {
 			if (!otherSide(menu, slot, s) || !s.mayPlace(item)) continue;
-			ItemStack there = s.getItem();
+			ItemStack there = shown(menu, s);
 			if (there.isEmpty()) {
 				if (empty == null) empty = s;
 			} else if (ItemStack.isSameItemSameComponents(there, item) && there.getCount() < s.getMaxStackSize(there)) {
@@ -444,8 +521,9 @@ public class InventoryTweaks extends Module {
 	/** Where one of {@code item} for {@code slot} comes from on the other side. */
 	private @Nullable Slot source(AbstractContainerMenu menu, Slot slot, ItemStack item) {
 		for (Slot s : menu.slots) {
+			ItemStack there = shown(menu, s);
 			// Only slots you could put it back in: taking from a crafting or furnace output would craft or take the product.
-			if (otherSide(menu, slot, s) && s.hasItem() && ItemStack.isSameItemSameComponents(s.getItem(), item) && s.mayPickup(mc.player) && s.mayPlace(item)) return s;
+			if (otherSide(menu, slot, s) && !there.isEmpty() && ItemStack.isSameItemSameComponents(there, item) && s.mayPickup(mc.player) && s.mayPlace(item)) return s;
 		}
 		return null;
 	}
@@ -458,6 +536,9 @@ public class InventoryTweaks extends Module {
 	private boolean otherSide(AbstractContainerMenu menu, Slot slot, Slot other) {
 		var inventory = mc.player.getInventory();
 		boolean mine = slot.container == inventory, theirs = other.container == inventory;
+		// Your inventory and the container's own slots, before yours: not slots after them (another mod's), which go with
+		// your inventory only.
+		if (mine && !theirs && other.index > slot.index) return false;
 		if ((mine && slot.getContainerSlot() >= 36) || (theirs && other.getContainerSlot() >= 36)) return false;
 		if (menu instanceof InventoryMenu) {
 			if (!mine || !theirs) return false;

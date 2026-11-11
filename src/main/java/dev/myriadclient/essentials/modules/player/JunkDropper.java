@@ -37,8 +37,9 @@ import java.util.regex.Pattern;
  * one (that map, or that item by that name); a click on something already junk takes off what made it junk. The click
  * does nothing else then.
  * <p>
- * Throws one stack a tick, from the hotbar and main inventory (not your armour or off hand), and only while no container
- * is open and the server takes clicks (not while you sprint or move on Grim), so it never costs you speed.
+ * Throws every junk stack at once (one click each), from the hotbar and main inventory (not your armour or off hand),
+ * and only while no container is open and the server takes clicks (not while you sprint or move on Grim), so it never
+ * costs you speed.
  */
 public class JunkDropper extends Module {
 	private final StringListSetting junk = sgGeneral.stringList("Junk").description("What to throw out: an item (golden_sword), text in its name "
@@ -107,11 +108,12 @@ public class JunkDropper extends Module {
 		if (mc.player.containerMenu != mc.player.inventoryMenu || !mc.player.containerMenu.getCarried().isEmpty()) return;
 		if (!Myriad.inventory().safeToClick()) return;
 		var inventory = mc.player.getInventory();
+		// Every junk stack in this tick (a whole stack is one click), as far as the click budget goes; the rest the next.
 		for (int i = 0; i < 36; i++) {
 			ItemStack stack = inventory.getItem(i);
 			if (junkRule(stack) == null || Myriad.inventory().isSpared(stack)) continue;
+			// (One not dropped, its slot's last click unanswered or the budget spent, waits for the next tick.)
 			Myriad.inventory().drop(i, true);
-			return;
 		}
 	}
 

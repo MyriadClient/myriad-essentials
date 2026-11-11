@@ -1,10 +1,13 @@
 package dev.myriadclient.essentials.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
+import com.llamalad7.mixinextras.sugar.Local;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.essentials.modules.player.InventoryTweaks;
 import dev.myriadclient.essentials.modules.render.Tooltips;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -46,6 +49,9 @@ public abstract class ContainerScreenMixin implements InventoryTweaks.ScreenAcce
 	protected int imageHeight;
 
 	@Shadow
+	protected @Nullable Slot hoveredSlot;
+
+	@Shadow
 	protected abstract void slotClicked(Slot slot, int slotId, int button, ContainerInput input);
 
 	@Shadow
@@ -53,11 +59,16 @@ public abstract class ContainerScreenMixin implements InventoryTweaks.ScreenAcce
 		throw new AssertionError();
 	}
 
-	/** Inventory Tweaks' Box Grid, over the window's slots and under the carried item and tooltips. */
-	@Inject(method = "extractRenderState", at = @At(value = "INVOKE",
-		target = "Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;extractCarriedItem(Lnet/minecraft/client/gui/GuiGraphicsExtractor;II)V"))
+	/** Inventory Tweaks' Box Grid, over the screen's background and under the window's slots, the carried item and tooltips. */
+	@Inject(method = "extractContents", at = @At(value = "INVOKE", target = "Lorg/joml/Matrix3x2fStack;pushMatrix()Lorg/joml/Matrix3x2fStack;", ordinal = 0))
 	private void essentials$grid(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a, CallbackInfo ci) {
 		InventoryTweaks.drawGrid(this, graphics, mouseX, mouseY);
+	}
+
+	/** A click on the Box Grid isn't outside the window (it would throw what's on the cursor). */
+	@Inject(method = "hasClickedOutside", at = @At("HEAD"), cancellable = true)
+	private void essentials$gridInside(double mx, double my, int xo, int yo, CallbackInfoReturnable<Boolean> cir) {
+		if (InventoryTweaks.gridCovers(mx, my)) cir.setReturnValue(false);
 	}
 
 	/** Tooltips' icon on a shulker box carried on the cursor, as on one in a slot. */
@@ -69,7 +80,8 @@ public abstract class ContainerScreenMixin implements InventoryTweaks.ScreenAcce
 
 	@Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
 	private void essentials$press(MouseButtonEvent event, boolean doubleClick, CallbackInfoReturnable<Boolean> cir) {
-		if (InventoryTweaks.gridPress(this, event.x(), event.y())) {
+		InventoryTweaks.beforeInput();
+		if (InventoryTweaks.gridPress(this, event.x(), event.y(), event.button())) {
 			cir.setReturnValue(true);
 			return;
 		}
@@ -79,6 +91,30 @@ public abstract class ContainerScreenMixin implements InventoryTweaks.ScreenAcce
 			return;
 		}
 		InventoryTweaks.press(this, slot, event.button(), event.hasShiftDown(), event.modifiers());
+	}
+
+	/** A key in the screen (a hotbar number, drop, closing it): Scroll Move's waiting items go first. */
+	@Inject(method = "keyPressed", at = @At("HEAD"))
+	private void essentials$key(KeyEvent event, CallbackInfoReturnable<Boolean> cir) {
+		InventoryTweaks.beforeInput();
+	}
+
+	/** Any click in the screen, yours or a feature's: Scroll Move's waiting items go first. */
+	@Inject(method = "slotClicked", at = @At("HEAD"))
+	private void essentials$beforeClick(Slot slot, int slotId, int button, ContainerInput input, CallbackInfo ci) {
+		InventoryTweaks.beforeInput();
+	}
+
+	/** Slots show Scroll Move's items where they're going (see ScrollBatch). */
+	@ModifyExpressionValue(method = "extractSlot", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/inventory/Slot;getItem()Lnet/minecraft/world/item/ItemStack;", ordinal = 0))
+	private ItemStack essentials$shownSlot(ItemStack stack, @Local(argsOnly = true) Slot slot) {
+		return InventoryTweaks.shownIn(this, slot, stack);
+	}
+
+	@ModifyExpressionValue(method = "extractTooltip", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/inventory/Slot;getItem()Lnet/minecraft/world/item/ItemStack;"))
+	private ItemStack essentials$shownTooltip(ItemStack stack) {
+		Slot hovered = hoveredSlot;
+		return hovered == null ? stack : InventoryTweaks.shownIn(this, hovered, stack);
 	}
 
 	@Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)

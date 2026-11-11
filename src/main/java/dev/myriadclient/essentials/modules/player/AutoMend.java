@@ -20,13 +20,15 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
 
 import java.util.ArrayDeque;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Mends your gear with bottles o' enchanting: thrown straight down at your feet (the throw is aimed down, whatever
  * way you look; your view doesn't move) while something
  * with Mending that you wear or hold is damaged, about as many as the damage needs. Bottles still in the air and orbs
  * on the ground are counted, so it doesn't throw more while they land. With Repair Inventory, damaged Mending armour
- * from your inventory is worn in turn and Mending tools are held in turn (the server holds them; your hand doesn't
+ * from your inventory is worn (every piece with a slot of its own at once) and Mending tools are held in turn (the server holds them; your hand doesn't
  * change), and everything goes back where it was afterwards. Turns itself off once nothing's left to mend.
  */
 public class AutoMend extends Module {
@@ -157,39 +159,50 @@ public class AutoMend extends Module {
 	}
 
 	/**
-	 * Wears or holds the next damaged Mending piece from the inventory. Armour is moved into its slot (swapping what's
-	 * there out); a hotbar tool is held by the server. True while there's something being brought in.
+	 * Wears or holds damaged Mending pieces from the inventory: every armour piece with a slot of its own in this tick
+	 * (moved into it, swapping what's there out; Mending mends a random damaged piece you wear, so several at once cost no
+	 * more bottles), and one hotbar tool, held by the server. True while there's something being brought in.
 	 */
 	private boolean bringNext() {
 		var inv = mc.player.getInventory();
+		boolean bringing = false, tool = false;
+		Set<Integer> filled = new HashSet<>();
 		for (int i = 0; i < Slots.MAIN_END; i++) {
 			ItemStack s = inv.getItem(i);
 			if (mendable(s) == 0) continue;
 			EquipmentSlot armour = ItemInfo.armorSlot(s);
 			if (armour != null && armour != EquipmentSlot.MAINHAND && armour != EquipmentSlot.OFFHAND && armour != EquipmentSlot.BODY) {
 				int to = ItemInfo.inventoryIndex(armour);
-				// Bound gear can't come off to make room.
-				if (ItemInfo.isBound(inv.getItem(to))) continue;
+				// Bound gear can't come off to make room; a slot already given a piece this tick takes the next one later.
+				if (ItemInfo.isBound(inv.getItem(to)) || !filled.add(to)) continue;
+				bringing = true;
 				if (!Myriad.inventory().prepareClick()) return true;
 				if (Myriad.inventory().move(i, to)) moved.push(new int[]{i, to});
-				return true;
+				continue;
 			}
-			if (Slots.isHotbar(i)) {
+			if (Slots.isHotbar(i) && !tool) {
+				tool = bringing = true;
 				if (Myriad.inventory().hold(this, i, 200)) heldSlot = i;
-				return true;
 			}
 		}
+		if (bringing) return true;
 		Myriad.inventory().release(this);
 		heldSlot = -1;
 		return false;
 	}
 
-	/** Puts the worn pieces back where they came from, one move a tick. True once everything's back. */
+	/**
+	 * Puts the worn pieces back where they came from, all in one tick, newest first (one for a slot whose last move
+	 * isn't answered yet waits for the next). True once everything's back.
+	 */
 	private boolean restore() {
 		if (moved.isEmpty()) return true;
 		if (!Myriad.inventory().prepareClick()) return false;
-		int[] m = moved.peek();
-		if (Myriad.inventory().move(m[1], m[0])) moved.pop();
+		while (!moved.isEmpty()) {
+			int[] m = moved.peek();
+			if (!Myriad.inventory().move(m[1], m[0])) break;
+			moved.pop();
+		}
 		return moved.isEmpty();
 	}
 }

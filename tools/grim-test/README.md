@@ -20,6 +20,9 @@ Where 2b2t is known to differ from current Grim, the server is set like 2b2t: Gr
 clicks over held movement keys and jump (live captures on 2b2t, 2026-10-14, showed its Grim doesn't judge them). The
 test players get `grim.nomodifypacket.multiactionsc` (through `myriad.like2b2t` in `server/permissions.yml`), so it
 still flags them but cancels nothing, and `./suite` lets a keys-only flag pass while a sprinting or sneaking one fails.
+2b2t's Grim also takes air placements, on any face, one facing away from you too (measured there 2026-11-10):
+`myriad.like2b2t` has the no-modify permission for AirLiquidPlace and PositionPlace as well, and `./suite`
+doesn't fail a test over those flags (FLAGS_2B2T) unless run as current Grim.
 Dev clients click on `localhost` as on 2b2t (`-Dmyriad.noInputRuleHosts`). For current Grim as shipped: `./start.sh
 --strict`, the client with `-Pstrict` (`./clients N --strict`), and `GRIM_STRICT=1 ./suite`.
 

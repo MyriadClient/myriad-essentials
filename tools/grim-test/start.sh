@@ -32,8 +32,9 @@ s = re.sub(r'(?m)^check-for-updates: \w+', 'check-for-updates: false', s)
 open(path, 'w').write(s)
 PY
 	# 2b2t's Grim takes an inventory click whatever keys the last input held (live captures, 2026-10-14); current Grim's
-	# MultiActionsC cancels it. Like 2b2t: ops (the test players) get Grim's no-modify permission for that check, so it
-	# only flags (the suite lets a keys-only flag pass; over sprinting or sneaking it still fails).
+	# MultiActionsC cancels it. It also takes air placements (AirLiquidPlace) on any face, one facing away from you too
+	# (PositionPlace; measured there 2026-11-10). Like 2b2t: ops (the test players) get Grim's no-modify
+	# permission for those checks, so they only flag (the suite lets those flags pass; see FLAGS_2B2T there).
 	python3 - server/permissions.yml "$strict" <<'PY'
 import re, sys
 path, strict = sys.argv[1], sys.argv[2]
@@ -43,7 +44,7 @@ except FileNotFoundError:
     s = ""
 s = re.sub(r'(?ms)^# myriad: like 2b2t.*?^# myriad: end\n', '', s)
 if strict == "false":
-    s = s.rstrip("\n") + ("\n" if s.strip() else "") + "# myriad: like 2b2t (Grim registers its own nodes default false: granted through this parent)\nmyriad.like2b2t:\n  default: op\n  children:\n    grim.nomodifypacket.multiactionsc: true\n" \
+    s = s.rstrip("\n") + ("\n" if s.strip() else "") + "# myriad: like 2b2t (Grim registers its own nodes default false: granted through this parent)\nmyriad.like2b2t:\n  default: op\n  children:\n    grim.nomodifypacket.multiactionsc: true\n    grim.nomodifypacket.airliquidplace: true\n    grim.nomodifypacket.positionplace: true\n" \
         + "# The suite's 2b2t placement runs deop the tester for this: placements Grim would cancel for the look or for air (which\n# 2b2t's Grim takes) are only flagged, so what's left to judge is where the game puts the blocks.\nmyriad.lenientplace:\n  default: notop\n  children:\n    grim.nomodifypacket.multiactionsc: true\n    grim.nomodifypacket.rotationplace: true\n    grim.nomodifypacket.airliquidplace: true\n    grim.nomodifypacket.positionplace: true\n# myriad: end\n"
 open(path, "w").write(s if s.strip() else "")
 PY

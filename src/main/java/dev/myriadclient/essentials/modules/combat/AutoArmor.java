@@ -49,7 +49,9 @@ public class AutoArmor extends Module {
 
 	private static final EquipmentSlot[] SLOTS = {EquipmentSlot.CHEST, EquipmentSlot.HEAD, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
-	private final IntSetting delay = sgGeneral.integer("Delay").description("Ticks between equipping pieces.").defaultValue(2).range(0, 20).build();
+	// Not 0: a chestplate put back at once undoes Elytra Swap's elytra before the glide starts.
+	private final IntSetting delay = sgGeneral.integer("Delay").description("Ticks after equipping before looking again (every piece that's "
+		+ "better goes on in one tick).").defaultValue(2).range(0, 20).build();
 	private final EnumSetting<Protection> prefer = sgGeneral.oneOf("Prefer", Protection.BLAST_LEGS)
 		.description("Protection enchantment to favour between otherwise equal pieces. Blast Legs: Protection, with Blast Protection on leggings.").build();
 	private final DoubleSetting preserve = sgGeneral.decimal("Preserve").description("Put pieces with less durability than this (%) aside, to be mended.")
@@ -129,13 +131,15 @@ public class AutoArmor extends Module {
 			wait--;
 			return;
 		}
+		// Every piece that's better goes on in this tick (each slot is its own, so one doesn't wait on another's answer).
+		boolean equipped = false;
 		for (EquipmentSlot slot : SLOTS) {
 			Step step = equipBest(slot);
-			if (step == Step.NONE) continue;
+			if (step == Step.EQUIPPED) equipped = true;
 			// Waiting for a still tick goes on next tick, not after the delay, or the tick is missed.
-			if (step == Step.EQUIPPED) wait = delay.get();
-			return;
+			else if (step == Step.WAITING) break;
 		}
+		if (equipped) wait = delay.get();
 	}
 
 	private enum Step {
