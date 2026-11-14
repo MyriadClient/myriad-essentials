@@ -144,9 +144,11 @@ round, Myriad's "everything" dev client loads this checkout's jar with `-Pessent
 ## Testing against Grim
 
 [`tools/grim-test/`](tools/grim-test) runs a local 2b2t-like server with Grim, with scripts to run server commands,
-drive the dev client and read Grim's flags. `tools/grim-test/suite` is the Essentials test suite: every module
-switched on and off (`selftest`), then each main module in a scene of its own, checked on the server and against
-Grim's flags. Run it after changing core or Essentials; add a test when you add a module.
+drive the dev client and read Grim's flags. The Essentials test suite is [`src/gametest`](src/gametest), run with
+[Myriad Testing](https://github.com/MyriadClient/myriad-testing) against that server: every module switched on and
+off (`general/selftest`), then each main module in a scene of its own, checked on the server and against Grim's flags.
+Start the server and `./gradlew runTestClient -Photswap`, then `../myriad-testing/cli/myriad-test run` (or a filter:
+`run scaffold`). Run it after changing core or Essentials; add a test when you add a module.
 
 ## Releasing
 
