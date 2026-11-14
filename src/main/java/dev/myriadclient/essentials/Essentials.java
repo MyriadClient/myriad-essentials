@@ -73,6 +73,7 @@ import dev.myriadclient.essentials.modules.world.AirPlace;
 import dev.myriadclient.essentials.modules.world.BaritoneSettings;
 import dev.myriadclient.essentials.modules.world.Nuker;
 import dev.myriadclient.essentials.modules.world.PacketMine;
+import dev.myriadclient.essentials.modules.world.PlacementTweaks;
 import dev.myriadclient.essentials.modules.world.Reach;
 import dev.myriadclient.essentials.modules.world.Scaffold;
 import dev.myriadclient.essentials.modules.world.WallInteract;
@@ -113,7 +114,7 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerModules(movement, elytraSwap, rotationLock);
 		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), new Velocity(), new AutoDisconnect());
 		ctx.registerModules(movement, elytraFly, new RocketBoost(), new InventoryMove(), new NoSlow());
-		ctx.registerModules(world, new Scaffold(), new AirPlace(), new PacketMine(), new Nuker(), new Reach(), new WallInteract());
+		ctx.registerModules(world, new Scaffold(), new AirPlace(), new PlacementTweaks(), new PacketMine(), new Nuker(), new Reach(), new WallInteract());
 		ctx.registerModules(player, new InventoryTweaks(), new Replenish(), new MiddleClick(), new AutoReconnect());
 		ctx.registerModules(render, new EntityESP(), new Tracers(), new Nametags(), new StorageESP(), new BlockESP(), new BlockHighlight(), new FullBright(),
 			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips(), new Chat(), new ExtraTab());

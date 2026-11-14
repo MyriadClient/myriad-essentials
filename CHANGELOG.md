@@ -3,6 +3,17 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.1.0
+
+Needs Myriad 2.0.0, for Minecraft 26.3 (2.1.0 shows a block it places the right way at once).
+
+- **Placement Tweaks** (World): place blocks by hand the way you choose, each while its bind is held. The face you aim at
+  shows its four edges, the one under the crosshair lit. **Flexible Rotation** (Left Alt) places the block facing that
+  edge, or out of the face anywhere else: a piston, observer, hopper or log the way you want it without turning round.
+  **Offset** (R) places it in the space beside the usual one, towards that edge, outlined beforehand. Both held, both at
+  once. Core's build engine finds the click and the look that make the game place it so; **Air Place** lets a block that
+  faces the way it's clicked face sideways with nothing beside it (2b2t takes it; current Grim refuses it).
+
 ## 2.0.0
 
 Needs Myriad 2.0.0, for Minecraft 26.3. 1.10.1 stays for 26.2.
