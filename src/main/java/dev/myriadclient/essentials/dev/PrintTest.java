@@ -2,14 +2,14 @@ package dev.myriadclient.essentials.dev;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.myriadclient.api.Myriad;
+import dev.myriadclient.api.build.BlockRules;
 import dev.myriadclient.api.build.Build;
 import dev.myriadclient.api.command.Command;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.setting.Setting;
-import dev.myriadclient.api.build.BlockRules;
-import dev.myriadclient.essentials.modules.world.Printer;
+import dev.myriadclient.essentials.modules.automation.Printer;
 import fi.dy.masa.litematica.data.DataManager;
 import fi.dy.masa.litematica.schematic.LitematicaSchematic;
 import fi.dy.masa.litematica.schematic.placement.SchematicPlacement;

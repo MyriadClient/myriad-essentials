@@ -6,6 +6,8 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.KeyEvent;
 import dev.myriadclient.api.event.events.MouseButtonEvent;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.item.ItemInfo;
+import dev.myriadclient.api.item.Slots;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -15,11 +17,8 @@ import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.KeybindSetting;
 import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
-import dev.myriadclient.api.util.ItemInfo;
-import dev.myriadclient.api.util.Slots;
-import dev.myriadclient.essentials.modules.movement.ElytraFlight;
-import dev.myriadclient.essentials.modules.movement.ElytraSwap;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import dev.myriadclient.essentials.modules.movement.elytra.ElytraFlight;
+import dev.myriadclient.essentials.modules.movement.elytra.ElytraSwap;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
@@ -27,15 +26,15 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
 
 /**
- * Wears the best armour you're carrying, one piece at a time. Best means most armour and toughness, then your
- * preferred protection enchantment; curse of binding is skipped. A piece isn't swapped for a copy that's only less worn:
- * it's used until it's worn down to Preserve, then the freshest other goes on. Pieces worn down to Preserve are put aside to be
- * mended: swapped for another, or taken off when there's none (an elytra once you've landed), and other modules pass
+ * Wears the best armour you're carrying, one piece at a time. Best means most armour and toughness, then your preferred
+ * protection enchantment; curse of binding is skipped. A piece isn't swapped for a copy that's only less worn: it's
+ * used until it's worn down to Preserve, then the freshest other goes on. Pieces worn down to Preserve are put aside to
+ * be mended: swapped for another, or taken off when there's none (an elytra once you've landed), and other modules pass
  * them over too.
  * <p>
  * For the chest slot you choose between a chestplate and an elytra, and the Chest Swap bind flips between them (and
- * swaps straight away). Until you land, an elytra you're flying with is never taken off, and while
- * {@link ElytraSwap} swaps it for a chestplate the chest slot is left to it.
+ * swaps straight away). Until you land, an elytra you're flying with is never taken off, and while {@link ElytraSwap}
+ * swaps it for a chestplate the chest slot is left to it.
  */
 public class AutoArmor extends Module {
 	public enum Protection {
@@ -126,7 +125,7 @@ public class AutoArmor extends Module {
 	@Subscribe
 	private void onTick(TickEvent.Pre e) {
 		if (!inGame() || mc.player.isCreative()) return;
-		if (mc.gui.screen() != null && !(mc.gui.screen() instanceof InventoryScreen) && mc.player.containerMenu != mc.player.inventoryMenu) return;
+		if (Myriad.inventory().containerOpen()) return;
 		if (wait > 0) {
 			wait--;
 			return;
@@ -160,8 +159,8 @@ public class AutoArmor extends Module {
 			ItemStack s = mc.player.getInventory().getItem(i);
 			if (s.isEmpty() || ItemInfo.armorSlot(s) != slot) continue;
 			// Better than what's worn by more than wear, or it stays on: a piece is used until Preserve takes it off, not
-			// swapped for a fresher copy at every point of wear (which wore all your spares in turn). Among the better
-			// ones, the freshest.
+			// swapped for a fresher copy at every point of wear (which would wear all your spares down in turn). Among the
+			// better ones, the freshest.
 			double sc = score(s, slot);
 			if (sc <= current) continue;
 			double fresh = ItemInfo.durabilityFraction(s);

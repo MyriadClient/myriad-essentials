@@ -28,7 +28,7 @@ public class FullBright extends Module {
 	private MobEffectInstance added;
 
 	public FullBright() {
-		super(Tags.RENDER, "Full Bright", "See in the dark.");
+		super(Tags.RENDER, "Full Bright", "Lets you see in the dark.");
 	}
 
 	/** Read by this addon's lightmap mixin. */

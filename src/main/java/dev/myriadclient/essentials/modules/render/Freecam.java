@@ -19,6 +19,8 @@ import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Locale;
+
 /**
  * Fly the camera around while your player stays put. Movement keys move the camera, Space/Shift go up/down.
  */
@@ -34,7 +36,7 @@ public class Freecam extends Module {
 	private boolean savedCulling;
 
 	public Freecam() {
-		super(Tags.RENDER, "Freecam", "Detach the camera and fly it around.");
+		super(Tags.RENDER, "Freecam", "Detaches the camera so you can fly it around.");
 		// Both take the camera over: on together, each fights the other for it.
 		conflictsWith(FreeLook.class);
 	}
@@ -100,7 +102,7 @@ public class Freecam extends Module {
 
 	@Override
 	public String hudInfo() {
-		return String.format("%.1f", speed.get());
+		return String.format(Locale.ROOT, "%.1f", speed.get());
 	}
 
 	@Subscribe

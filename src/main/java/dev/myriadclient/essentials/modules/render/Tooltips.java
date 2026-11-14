@@ -6,16 +6,16 @@ import dev.myriadclient.api.event.events.ContainerScreenEvent;
 import dev.myriadclient.api.event.events.ItemTooltipEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.event.events.WorldEvent;
+import dev.myriadclient.api.item.ItemInfo;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.Canvas;
-import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.KeybindSetting;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.ui.ThemeSettings;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
 import dev.myriadclient.api.util.ColorUtil;
-import dev.myriadclient.api.util.ItemInfo;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
@@ -33,11 +33,12 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MapItem;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -82,7 +83,7 @@ public class Tooltips extends Module {
 	private int lockedX, lockedY;
 
 	public Tooltips() {
-		super(Tags.RENDER, "Tooltips", "Container and map previews, durability and food values in tooltips.");
+		super(Tags.RENDER, "Tooltips", "Adds container and map previews, durability and food values to tooltips.");
 	}
 
 	@Override
@@ -115,15 +116,11 @@ public class Tooltips extends Module {
 		}
 		FoodProperties f = stack.get(DataComponents.FOOD);
 		if (food.get() && f != null) {
-			e.lines().add(Component.literal(String.format("Hunger +%d  Saturation +%.1f", f.nutrition(), f.saturation())).withStyle(ChatFormatting.GRAY));
+			e.lines().add(Component.literal(String.format(Locale.ROOT, "Hunger +%d  Saturation +%.1f", f.nutrition(), f.saturation())).withStyle(ChatFormatting.GRAY));
 		}
 	}
 
 	// ---- container previews -----------------------------------------------------------------------------------------
-
-	public static boolean isShulker(ItemStack stack) {
-		return stack != null && ItemInfo.isShulkerBox(stack);
-	}
 
 	/** The box's 27 slots, empty ones included, so the preview grid lines up. */
 	public static List<ItemStack> contents(ItemStack stack) {
@@ -140,7 +137,7 @@ public class Tooltips extends Module {
 
 	/** What to preview for {@code stack}: its contents, or null for no preview. */
 	private @Nullable List<ItemStack> previewOf(ItemStack stack) {
-		if (shulkers.get() && isShulker(stack)) {
+		if (shulkers.get() && ItemInfo.isShulkerBox(stack)) {
 			List<ItemStack> items = contents(stack);
 			return hasItems(items) || emptyPreview.get() ? items : null;
 		}
@@ -188,7 +185,7 @@ public class Tooltips extends Module {
 	@Subscribe
 	private void onSlot(ContainerScreenEvent.SlotDrawn e) {
 		Slot slot = e.slot();
-		if (slotIcons.get() && slot.hasItem() && isShulker(slot.getItem())) drawIcon(e.graphics(), slot.getItem(), slot.x, slot.y);
+		if (slotIcons.get() && slot.hasItem() && ItemInfo.isShulkerBox(slot.getItem())) drawIcon(e.graphics(), slot.getItem(), slot.x, slot.y);
 	}
 
 	/** In place of the inventory tooltip. Returns true if a preview replaced it. */

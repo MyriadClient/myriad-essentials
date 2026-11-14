@@ -8,19 +8,19 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
 /**
- * Scroll Move's items, shown where they go at once and moved together. Each notch of the wheel used to be three clicks
- * on its own (pick the stack up, drop one, put the rest back), so fast scrolling sent dozens a second, more than 2b2t
- * takes (it drops you on the 80th click in about 4 seconds), each clicking on a view its answers hadn't caught up with.
- * Now a notch only adds to what's moving from one slot to another (a notch back takes one off), the slots show the
- * result, and the moves go out in one tick once the wheel rests, as few clicks as they can be: half the stack picked up
- * where that's nearer, the rest one at a time. Clicking, a key or closing the screen sends them first.
+ * Scroll Move's items, shown where they go at once and moved together. A notch of the wheel adds one to what's moving
+ * from one slot to another (a notch back takes one off), the slots show the result, and the moves go out in one tick
+ * once the wheel rests, in as few clicks as they can be: half the stack picked up where that's nearer, the rest one at a
+ * time. Clicking, a key or closing the screen sends them first. Sent notch by notch, each would be three clicks (pick the
+ * stack up, drop one, put the rest back), so fast scrolling would send dozens a second, more than 2b2t takes (it drops
+ * you on the 80th click in about 4 seconds), each clicking on a view its answers hadn't caught up with.
  */
 final class ScrollBatch {
 	/** Ticks of a still wheel before the moves go. */
@@ -41,7 +41,7 @@ final class ScrollBatch {
 
 	private final Minecraft mc = Minecraft.getInstance();
 	private final List<Move> moves = new ArrayList<>();
-	private @Nullable InventoryTweaks.ScreenAccess screen;
+	private InventoryTweaks.@Nullable ScreenAccess screen;
 	private long lastAt;
 	private boolean sending;
 

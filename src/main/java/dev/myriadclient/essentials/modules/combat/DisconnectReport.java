@@ -1,10 +1,11 @@
 package dev.myriadclient.essentials.modules.combat;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.render.Canvas;
-import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.ui.Icons;
 import dev.myriadclient.api.ui.ThemeSettings;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.api.util.Format;
 import net.minecraft.client.Minecraft;
@@ -217,7 +218,7 @@ public final class DisconnectReport extends AbstractWidget {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		if (event.button() != 0 || module.shotWidth() == 0 || !overPicture(event.x(), event.y())) return false;
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT || module.shotWidth() == 0 || !overPicture(event.x(), event.y())) return false;
 		Minecraft mc = Minecraft.getInstance();
 		mc.gui.setScreen(new PictureScreen(mc.gui.screen(), module.shotWidth(), module.shotHeight()));
 		return true;

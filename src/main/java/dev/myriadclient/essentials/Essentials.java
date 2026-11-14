@@ -3,10 +3,10 @@ package dev.myriadclient.essentials;
 import dev.myriadclient.api.addon.AddonContext;
 import dev.myriadclient.api.addon.MyriadAddon;
 import dev.myriadclient.api.control.ControlPreset;
+import dev.myriadclient.api.integration.Baritone;
 import dev.myriadclient.api.module.ModuleGroup;
 import dev.myriadclient.api.ui.Icons;
 import dev.myriadclient.api.ui.PanelType;
-import dev.myriadclient.api.util.Baritone;
 import dev.myriadclient.essentials.dev.InvTest;
 import dev.myriadclient.essentials.dev.PortalTest;
 import dev.myriadclient.essentials.dev.PrintScene;
@@ -29,34 +29,33 @@ import dev.myriadclient.essentials.hud.SpeedPanel;
 import dev.myriadclient.essentials.hud.TotemsPanel;
 import dev.myriadclient.essentials.hud.TpsPanel;
 import dev.myriadclient.essentials.hud.WatermarkPanel;
+import dev.myriadclient.essentials.modules.automation.AntiAfk;
+import dev.myriadclient.essentials.modules.automation.AutoEat;
+import dev.myriadclient.essentials.modules.automation.AutoMend;
+import dev.myriadclient.essentials.modules.automation.AutoPortal;
+import dev.myriadclient.essentials.modules.automation.AutoSort;
+import dev.myriadclient.essentials.modules.automation.AutoTool;
+import dev.myriadclient.essentials.modules.automation.AutoWalk;
+import dev.myriadclient.essentials.modules.automation.JunkDropper;
+import dev.myriadclient.essentials.modules.automation.Printer;
 import dev.myriadclient.essentials.modules.combat.AutoArmor;
 import dev.myriadclient.essentials.modules.combat.AutoDisconnect;
 import dev.myriadclient.essentials.modules.combat.KillAura;
 import dev.myriadclient.essentials.modules.combat.Offhand;
-import dev.myriadclient.essentials.modules.movement.AutoWalk;
-import dev.myriadclient.essentials.modules.movement.ElytraFly;
-import dev.myriadclient.essentials.modules.movement.ElytraSwap;
+import dev.myriadclient.essentials.modules.combat.Velocity;
 import dev.myriadclient.essentials.modules.movement.InventoryMove;
 import dev.myriadclient.essentials.modules.movement.NoSlow;
-import dev.myriadclient.essentials.modules.movement.RocketBoost;
 import dev.myriadclient.essentials.modules.movement.RotationLock;
-import dev.myriadclient.essentials.modules.movement.Velocity;
-import dev.myriadclient.essentials.modules.player.AntiAfk;
-import dev.myriadclient.essentials.modules.player.AutoEat;
-import dev.myriadclient.essentials.modules.player.AutoMend;
+import dev.myriadclient.essentials.modules.movement.elytra.ElytraFly;
+import dev.myriadclient.essentials.modules.movement.elytra.ElytraSwap;
+import dev.myriadclient.essentials.modules.movement.elytra.RocketBoost;
 import dev.myriadclient.essentials.modules.player.AutoReconnect;
-import dev.myriadclient.essentials.modules.player.AutoSort;
-import dev.myriadclient.essentials.modules.player.AutoTool;
 import dev.myriadclient.essentials.modules.player.InventoryTweaks;
-import dev.myriadclient.essentials.modules.player.JunkDropper;
 import dev.myriadclient.essentials.modules.player.MiddleClick;
-import dev.myriadclient.essentials.modules.player.PacketMine;
-import dev.myriadclient.essentials.modules.player.Reach;
 import dev.myriadclient.essentials.modules.player.Replenish;
-import dev.myriadclient.essentials.modules.player.WallInteract;
 import dev.myriadclient.essentials.modules.render.BlockESP;
-import dev.myriadclient.essentials.modules.render.Chat;
 import dev.myriadclient.essentials.modules.render.BlockHighlight;
+import dev.myriadclient.essentials.modules.render.Chat;
 import dev.myriadclient.essentials.modules.render.EntityESP;
 import dev.myriadclient.essentials.modules.render.ExtraTab;
 import dev.myriadclient.essentials.modules.render.FreeLook;
@@ -71,11 +70,12 @@ import dev.myriadclient.essentials.modules.render.Tracers;
 import dev.myriadclient.essentials.modules.render.ViewModel;
 import dev.myriadclient.essentials.modules.render.Zoom;
 import dev.myriadclient.essentials.modules.world.AirPlace;
-import dev.myriadclient.essentials.modules.world.AutoPortal;
 import dev.myriadclient.essentials.modules.world.BaritoneSettings;
 import dev.myriadclient.essentials.modules.world.Nuker;
-import dev.myriadclient.essentials.modules.world.Printer;
+import dev.myriadclient.essentials.modules.world.PacketMine;
+import dev.myriadclient.essentials.modules.world.Reach;
 import dev.myriadclient.essentials.modules.world.Scaffold;
+import dev.myriadclient.essentials.modules.world.WallInteract;
 import dev.myriadclient.essentials.util.PearlOwners;
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -108,8 +108,8 @@ public final class Essentials implements MyriadAddon {
 		ModuleGroup render = ctx.registerGroup("Render", Icons.EYE);
 		ModuleGroup automation = ctx.registerGroup("Automation", Icons.COGS);
 
-		// Building blocks other modules use (and control panels combine with them). First: they load before the modules
-		// whose former settings they take over (Elytra Fly, Auto Armor).
+		// Building blocks other modules use (and control panels combine with them). They register first, so they exist
+		// when Elytra Fly and Auto Armor hand them settings those modules saved for them in older configs.
 		ctx.registerModules(movement, elytraSwap, rotationLock);
 		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), new Velocity(), new AutoDisconnect());
 		ctx.registerModules(movement, elytraFly, new RocketBoost(), new InventoryMove(), new NoSlow());
@@ -150,7 +150,7 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerHud("Module List", "", ModuleListPanel::new, TOP_RIGHT, 0, 0);
 		ctx.registerHud("Looking At", "", LookingAtPanel::new, TOP, 0, 6);
 		ctx.registerHud("Coordinates", "", CoordinatesPanel::new, BOTTOM_LEFT, 0, 0);
-		// Gear was Armor: its id stays myriad-essentials:armor so HUDs placed before keep it.
+		// Gear's id is myriad-essentials:armor, the id saved HUDs know it by.
 		ctx.registerPanel(PanelType.builder(ctx.id("armor"), "Gear").icon("").factory(GearPanel::new).hud().build());
 		ctx.registerHud("Biome", "", BiomePanel::new);
 		ctx.registerHud("Binds", "", BindsPanel::new);

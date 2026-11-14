@@ -1,9 +1,9 @@
 package dev.myriadclient.essentials.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
-import dev.myriadclient.essentials.modules.movement.ElytraFlight;
+import dev.myriadclient.essentials.modules.combat.Velocity;
 import dev.myriadclient.essentials.modules.movement.NoSlow;
-import dev.myriadclient.essentials.modules.movement.Velocity;
+import dev.myriadclient.essentials.modules.movement.elytra.ElytraFlight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;

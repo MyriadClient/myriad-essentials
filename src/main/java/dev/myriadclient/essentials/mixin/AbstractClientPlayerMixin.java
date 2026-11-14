@@ -1,7 +1,7 @@
 package dev.myriadclient.essentials.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
-import dev.myriadclient.essentials.modules.movement.ElytraFlight;
+import dev.myriadclient.essentials.modules.movement.elytra.ElytraFlight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.resources.Identifier;

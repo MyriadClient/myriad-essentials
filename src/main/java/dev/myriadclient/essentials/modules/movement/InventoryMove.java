@@ -6,6 +6,7 @@ import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.InputEvent;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.input.Keybind;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -18,7 +19,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractSignEditScreen;
 import net.minecraft.client.gui.screens.inventory.AnvilScreen;
 import net.minecraft.client.gui.screens.inventory.BookEditScreen;
 import net.minecraft.util.Mth;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * Keeps the movement keys working while a screen is open (your inventory, a chest, a furnace), except where you type:
@@ -32,7 +32,7 @@ public class InventoryMove extends Module {
 	private static final float LOOK_SPEED = 6;
 
 	public InventoryMove() {
-		super(Tags.MOVEMENT, "Inventory Move", "Walk, jump and sprint with your inventory or a container open.");
+		super(Tags.MOVEMENT, "Inventory Move", "Lets you walk, jump and sprint with your inventory or a container open.");
 	}
 
 	private boolean active() {
@@ -62,23 +62,22 @@ public class InventoryMove extends Module {
 	@Subscribe
 	private void onTick(TickEvent.Pre e) {
 		if (!arrowLook.get() || !inGame() || !active()) return;
-		long window = mc.getWindow().handle();
-		float yaw = (key(window, GLFW.GLFW_KEY_RIGHT) - key(window, GLFW.GLFW_KEY_LEFT)) * LOOK_SPEED;
-		float pitch = (key(window, GLFW.GLFW_KEY_DOWN) - key(window, GLFW.GLFW_KEY_UP)) * LOOK_SPEED;
+		float yaw = (key(InputConstants.KEY_RIGHT) - key(InputConstants.KEY_LEFT)) * LOOK_SPEED;
+		float pitch = (key(InputConstants.KEY_DOWN) - key(InputConstants.KEY_UP)) * LOOK_SPEED;
 		if (yaw == 0 && pitch == 0) return;
 		mc.player.setYRot(mc.player.getYRot() + yaw);
 		mc.player.setXRot(Mth.clamp(mc.player.getXRot() + pitch, -90, 90));
 	}
 
-	private static int key(long window, int key) {
-		return GLFW.glfwGetKey(window, key) == GLFW.GLFW_PRESS ? 1 : 0;
+	private static int key(int key) {
+		return InputConstants.isKeyDown(key) ? 1 : 0;
 	}
 
 	/** Whether the key or mouse button bound to {@code mapping} is held, read straight from the window. */
 	private boolean down(KeyMapping mapping) {
 		if (mapping.isUnbound()) return false;
 		InputConstants.Key key = InputConstants.getKey(mapping.saveString());
-		if (key.getType() == InputConstants.Type.MOUSE) return GLFW.glfwGetMouseButton(mc.getWindow().handle(), key.getValue()) == GLFW.GLFW_PRESS;
-		return InputConstants.isKeyDown(mc.getWindow(), key.getValue());
+		if (key.getType() == InputConstants.Type.MOUSE) return Keybind.mouse(key.getValue()).isPressed();
+		return InputConstants.isKeyDown(key.getValue());
 	}
 }

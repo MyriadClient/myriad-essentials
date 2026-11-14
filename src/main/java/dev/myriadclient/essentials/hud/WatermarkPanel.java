@@ -1,19 +1,19 @@
 package dev.myriadclient.essentials.hud;
 
-import dev.myriadclient.api.render.Canvas;
-import dev.myriadclient.api.render.FontFamily;
-import dev.myriadclient.api.render.MyriadLogo;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.StringSetting;
 import dev.myriadclient.api.ui.Rect;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
+import dev.myriadclient.api.ui.draw.MyriadLogo;
 import dev.myriadclient.api.ui.hud.HudPanel;
 import dev.myriadclient.api.ui.hud.HudStyle;
 import net.fabricmc.loader.api.FabricLoader;
 
 public final class WatermarkPanel extends HudPanel {
-	private final StringSetting text = sgGeneral.string("Text").defaultValue("Myriad").build();
+	private final StringSetting text = sgGeneral.string("Text").description("The name shown.").defaultValue("Myriad").build();
 	private final BoolSetting logo = sgGeneral.bool("Logo").description("The Myriad mark before the text.").defaultValue(true).build();
-	private final BoolSetting version = sgGeneral.bool("Show Version").defaultValue(true).build();
+	private final BoolSetting version = sgGeneral.bool("Show Version").description("Myriad's version in small text after the name.").defaultValue(true).build();
 
 	private final HudStyle style = new HudStyle(settings, HudStyle.Mode.GRADIENT, true);
 

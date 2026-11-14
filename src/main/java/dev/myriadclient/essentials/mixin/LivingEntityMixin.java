@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.At;
 /** View Model: your swing speed. No Render: your own effect particles. */
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin {
-	@ModifyReturnValue(method = "getCurrentSwingDuration", at = @At("RETURN"))
+	@ModifyReturnValue(method = "getModifiedSwingDuration", at = @At("RETURN"))
 	private int essentials$swingSpeed(int ticks) {
 		return (Object) this == Minecraft.getInstance().player ? ViewModel.swingDuration(ticks) : ticks;
 	}

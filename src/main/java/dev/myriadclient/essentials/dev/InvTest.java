@@ -7,8 +7,8 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Modules;
-import dev.myriadclient.essentials.modules.player.AutoMend;
-import dev.myriadclient.essentials.modules.player.AutoSort;
+import dev.myriadclient.essentials.modules.automation.AutoMend;
+import dev.myriadclient.essentials.modules.automation.AutoSort;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -85,7 +85,7 @@ public final class InvTest extends Command {
 	}
 
 	private Scenario scenario;
-	private int stableTicks, doneFor;
+	private int doneFor;
 
 	private int scenario(Scenario sc) {
 		if (mc.getSingleplayerServer() == null || mc.player == null) {
@@ -121,7 +121,6 @@ public final class InvTest extends Command {
 				if (ticks < 0) return;
 				phase = Phase.SORTING;
 				ticks = 0;
-				stableTicks = 0;
 				scenario.open.run();
 			}
 			case SORTING -> {
@@ -147,31 +146,13 @@ public final class InvTest extends Command {
 		}
 	}
 
-	/** Turns module {@code type} on with its item list {@code id} set to {@code items}. */
-	@SuppressWarnings("unchecked")	private static int count(ServerPlayer p, Item item) {
+	private static int count(ServerPlayer p, Item item) {
 		int n = 0;
 		for (int i = 0; i < 36; i++) if (p.getInventory().getItem(i).is(item)) n += p.getInventory().getItem(i).getCount();
 		return n;
 	}
 
-	/** Whether nothing the module watches has changed for a second (it's finished or stuck). */
-	private boolean settled(java.util.function.IntSupplier state) {
-		int now = state.getAsInt();
-		if (now != lastState) {
-			lastState = now;
-			stableTicks = 0;
-			return false;
-		}
-		return ++stableTicks > 20;
-	}
-
-	private int lastState = Integer.MIN_VALUE;
-
-	private int inventoryHash() {
-		int h = 0;
-		for (int i = 0; i < 36; i++) h = h * 31 + ItemStack.hashItemAndComponents(mc.player.getInventory().getItem(i)) * 7 + mc.player.getInventory().getItem(i).getCount();
-		return h;
-	}	private static ItemStack mending(ServerLevel level, Item item, int damage) {
+	private static ItemStack mending(ServerLevel level, Item item, int damage) {
 		ItemStack s = new ItemStack(item);
 		s.enchant(level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
 			.getOrThrow(net.minecraft.world.item.enchantment.Enchantments.MENDING), 1);
@@ -205,33 +186,8 @@ public final class InvTest extends Command {
 			return (placed && mended && used < 100 ? "OK" : "WRONG") + " mended " + mended + ", everything back in place " + placed + ", bottles " + used
 				+ " (chest " + chest.getDamageValue() + ", sword " + inv.getItem(3).getDamageValue() + ", helmet " + inv.getItem(15).getDamageValue() + ", head " + head + ")";
 		});
-	}	private static int inBox(ItemStack box, Item item) {
-		return dev.myriadclient.api.util.ItemInfo.contents(box).stream().filter(s -> s.is(item)).mapToInt(ItemStack::getCount).sum();
-	}	/** The kit: obsidian, crystals, totems, apples, a Sharpness V sword, pearls, and gaps. */
-	private static ItemStack[] kitLayout(ServerLevel level) {
-		ItemStack[] k = new ItemStack[27];
-		java.util.Arrays.fill(k, ItemStack.EMPTY);
-		for (int i = 0; i < 10; i++) k[i] = new ItemStack(Items.OBSIDIAN, 64);
-		for (int i = 10; i < 16; i++) k[i] = new ItemStack(Items.END_CRYSTAL, 64);
-		for (int i = 17; i < 21; i++) k[i] = new ItemStack(Items.TOTEM_OF_UNDYING);
-		k[21] = new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 64);
-		k[22] = new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 32);
-		k[24] = sword(level);
-		k[26] = new ItemStack(Items.ENDER_PEARL, 16);
-		return k;
 	}
 
-	private static ItemStack sword(ServerLevel level) {
-		ItemStack s = new ItemStack(Items.DIAMOND_SWORD);
-		s.enchant(level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
-			.getOrThrow(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS), 5);
-		return s;
-	}
-
-	private static void fill(ServerLevel level, BlockPos pos, ItemStack... items) {
-		level.setBlock(pos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_CLIENTS);
-		if (level.getBlockEntity(pos) instanceof net.minecraft.world.Container c) for (int i = 0; i < items.length; i++) c.setItem(i, items[i]);
-	}
 	private int sort(boolean full) {
 		if (mc.getSingleplayerServer() == null || mc.player == null) {
 			error("Only in singleplayer.");

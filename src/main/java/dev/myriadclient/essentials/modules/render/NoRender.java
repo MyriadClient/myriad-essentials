@@ -29,12 +29,12 @@ public class NoRender extends Module {
 	public final BoolSetting totem = sgGeneral.bool("Totem Animation").description("No totem pop animation.").defaultValue(true).build();
 	public final BoolSetting weather = sgGeneral.bool("Weather").description("No rain or snow.").build();
 	public final BoolSetting toasts = sgGeneral.bool("Toasts").description("No advancement, recipe or system toasts.").build();
-	public final BoolSetting fire = sgOverlays.bool("Fire Overlay").defaultValue(true).build();
+	public final BoolSetting fire = sgOverlays.bool("Fire Overlay").description("No flames across the screen while you burn.").defaultValue(true).build();
 	public final BoolSetting blockOverlay = sgOverlays.bool("Block Overlay").description("No texture when your head is inside a block.").defaultValue(true).build();
 	public final BoolSetting liquidOverlay = sgOverlays.bool("Liquid Overlay").description("No underwater texture.").build();
-	public final BoolSetting vignette = sgOverlays.bool("Vignette").defaultValue(true).build();
+	public final BoolSetting vignette = sgOverlays.bool("Vignette").description("No darkened screen edges.").defaultValue(true).build();
 	public final BoolSetting portal = sgOverlays.bool("Portal Overlay").description("No purple swirl or screen warp while you stand in a portal.").defaultValue(true).build();
-	public final BoolSetting pumpkin = sgOverlays.bool("Pumpkin Overlay").defaultValue(true).build();
+	public final BoolSetting pumpkin = sgOverlays.bool("Pumpkin Overlay").description("See normally while wearing a carved pumpkin.").defaultValue(true).build();
 	public final BoolSetting powderSnow = sgOverlays.bool("Powder Snow Overlay").description("No frost around the screen while freezing.").defaultValue(true).build();
 	public final BoolSetting spyglass = sgOverlays.bool("Spyglass Overlay").description("Zoom with a spyglass without the black ring.").build();
 
@@ -46,9 +46,9 @@ public class NoRender extends Module {
 		.defaultValue(true).build();
 
 	private final SettingGroup sgHud = settings.group("HUD");
-	public final BoolSetting bossBar = sgHud.bool("Boss Bar").build();
+	public final BoolSetting bossBar = sgHud.bool("Boss Bar").description("No boss health bars at the top of the screen.").build();
 	public final BoolSetting statusEffects = sgHud.bool("Status Effects").description("No potion icons in the top right.").build();
-	public final BoolSetting xpBar = sgHud.bool("XP Bar").build();
+	public final BoolSetting xpBar = sgHud.bool("XP Bar").description("No experience bar or level above the hotbar.").build();
 	public final BoolSetting itemName = sgHud.bool("Item Name").description("No item name above the hotbar when switching.").build();
 	public final BoolSetting scoreboard = sgHud.bool("Scoreboard").description("No scoreboard on the right of the screen.").build();
 

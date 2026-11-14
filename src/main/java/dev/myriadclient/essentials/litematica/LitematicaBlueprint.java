@@ -11,9 +11,9 @@ import fi.dy.masa.malilib.util.position.LayerRange;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
-import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashSet;
@@ -38,20 +38,13 @@ public final class LitematicaBlueprint implements Blueprint {
 	private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 	private final LongOpenHashSet seen = new LongOpenHashSet();
 
-	/** {@code includeAir}: also ask for the air inside the schematic (to clear what's in the way); false leaves it be. */
-	public LitematicaBlueprint(BooleanSupplier includeAir) {
-		this(includeAir, s -> false);
-	}
-
-	/** As {@link #LitematicaBlueprint(BooleanSupplier)}; positions whose schematic block {@code skip} accepts are left out. */
+	/**
+	 * {@code includeAir}: also ask for the air inside the schematic (to clear what's in the way), else leave it be;
+	 * positions whose schematic block {@code skip} accepts are left out.
+	 */
 	public LitematicaBlueprint(BooleanSupplier includeAir, Predicate<BlockState> skip) {
 		this.includeAir = includeAir;
 		this.skip = skip;
-	}
-
-	/** Whether Litematica and a schematic world are there to read. */
-	public static boolean ready() {
-		return SchematicWorldHandler.getSchematicWorld() != null;
 	}
 
 	@Override

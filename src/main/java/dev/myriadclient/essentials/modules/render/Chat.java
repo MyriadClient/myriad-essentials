@@ -2,7 +2,6 @@ package dev.myriadclient.essentials.modules.render;
 
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
-import dev.myriadclient.api.event.events.GameReadyEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
@@ -13,7 +12,6 @@ import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.setting.StringListSetting;
-import dev.myriadclient.api.ui.ThemeSettings;
 import dev.myriadclient.api.util.ColorUtil;
 import net.minecraft.client.OptionInstance;
 import net.minecraft.client.Options;
@@ -38,9 +36,6 @@ import java.util.regex.PatternSyntaxException;
  * module's own, read by the chat mixins (ChatComponentMixin, ChatBackgroundMixin, ChatTextShadowMixin). That includes
  * what's shown, which only changes what you see: Minecraft's own Chat option also tells the server, which then ignores
  * your commands. Off, chat is Minecraft's.
- * <p>
- * It was part of Myriad core's theme preferences until core 1.3: the first time it loads, it takes what you had set
- * there, and turns on, so chat looks as it did.
  */
 public class Chat extends Module {
 	/** A server's chat line: {@code <name> message}. */
@@ -67,12 +62,12 @@ public class Chat extends Module {
 	public final IntSetting width = sgLook.integer("Width").description("In GUI pixels.").defaultValue(320).range(40, 320).build();
 	public final IntSetting height = sgLook.integer("Height").description("While chat is open, in GUI pixels.").defaultValue(180).range(20, 180).build();
 	public final IntSetting heightClosed = sgLook.integer("Height Closed").description("While chat is closed, in GUI pixels.").defaultValue(90).range(20, 180).build();
-	public final DoubleSetting textOpacity = sgLook.decimal("Text Opacity").defaultValue(1.0).range(0, 1).decimals(2).build();
-	public final DoubleSetting backgroundOpacity = sgLook.decimal("Background Opacity").defaultValue(0.5).range(0, 1).decimals(2).build();
-	public final DoubleSetting lineSpacing = sgLook.decimal("Line Spacing").defaultValue(0.0).range(0, 1).decimals(2).build();
+	public final DoubleSetting textOpacity = sgLook.decimal("Text Opacity").description("How solid chat's text is, from invisible (0) to fully opaque (1).").defaultValue(1.0).range(0, 1).decimals(2).build();
+	public final DoubleSetting backgroundOpacity = sgLook.decimal("Background Opacity").description("How solid the background behind chat's lines is.").defaultValue(0.5).range(0, 1).decimals(2).build();
+	public final DoubleSetting lineSpacing = sgLook.decimal("Line Spacing").description("Extra room between chat's lines.").defaultValue(0.0).range(0, 1).decimals(2).build();
 	public final EnumSetting<Background> background = sgLook.oneOf("Background", Background.THEME)
 		.description("What chat's lines are drawn on: the theme's window colour, Minecraft's black, or nothing.").build();
-	public final BoolSetting shadow = sgLook.bool("Text Shadow").defaultValue(true).build();
+	public final BoolSetting shadow = sgLook.bool("Text Shadow").description("Draw a shadow under chat's text.").defaultValue(true).build();
 
 	private final SettingGroup sgMessages = settings.group("Messages");
 	public final EnumSetting<Shown> shown = sgMessages.oneOf("Shown", Shown.ALL).description("What you see, not what you can send: all messages; all, only while chat is open; "
@@ -84,9 +79,7 @@ public class Chat extends Module {
 		.defaultValue(true).build();
 	public final IntSetting history = sgMessages.integer("History").description("Messages kept to scroll back through (Minecraft keeps 100).")
 		.defaultValue(1000).range(100, 10000).build();
-	/** Whether what core's theme preferences had has been taken (see the class comment). */
-	private final BoolSetting carriedOver = sgMessages.bool("Carried Over").visible(() -> false).build();
-	/** Whether Minecraft's Chat option has been given back, once, after Shown stopped being kept in step with it. */
+	/** Whether Minecraft's Chat option has been checked, once, for a hidden value an older config's Shown left in it. */
 	private final BoolSetting chatOptionFreed = sgMessages.bool("Chat Option Freed").visible(() -> false).build();
 
 	/** Chat is drawing (ChatComponentMixin): its text shadow and background follow the settings. */
@@ -100,8 +93,7 @@ public class Chat extends Module {
 	private List<Pattern> patterns = List.of();
 
 	public Chat() {
-		super(Tags.RENDER, "Chat", "Chat in the theme's font and colours, filtered, repeats stacked, more kept; Minecraft's Chat Settings here too.");
-		Myriad.events().subscribe(new CarryOver());
+		super(Tags.RENDER, "Chat", "Draws chat in the theme's font and colours, filtered, repeats stacked, more kept; Minecraft's Chat Settings here too.");
 	}
 
 	@Override
@@ -172,8 +164,8 @@ public class Chat extends Module {
 	}
 
 	/**
-	 * Shown used to set Minecraft's Chat option too, and hiding chat there makes servers ignore your commands: if it
-	 * was left as Shown had set it, it goes back to on, once.
+	 * Older configs kept Minecraft's Chat option in step with Shown, so it may still say Commands Only or Hidden, and hiding
+	 * chat there makes servers ignore your commands. If it matches Shown, it's set back to on, once.
 	 */
 	private boolean freeChatOption(Options o) {
 		if (chatOptionFreed.get()) return false;
@@ -190,39 +182,6 @@ public class Chat extends Module {
 	/** Chat's lines are split by the font and width they're drawn at, and shown by the filters: split again. */
 	private static void rescale() {
 		if (mc.gui != null) mc.gui.hud.getChat().rescaleChat();
-	}
-
-	/**
-	 * What core's theme preferences had, taken once (core 1.3 left them there, hidden and unused), and the module turned
-	 * on: chat looked like this before, with nothing to turn on.
-	 */
-	private final class CarryOver {
-		@Subscribe
-		@SuppressWarnings({"deprecation", "removal"})
-		private void onReady(GameReadyEvent e) {
-			if (carriedOver.get()) return;
-			ThemeSettings t = Myriad.ui().theme();
-			font.set(t.chatFont.get() == ThemeSettings.ChatFont.MINECRAFT ? Font.MINECRAFT : Font.THEME);
-			size.set(t.chatSize.get());
-			width.set(t.chatWidth.get());
-			height.set(t.chatHeight.get());
-			heightClosed.set(t.chatHeightUnfocused.get());
-			textOpacity.set(t.chatTextOpacity.get());
-			backgroundOpacity.set(t.chatBackgroundOpacity.get());
-			lineSpacing.set(t.chatLineSpacing.get());
-			background.set(switch (t.chatBackground.get()) {
-				case THEME -> Background.THEME;
-				case VANILLA -> Background.MINECRAFT;
-				case NONE -> Background.NONE;
-			});
-			shadow.set(t.chatShadow.get());
-			shown.set(Shown.valueOf(t.chatShown.get().name()));
-			filters.set(new ArrayList<>(t.chatFilters.get()));
-			stackRepeats.set(t.chatStackRepeats.get());
-			history.set(t.chatHistory.get());
-			carriedOver.set(true);
-			setEnabled(true);
-		}
 	}
 
 	// ---- read by the chat mixins ------------------------------------------------------------------------------------

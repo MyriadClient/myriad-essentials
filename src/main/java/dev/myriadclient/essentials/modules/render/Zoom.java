@@ -8,12 +8,14 @@ import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.Easing;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SavedSettings;
+import dev.myriadclient.api.ui.draw.Easing;
 import net.minecraft.util.Mth;
+
+import java.util.Locale;
 
 /**
  * Zooms the camera by dividing the field of view, easing in and out. Mouse turning slows down to match, and you can
@@ -50,7 +52,7 @@ public class Zoom extends Module {
 
 	@Override
 	protected void migrateSettings(int fromVersion, SavedSettings saved) {
-		// 1 had a Smooth toggle and a Speed; easing is now a duration, and 0 is what Smooth off meant.
+		// Version 1 configs have a Smooth toggle and a Speed; easing is a Duration, and 0 is what Smooth off means.
 		if (fromVersion == 1) {
 			saved.get("General", "Smooth").filter(v -> !v.getAsBoolean()).ifPresent(v -> saved.set("General", "Duration", new JsonPrimitive(0)));
 			saved.remove("General", "Smooth");
@@ -60,7 +62,7 @@ public class Zoom extends Module {
 
 	@Override
 	public String hudInfo() {
-		return String.format("%.1fx", zoom);
+		return String.format(Locale.ROOT, "%.1fx", zoom);
 	}
 
 	@Override

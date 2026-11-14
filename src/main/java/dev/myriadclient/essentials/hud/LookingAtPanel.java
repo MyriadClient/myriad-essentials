@@ -1,19 +1,19 @@
 package dev.myriadclient.essentials.hud;
 
-import dev.myriadclient.api.util.ColorUtil;
-import dev.myriadclient.essentials.mixin.MultiPlayerGameModeAccessor;
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.render.Animated;
-import dev.myriadclient.api.render.Canvas;
+import dev.myriadclient.api.player.Interactions;
 import dev.myriadclient.api.render.EntityGroups;
-import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.ui.Rect;
 import dev.myriadclient.api.ui.ThemeSettings;
+import dev.myriadclient.api.ui.draw.Animated;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
 import dev.myriadclient.api.ui.hud.HudPanel;
 import dev.myriadclient.api.ui.hud.ItemHud;
-import dev.myriadclient.api.util.Entities;
+import dev.myriadclient.api.util.ColorUtil;
+import dev.myriadclient.api.world.Entities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
@@ -42,6 +42,7 @@ import net.minecraft.world.phys.HitResult;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * What the crosshair is on, in a wide card in the theme's colours: the block or entity with its icon and name, and on
@@ -128,7 +129,7 @@ public final class LookingAtPanel extends HudPanel {
 			} else {
 				float perTick = state.getDestroyProgress(mc.player, mc.level, pos);
 				if (perTick >= 1) lines.add(new Line("Breaks", "Instantly", t.green.argb()));
-				else if (perTick > 0) lines.add(new Line("Breaks", String.format("%.2f s", Math.ceil(1 / perTick) / 20), t.text.argb()));
+				else if (perTick > 0) lines.add(new Line("Breaks", String.format(Locale.ROOT, "%.2f s", Math.ceil(1 / perTick) / 20), t.text.argb()));
 			}
 			if (grows(block)) {
 				IntegerProperty age = intProperty(state, "age");
@@ -163,7 +164,7 @@ public final class LookingAtPanel extends HudPanel {
 		if (entity instanceof LivingEntity living && living.isBaby()) title += " (Baby)";
 		if (entityDetails.get() && entity instanceof LivingEntity living) {
 			float hp = living.getHealth(), max = living.getMaxHealth(), absorption = living.getAbsorptionAmount();
-			String health = String.format("%.1f / %.0f", hp, max) + (absorption > 0 ? String.format(" +%.0f", absorption) : "");
+			String health = String.format(Locale.ROOT, "%.1f / %.0f", hp, max) + (absorption > 0 ? String.format(Locale.ROOT, " +%.0f", absorption) : "");
 			lines.add(new Line("Health", health, ItemHud.durabilityColor(max > 0 ? hp / max : 0)));
 			if (living.getArmorValue() > 0) lines.add(new Line("Armor", String.valueOf(living.getArmorValue()), t.text.argb()));
 			if (entity instanceof Player player && player != mc.player) {
@@ -172,7 +173,7 @@ public final class LookingAtPanel extends HudPanel {
 			}
 			if (entity instanceof AbstractHorse horse) {
 				double speed = horse.getAttributeValue(Attributes.MOVEMENT_SPEED) * HORSE_SPEED_TO_BPS;
-				lines.add(new Line("Speed", String.format("%.1f b/s", speed), t.text.argb()));
+				lines.add(new Line("Speed", String.format(Locale.ROOT, "%.1f b/s", speed), t.text.argb()));
 			}
 		}
 		EntityGroups.Group group = EntityGroups.of(entity);
@@ -185,9 +186,7 @@ public final class LookingAtPanel extends HudPanel {
 		if (info.pos() == null || !breakBar.get()) return 0;
 		if (preview()) return 0.6f;
 		float service = Myriad.breaking().progress(info.pos());
-		MultiPlayerGameModeAccessor hand = (MultiPlayerGameModeAccessor) mc.gameMode;
-		float own = hand != null && mc.gameMode.isDestroying() && info.pos().equals(hand.essentials$destroyBlockPos()) ? hand.essentials$destroyProgress() : 0;
-		return Math.clamp(Math.max(service, own), 0, 1);
+		return Math.clamp(Math.max(service, Interactions.handBreakProgress(info.pos())), 0, 1);
 	}
 
 	// ---- layout -----------------------------------------------------------------------------------------------------

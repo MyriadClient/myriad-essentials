@@ -8,6 +8,7 @@ import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
+import dev.myriadclient.api.player.Reach;
 import dev.myriadclient.api.render.HighlightStyle;
 import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.service.Placement;
@@ -16,7 +17,6 @@ import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
-import dev.myriadclient.api.util.Reach;
 import dev.myriadclient.essentials.modules.render.BlockHighlight;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
@@ -27,9 +27,9 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Places blocks in mid-air: with a block in hand and nothing under the crosshair, right-click puts it where you look,
- * {@link #distance} blocks away, outlined beforehand (in Block Highlight's look while that's on). Farther than the server would accept, it comes back along your
- * look to the farthest space that is: your look has to enter the space within reach, so up to about 5 blocks ahead
- * (6 looking along a diagonal).
+ * {@link #distance} blocks away, outlined beforehand (in Block Highlight's look while that's on). Farther than the
+ * server would accept, it comes back along your look to the farthest space that is: your look has to enter the space
+ * within reach, so up to about 5 blocks ahead (6 looking along a diagonal).
  */
 public class AirPlace extends Module {
 	private final DoubleSetting distance = sgGeneral.decimal("Distance").description("How far in front of you the block goes.")
@@ -37,7 +37,7 @@ public class AirPlace extends Module {
 	private final SettingGroup sgRender = settings.group("Render");
 	private final BoolSetting showTarget = sgRender.bool("Show Target").description("Where the block will go (Block Highlight shows it instead while it's on).")
 		.defaultValue(true).build();
-	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(showTarget::get).build();
+	private final ColorSetting color = sgRender.color("Color").description("The outline's colour.").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(showTarget::get).build();
 	private final RenderSettings look = RenderSettings.builder(sgRender).visible(showTarget::get)
 		.defaults(HighlightStyle.OUTLINE.withFill(HighlightStyle.Fill.NONE)).throughWalls(false).build();
 
@@ -48,7 +48,7 @@ public class AirPlace extends Module {
 	private BlockPos target;
 
 	public AirPlace() {
-		super(Tags.WORLD, "Air Place", "Place blocks in mid-air where you look.");
+		super(Tags.WORLD, "Air Place", "Places blocks in mid-air where you look.");
 	}
 
 	private Placement.Options options() {

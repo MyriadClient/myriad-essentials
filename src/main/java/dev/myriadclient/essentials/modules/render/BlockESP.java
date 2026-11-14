@@ -10,13 +10,13 @@ import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
+import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingColor;
+import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.ui.widget.Preview;
 import dev.myriadclient.api.ui.widget.Widget;
 import dev.myriadclient.api.world.BlockScan;
 import dev.myriadclient.api.world.ChunkCache;
-import dev.myriadclient.api.setting.SavedSettings;
-import dev.myriadclient.api.setting.SettingGroup;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -48,7 +48,7 @@ public class BlockESP extends Module {
 
 	private final SettingGroup sgRender = settings.group("Render");
 	private final BoolSetting blockColors = sgRender.bool("Block Colors").description("Draw each block in its own colour (as on a map).").defaultValue(true).build();
-	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(() -> !blockColors.get()).build();
+	private final ColorSetting color = sgRender.color("Color").description("The one colour every block is drawn in.").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(() -> !blockColors.get()).build();
 	private final RenderSettings look = RenderSettings.builder(sgRender).build();
 
 	private final ChunkCache<List<BlockPos>> found = ChunkCache.of(this, this::scan)

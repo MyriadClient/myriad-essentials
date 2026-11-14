@@ -1,9 +1,9 @@
 package dev.myriadclient.essentials.modules.render.tab;
 
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.render.Canvas;
-import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.ui.ThemeSettings;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
 import dev.myriadclient.api.util.ColorUtil;
 import dev.myriadclient.essentials.modules.render.ExtraTab;
 import net.minecraft.Optionull;

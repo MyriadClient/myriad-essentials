@@ -4,6 +4,9 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.Render3DEvent;
 import dev.myriadclient.api.event.events.RenderEvent;
+import dev.myriadclient.api.integration.Baritone;
+import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.Ghosts;
 import dev.myriadclient.api.render.RenderMode;
 import dev.myriadclient.api.render.RenderSettings;
@@ -13,8 +16,10 @@ import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
+import dev.myriadclient.api.setting.Setting;
+import dev.myriadclient.api.setting.SettingColor;
+import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.TickCached;
-import java.util.Set;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
@@ -23,17 +28,11 @@ import net.minecraft.util.ARGB;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import dev.myriadclient.api.module.Module;
-import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.setting.Setting;
-import dev.myriadclient.api.setting.SettingColor;
-import dev.myriadclient.api.setting.SettingGroup;
-import dev.myriadclient.api.util.Baritone;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.level.block.Block;
 
 import java.awt.Color;
 import java.lang.reflect.ParameterizedType;
@@ -47,6 +46,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -283,28 +283,18 @@ public class BaritoneSettings extends Module {
 		private final TickCached<List<BlockPos>[]> work = TickCached.of(this::blocksAhead);
 		/** The way the ghost faces now (turned smoothly towards where it should), or NaN before the first frame. */
 		private float ghostYaw = Float.NaN;
-		/** Baritone's own drawing as it was before this turned it off (null: not changed). */
-		private Object renderPathBefore, renderGoalBefore, renderBoxesBefore;
+		/** Baritone's own drawing, off while this draws, put back after (unless something turned it on again meanwhile). */
+		private final Baritone.Overrides ownDrawing = Baritone.override();
 
 
 
 		/** Turns Baritone's own drawing off while this draws. */
 		void start() {
-			renderPathBefore = Baritone.setSetting("renderPath", false);
-			renderGoalBefore = Baritone.setSetting("renderGoal", false);
-			renderBoxesBefore = Baritone.setSetting("renderSelectionBoxes", false);
+			ownDrawing.set("renderPath", false).set("renderGoal", false).set("renderSelectionBoxes", false);
 		}
 
 		void stop() {
-			// Back as they were, unless something turned them on again meanwhile.
-			putBack("renderPath", renderPathBefore);
-			putBack("renderGoal", renderGoalBefore);
-			putBack("renderSelectionBoxes", renderBoxesBefore);
-			renderPathBefore = renderGoalBefore = renderBoxesBefore = null;
-		}
-
-		private static void putBack(String name, Object before) {
-			if (before != null && Boolean.FALSE.equals(Baritone.getSetting(name))) Baritone.setSetting(name, before);
+			ownDrawing.close();
 		}
 
 		@Subscribe(inGame = true)
@@ -382,8 +372,9 @@ public class BaritoneSettings extends Module {
 		// ---- blocks to break and place ----------------------------------------------------------------------------------
 
 		/**
-		 * The next {@link #BLOCKS_AHEAD} nodes' work, as Baritone would see it: anything solid where your body goes (feet and
-		 * head, and over your head where it climbs) is mined; a gap under a node it walks or climbs onto is filled.
+		 * The next {@link #BLOCKS_AHEAD} nodes' work, as Baritone would see it: anything solid where your body goes
+		 * (feet and head, and over your head where it climbs) is mined; a gap under a node it walks or climbs onto is
+		 * filled.
 		 */
 		@SuppressWarnings("unchecked")
 		private List<BlockPos>[] blocksAhead() {

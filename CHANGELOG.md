@@ -3,6 +3,32 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.0.0
+
+Needs Myriad 2.0.0, for Minecraft 26.3. 1.10.1 stays for 26.2.
+
+- **Minecraft 26.3.** Every module is ported: View Model on 26.3's hand rendering, No Render's weather and fog, Time of
+  Day on the new world clock, and the rest; your settings and binds carry over.
+- **Middle Balance** (Inventory Tweaks): middle-click over a crafting grid to share each item out evenly across the slots
+  that hold it, with vanilla's own drag clicks.
+- **Drag Collect is gone** (Inventory Tweaks): it got in the way of crafting.
+- **Chat's Carried Over is gone**: Myriad's theme no longer has the old chat options it carried over.
+- Every setting has a description, and module descriptions read the same way throughout.
+
+For addon developers: modules moved into packages named for their window, with their ids unchanged. The automation
+modules (Anti AFK, Auto Eat, Auto Mend, Auto Portal, Auto Sort, Auto Tool, Auto Walk, Junk Dropper, Printer) are in
+`modules.automation`; Elytra Fly and its types (`Recast`, `Altitude`, `ElytraControl`, `ElytraSwap`, `RocketBoost`, ...)
+in `modules.movement.elytra`; `Velocity` in `modules.combat`; `PacketMine`, `Reach` and `WallInteract` in
+`modules.world`. Hooks keep their ids.
+
+## 1.10.1
+
+Needs Myriad 1.8.0.
+
+- **Nether portals take you through with Elytra Fly left on.** Recast walks you out of a portal you stop in, so a run never
+  ends in another dimension, but it did so even with no elytra to fly with (Elytra Fly on, Recast standing by), so walking
+  into a portal yourself got you walked back out. It only does that now while it could fly you on.
+
 ## 1.10.0
 
 Needs Myriad 1.8.0.

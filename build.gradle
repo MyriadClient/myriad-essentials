@@ -3,7 +3,7 @@
 // the maven publication and publishAddon. `-PcoreDir=../myriad` builds against a core checkout next to this one, the
 // plugin included. What's below is Essentials' own.
 plugins {
-	id 'dev.myriadclient.addon' version '1.8.0'
+	id 'dev.myriadclient.addon' version '2.0.0'
 }
 
 version = project.mod_version
@@ -26,8 +26,8 @@ dependencies {
 	// Most 2b2t players join through ViaFabricPlus as an older version, so the dev client does too (see `via` below).
 	localRuntime "maven.modrinth:viafabricplus:${project.viafabricplus_version}"
 	// The Printer reads Litematica's schematic world when it's installed (see the litematica package); never bundled.
-	// -Plitematica puts it in the dev client (for .printtest), without Xaero's maps: Litematica 0.28.8 with Xaero's
-	// Minimap 26.6.0 and World Map 1.47.0 crashes at start ("Missing uniform Globals" uploading animated textures).
+	// -Plitematica puts it in the dev client (for .printtest), without Xaero's maps: the two together crash at start
+	// ("Missing uniform Globals" uploading animated textures).
 	compileOnly "maven.modrinth:litematica:${project.litematica_version}"
 	compileOnly "maven.modrinth:malilib:${project.malilib_version}"
 	def litematica = project.hasProperty("litematica")
@@ -43,8 +43,11 @@ dependencies {
 }
 
 // The protocol the dev client joins servers with, through ViaFabricPlus: 1.20.4 by default (what most 2b2t players
-// use), `-Pvia=native` for the client's own. Singleplayer is never translated.
-def viaProtocol = project.findProperty("via")?.toString() ?: "1.20.4"
+// use), `-Pvia=native` for the client's own (ViaFabricPlus still loaded, set to it). The test client joins as its own
+// version unless `-Pvia` says otherwise.
+// Singleplayer is never translated.
+def testClientRun = gradle.startParameter.taskNames.any { it.tokenize(":").last() == "runTestClient" }
+def viaProtocol = project.findProperty("via")?.toString() ?: (testClientRun ? "native" : "1.20.4")
 def runDir = project.findProperty("runDir")?.toString() ?: "run"
 def selectViaProtocol = tasks.register("selectViaProtocol") {
 	def settings = file("${runDir}/config/viafabricplus/settings.json")
@@ -59,7 +62,7 @@ def selectViaProtocol = tasks.register("selectViaProtocol") {
 		logger.lifecycle("ViaFabricPlus joins servers as ${json.selected_protocol_version}")
 	}
 }
-tasks.matching { it.name == "runClient" }.configureEach { dependsOn selectViaProtocol }
+tasks.matching { it.name == "runClient" || it.name == "runTestClient" }.configureEach { dependsOn selectViaProtocol }
 
 loom {
 	runs {

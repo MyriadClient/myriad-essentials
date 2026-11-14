@@ -1,24 +1,25 @@
 package dev.myriadclient.essentials.modules.player;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.MouseButtonEvent;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.input.Keybind;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
+import dev.myriadclient.api.player.Interactions;
 import dev.myriadclient.api.service.AntiCheat;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
-import dev.myriadclient.api.util.Interactions;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundPunchPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * Middle click does something useful depending on what you're pointing at: in the air, at an entity, at a block, or
@@ -51,7 +52,7 @@ public class MiddleClick extends Module {
 	private static final int PENDING_TICKS = 5;
 
 	public MiddleClick() {
-		super(Tags.PLAYER, "Middle Click", "Friends, experience, rockets or pearls on the middle mouse button.");
+		super(Tags.PLAYER, "Middle Click", "Puts friends, experience, rockets or pearls on the middle mouse button.");
 	}
 
 	@Override
@@ -62,8 +63,8 @@ public class MiddleClick extends Module {
 
 	@Subscribe
 	private void onMouse(MouseButtonEvent e) {
-		if (e.button() != GLFW.GLFW_MOUSE_BUTTON_MIDDLE || e.inScreen()) return;
-		if (e.action() == GLFW.GLFW_RELEASE) {
+		if (e.button() != InputConstants.MOUSE_BUTTON_MIDDLE || e.inScreen()) return;
+		if (e.action() == InputConstants.RELEASE) {
 			held = false;
 			return;
 		}
@@ -85,7 +86,7 @@ public class MiddleClick extends Module {
 			else use(pending);
 		}
 		if (!held || !inGame()) return;
-		if (mc.gui.screen() != null || GLFW.glfwGetMouseButton(mc.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_MIDDLE) != GLFW.GLFW_PRESS) {
+		if (mc.gui.screen() != null || !Keybind.mouse(InputConstants.MOUSE_BUTTON_MIDDLE).isPressed()) {
 			held = false;
 			return;
 		}
@@ -143,7 +144,7 @@ public class MiddleClick extends Module {
 		if (mc.player.getOffhandItem().is(item)) {
 			pending = null;
 			Interactions.useItem(InteractionHand.OFF_HAND);
-			swing(InteractionHand.OFF_HAND);
+			swing();
 			return;
 		}
 		int slot = Myriad.inventory().findInHotbar(s -> s.is(item));
@@ -166,12 +167,15 @@ public class MiddleClick extends Module {
 		Myriad.inventory().borrow(this, slot, null);
 		Myriad.inventory().silentSwap(slot, () -> {
 			Interactions.useItem(InteractionHand.MAIN_HAND);
-			swing(InteractionHand.MAIN_HAND);
+			swing();
 		});
 	}
 
-	/** The swing vanilla sends with a use, without the hand moving on screen; none where the server wants none (2b2t). */
-	private void swing(InteractionHand hand) {
-		if (mc.getConnection() != null && AntiCheat.inEffect().checksSwings()) mc.getConnection().send(new ServerboundSwingPacket(hand));
+	/**
+	 * The swing clients before 26.3 sent with a use (26.3 says only that you swung, not with which hand), without the
+	 * hand moving on screen; none where the server wants none (2b2t).
+	 */
+	private void swing() {
+		if (mc.getConnection() != null && AntiCheat.inEffect().checksSwings()) mc.getConnection().send(ServerboundPunchPacket.INSTANCE);
 	}
 }

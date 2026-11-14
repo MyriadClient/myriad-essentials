@@ -9,12 +9,12 @@ import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.setting.ColorSetting;
+import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingColor;
+import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.ui.widget.Preview;
 import dev.myriadclient.api.ui.widget.Widget;
 import dev.myriadclient.essentials.modules.world.AirPlace;
-import dev.myriadclient.api.setting.SavedSettings;
-import dev.myriadclient.api.setting.SettingGroup;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
@@ -23,14 +23,14 @@ import net.minecraft.world.phys.HitResult;
 
 /**
  * Replaces vanilla's thin black outline around the block you're looking at with your own look, in the render mode (the
- * Render window): an outline around the block's shape in Shader mode (with glow, fill and gradient, like Entity ESP's), a box
- * in Box mode. Always just the one block (half a double chest, one end of a bed), outlined on its own even where Blocks
- * or Storage highlight its neighbours. With nothing under the crosshair, it outlines the space Air Place would put a
- * block in (a full block).
+ * Render window): an outline around the block's shape in Shader mode (with glow, fill and gradient, like Entity ESP's),
+ * a box in Box mode. Always just the one block (half a double chest, one end of a bed), outlined on its own even where
+ * Block ESP or Storage ESP highlight its neighbours. With nothing under the crosshair, it outlines the space Air Place
+ * would put a block in (a full block).
  */
 public class BlockHighlight extends Module {
 	private final SettingGroup sgRender = settings.group("Render");
-	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).build();
+	private final ColorSetting color = sgRender.color("Color").description("The highlight's colour.").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).build();
 	private final RenderSettings look = RenderSettings.builder(sgRender).throughWalls(false).build();
 
 	/**
@@ -56,7 +56,7 @@ public class BlockHighlight extends Module {
 	}
 
 	public BlockHighlight() {
-		super(Tags.RENDER, "Block Highlight", "Your own look for the block you're looking at, in place of vanilla's outline.");
+		super(Tags.RENDER, "Block Highlight", "Draws the block you're looking at in your own look, in place of vanilla's outline.");
 		// Vanilla's outline only while this is off.
 		LevelRenderEvents.BEFORE_BLOCK_OUTLINE.register((context, state) -> !isEnabled());
 	}

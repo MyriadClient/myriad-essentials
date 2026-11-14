@@ -219,12 +219,72 @@ def t_scaffold():
     reset(z=-10.5, yaw=0)
     cmd("fill 980 99 -8 1040 99 20 air", f"item replace entity {P} hotbar.0 with dirt 64")
     # The test server's Grim checks where you look when placing (RotationPlace); 2b2t's doesn't.
-    out = client("select 1", ".set scaffold rotate true", ".toggle scaffold on", "wait 2", "hold forward,sprint 30", "wait 32", "status", ".toggle scaffold off", ".set scaffold rotate false")
+    # Ten ticks after the keys are let go: the cell you were held at the edge of goes in.
+    out = client("select 1", ".set scaffold rotate true", ".toggle scaffold on", "wait 2", "hold forward,sprint 30", "wait 42", "status", ".toggle scaffold off", ".set scaffold rotate false")
     # Every block it walked over from the floor's edge (z=-8), however far it got (Rotate breaks sprint at each one).
     _, y, z = position()
     path = range(-7, math.floor(z) + 1)
     placed = sum(passed(f"if block 1000 99 {bz} dirt") for bz in path)
     return len(path) >= 4 and placed == len(path) and y >= 99.9, f"{placed}/{len(path)} blocks bridged under the path, y={y:.2f}"
+
+
+def scaffold_pass(keys, ticks, rotate, air=False, yaw=0, clear=True):
+    """Scaffold on, the keys held for `ticks`, from (1000.5, 100, -10.5) facing `yaw`; with `clear`, the floor gone from z=-8 on.
+    Without Rotate it's 2b2t's way (unturned clicks, any face): the tester is deopped so this Grim only flags those, as
+    the 2b2t Printer passes do. Returns the start and end positions."""
+    reset(z=-10.5, yaw=yaw)
+    cmd(*(["fill 980 99 -8 1040 99 20 air"] if clear else []), f"item replace entity {P} hotbar.0 with dirt 64", f"item replace entity {P} inventory.0 with dirt 64")
+    client("select 1", f".set scaffold rotate {str(rotate).lower()}", f".set scaffold air_place {str(air).lower()}", ".set scaffold blocks clear", "wait 2")
+    lenient = not rotate or air
+    if lenient: cmd(f"deop {P}", "grim reload")
+    mark()
+    start = position()
+    client(".toggle scaffold on", "wait 2", f"hold {keys} {ticks}", f"wait {ticks + 4}", ".toggle scaffold off", ".set scaffold rotate false",
+        ".set scaffold air_place false")
+    end = position()
+    if lenient:
+        cmd(f"op {P}", "grim reload", f"kick {P} fresh Grim session")
+        time.sleep(4.5)
+        if not rejoin(): raise RuntimeError("couldn't rejoin after the pass")
+    return start, end
+
+
+def bridged(z0, z1, x=1000):
+    """How many of the cells z0..z1 at x under the floor's height have a block, and how many there are."""
+    path = range(z0, z1 + 1)
+    return sum(passed(f"if block {x} 99 {bz} dirt") for bz in path), len(path)
+
+
+def t_scaffold_sprinting_2b2t():
+    # Unturned clicks at a sprint: the run keeps its speed (sprinting covers about 8.4 blocks in 30 ticks, walking 6.5).
+    (_, _, z0), (_, y, z) = scaffold_pass("forward,sprint", 30, rotate=False)
+    placed, n = bridged(-7, math.floor(z))
+    return z - z0 >= 7.5 and placed == n and y >= 99.9, f"ran {z - z0:.2f} blocks, {placed}/{n} bridged, y={y:.2f}"
+
+
+def t_scaffold_diagonal():
+    # Running diagonally off the edge: a side cell goes in between each diagonal step, so nothing is left to fall through.
+    (x0, _, z0), (x, y, z) = scaffold_pass("forward,sprint", 30, rotate=False, yaw=-45)
+    gone = math.hypot(x - x0, z - z0)
+    return gone >= 6 and y >= 99.9, f"ran {gone:.2f} blocks diagonally, y={y:.2f}"
+
+
+def t_scaffold_air_place():
+    # Air Place: every cell straight into the air, no bridging needed.
+    (_, _, z0), (_, y, z) = scaffold_pass("forward,sprint", 30, rotate=False, air=True)
+    placed, n = bridged(-7, math.floor(z))
+    return z - z0 >= 7.5 and placed == n and y >= 99.9, f"ran {z - z0:.2f} blocks, {placed}/{n} placed, y={y:.2f}"
+
+
+def t_scaffold_tower():
+    # Jump held in place: a block under you at every jump.
+    (_, y0, _), (_, y, _) = scaffold_pass("jump", 80, rotate=False, clear=False)
+    return y - y0 >= 5, f"rose {y - y0:.2f} blocks in 80 ticks"
+
+
+def t_scaffold_tower_rotate():
+    (_, y0, _), (_, y, _) = scaffold_pass("jump", 80, rotate=True, clear=False)
+    return y - y0 >= 4, f"rose {y - y0:.2f} blocks in 80 ticks"
 
 
 def t_no_slow_items():
@@ -1989,6 +2049,11 @@ TESTS = [
     ("kill_aura walking", t_kill_aura_walking),
     ("packet_mine", t_packet_mine),
     ("scaffold", t_scaffold),
+    ("scaffold sprinting 2b2t", t_scaffold_sprinting_2b2t),
+    ("scaffold diagonal 2b2t", t_scaffold_diagonal),
+    ("scaffold air place 2b2t", t_scaffold_air_place),
+    ("scaffold tower 2b2t", t_scaffold_tower),
+    ("scaffold tower", t_scaffold_tower_rotate),
     ("no_slow items", t_no_slow_items),
     ("no_slow webs", t_no_slow_webs),
     ("no_slow webs after a tap", t_no_slow_webs_after_tap),
@@ -2103,7 +2168,9 @@ FLAGS_IGNORED = {"selftest (every module)"}
 # Checks a test relaxes on purpose (see printer_pass): flagged, but not failing it.
 FLAGS_RELAXED = {name: {"RotationPlace", "AirLiquidPlace", "PositionPlace"} for name in ("printer walking 2b2t", "printer sprinting 2b2t",
                                                                                         "printer jumping 2b2t", "printer full hotbar 2b2t",
-                                                                                        "auto_portal full hotbar", "auto_portal air place")}
+                                                                                        "auto_portal full hotbar", "auto_portal air place",
+                                                                                        "scaffold sprinting 2b2t", "scaffold diagonal 2b2t", "scaffold air place 2b2t",
+                                                                                        "scaffold tower 2b2t")}
 # Known to fail now and then for reasons that aren't the code under test. They run as usual; one that fails gets one
 # more try, alone, at the end, and only fails the run if it fails again. Anything else that fails is a failure.
 FLAKY = {

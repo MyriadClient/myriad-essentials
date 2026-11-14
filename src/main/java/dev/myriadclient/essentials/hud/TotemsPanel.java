@@ -1,10 +1,10 @@
 package dev.myriadclient.essentials.hud;
 
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.render.Canvas;
-import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.ui.Rect;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
 import dev.myriadclient.api.ui.hud.HudPanel;
 import dev.myriadclient.api.ui.hud.HudStyle;
 import net.minecraft.world.item.ItemStack;

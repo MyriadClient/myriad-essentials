@@ -3,7 +3,7 @@ package dev.myriadclient.essentials.mixin;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import dev.myriadclient.api.render.ThemeFont;
+import dev.myriadclient.api.ui.draw.ThemeFont;
 import dev.myriadclient.essentials.modules.render.Chat;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;

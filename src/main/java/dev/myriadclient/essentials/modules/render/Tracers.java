@@ -12,7 +12,7 @@ import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.util.ColorUtil;
-import dev.myriadclient.api.util.Entities;
+import dev.myriadclient.api.world.Entities;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -20,9 +20,9 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Set;
 
 /**
- * Lines from your crosshair to entities, by the same groups as Entity ESP (players, friends, monsters, crystals, pearls, …),
- * and to what Storage ESP and Block ESP highlight, in their colours. Every tracer line is drawn here, so range, width and fading
- * are set once for all of them.
+ * Lines from your crosshair to entities, by the same groups as Entity ESP (players, friends, monsters, crystals,
+ * pearls, …), and to what Storage ESP and Block ESP highlight, in their colours. Every tracer line is drawn here, so
+ * range, width and fading are set once for all of them.
  */
 public class Tracers extends Module {
 	public enum Target {
@@ -31,7 +31,7 @@ public class Tracers extends Module {
 
 	private final EnumSetting<Target> target = sgGeneral.oneOf("Target", Target.BODY).description("Which part of the entity the line ends at.").build();
 	private final DoubleSetting range = sgGeneral.decimal("Range").description("0 = no limit.").defaultValue(128).range(0, 512).decimals(0).build();
-	private final DoubleSetting lineWidth = sgGeneral.decimal("Line Width").defaultValue(1.5).range(0.5, 5).decimals(1).build();
+	private final DoubleSetting lineWidth = sgGeneral.decimal("Line Width").description("How thick the lines are, in pixels.").defaultValue(1.5).range(0.5, 5).decimals(1).build();
 	private final BoolSetting fadeDistance = sgGeneral.bool("Fade With Distance").description("Far lines are fainter.").defaultValue(true).build();
 	private final BoolSetting storage = sgGeneral.bool("Storage").description("Also draw lines to what Storage ESP highlights (needs Storage ESP on).").build();
 	private final BoolSetting blocks = sgGeneral.bool("Blocks").description("Also draw lines to what Block ESP highlights (needs Block ESP on).").build();

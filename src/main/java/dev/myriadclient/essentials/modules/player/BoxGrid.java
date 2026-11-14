@@ -1,15 +1,16 @@
 package dev.myriadclient.essentials.modules.player;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.render.Canvas;
-import dev.myriadclient.api.render.FontFamily;
+import dev.myriadclient.api.item.ItemInfo;
+import dev.myriadclient.api.item.Slots;
 import dev.myriadclient.api.service.Containers;
 import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.ui.ThemeSettings;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
 import dev.myriadclient.api.util.ColorUtil;
-import dev.myriadclient.api.util.ItemInfo;
 import dev.myriadclient.essentials.modules.render.Tooltips;
-import dev.myriadclient.essentials.util.Menus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -17,7 +18,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,9 +31,9 @@ import java.util.TreeMap;
 /**
  * Inventory Tweaks' Box Grid: with a chest open, what every shulker box in it holds, each box a full panel of its 27
  * slots in the theme's window look (hover for an item's tooltip), laid out like a page in rows of columns beside the
- * window, as many whole rows as the screen holds (six at most), centred on it beside the window; each row filled nearest the window first. Only whole rows show: when there are more than fit,
- * the wheel scrolls the page a row at a time, rows sliding in and out at the edges, a scrollbar at the screen's edge
- * saying where you are.
+ * window, as many whole rows as the screen holds (six at most), centred on it beside the window; each row filled
+ * nearest the window first. Only whole rows show: when there are more than fit, the wheel scrolls the page a row at a
+ * time, rows sliding in and out at the edges, a scrollbar at the screen's edge saying where you are.
  * <p>
  * With the chest open, a click on a box's panel puts that box down and gives it a tab on the swap bar, as Mod +
  * right-click does (another addon may handle the panels instead: {@link InventoryTweaks#BOX_GRID}). In a box from the
@@ -75,7 +76,6 @@ final class BoxGrid {
 	private List<Panel> panels = List.of();
 	private float step, viewTop, viewBottom;
 	private int lastRow, rows;
-	private int[] window = new int[4];
 	/** Each panel's opacity (by chest slot), fading to whether it's wholly in view at the row scrolled to. */
 	private final Map<Integer, Float> shown = new HashMap<>();
 	/**
@@ -158,7 +158,7 @@ final class BoxGrid {
 		Containers.View view = live ? chest(menu) : null;
 		if (view != null && view.isLoaded()) {
 			seen.clear();
-			for (int i : Menus.containerSlots(menu)) {
+			for (int i : Slots.containerSlots(menu)) {
 				ItemStack s = menu.getSlot(i).getItem();
 				if (ItemInfo.isShulkerBox(s)) seen.put(i, s.copy());
 			}
@@ -212,19 +212,10 @@ final class BoxGrid {
 		return out;
 	}
 
-	/** The top of where panels show: the rows in view. */
-	private float shownTop(Panel p) {
-		return viewTop;
-	}
-
-	private float shownBottom() {
-		return viewBottom;
-	}
-
 	/** Whether all of {@code p} is in view with the page scrolled {@code by}. */
 	private boolean whole(Panel p, float by) {
 		float y = p.y() - by;
-		return y >= shownTop(p) - 0.5f && y + p.h() <= shownBottom() + 0.5f;
+		return y >= viewTop - 0.5f && y + p.h() <= viewBottom + 0.5f;
 	}
 
 	// ---- drawing ----------------------------------------------------------------------------------------------------
@@ -236,7 +227,7 @@ final class BoxGrid {
 			panels = List.of();
 			return;
 		}
-		window = screen.essentials$bounds();
+		int[] window = screen.essentials$bounds();
 		panels = layout(menu, live, window[0], window[1], window[2], window[3]);
 		long now = System.nanoTime();
 		float dt = lastFrame == 0 ? 1 : Math.min(0.1f, (now - lastFrame) / 1e9f);
@@ -270,7 +261,10 @@ final class BoxGrid {
 		if (hovered[0] != null && menu.getCarried().isEmpty()) ctx.setTooltipForNextFrame(mc.font, hovered[0], mx, my);
 	}
 
-	/** The panels for their handler: each box's slots where they're drawn (as a slot's top left), showing where wholly in view. */
+	/**
+	 * The panels for their handler: each box's slots where they're drawn (as a slot's top left), showing where wholly
+	 * in view.
+	 */
 	private List<InventoryTweaks.GridPanel> views(InventoryTweaks.ScreenAccess screen) {
 		List<InventoryTweaks.GridPanel> out = new ArrayList<>(panels.size());
 		for (Panel p : panels) {
@@ -296,7 +290,7 @@ final class BoxGrid {
 	private boolean onPanel(Panel p, double mx, double my) {
 		if (shown.getOrDefault(p.slot(), 0f) < 0.5f) return false;
 		float y = p.y() - scroll;
-		return mx >= p.x() && mx < p.x() + p.w() && my >= Math.max(y, shownTop(p)) && my < Math.min(y + p.h(), shownBottom());
+		return mx >= p.x() && mx < p.x() + p.w() && my >= Math.max(y, viewTop) && my < Math.min(y + p.h(), viewBottom);
 	}
 
 	/**
@@ -305,7 +299,7 @@ final class BoxGrid {
 	 */
 	private void drawPanel(Canvas c, Panel p, int mx, int my, ItemStack[] hovered, boolean slotted, boolean bright) {
 		ThemeSettings theme = Myriad.ui().theme();
-		float x = p.x(), y = p.y() - scroll, w = p.w(), h = p.h(), top = shownTop(p), bottom = shownBottom();
+		float x = p.x(), y = p.y() - scroll, w = p.w(), h = p.h(), top = viewTop, bottom = viewBottom;
 		float r = Math.min(theme.rounding.get(), 6);
 		c.push();
 		c.clip(x - 2, top, w + 4, bottom - top);
@@ -368,7 +362,7 @@ final class BoxGrid {
 				if (p.slotAt(mx, my, scroll) < 0) return true;
 				if (take(screen)) return false;
 				Containers.View view = chest(menu);
-				if (button == 0 && view != null && !handlerHas(p.slot())) owner.putDownFromGrid(view, p.slot());
+				if (button == InputConstants.MOUSE_BUTTON_LEFT && view != null && !handlerHas(p.slot())) owner.putDownFromGrid(view, p.slot());
 				return true;
 			}
 			if (!menu.getCarried().isEmpty() || !going.add(p.slot())) return true;

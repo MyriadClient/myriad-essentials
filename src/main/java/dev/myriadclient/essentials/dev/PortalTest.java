@@ -7,7 +7,7 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.setting.Setting;
-import dev.myriadclient.essentials.modules.world.AutoPortal;
+import dev.myriadclient.essentials.modules.automation.AutoPortal;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -23,6 +23,7 @@ import net.minecraft.world.level.block.Blocks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -121,7 +122,7 @@ public final class PortalTest extends Command {
 		if (tap && Modules.get(AutoPortal.class).isEnabled() && ticks < 400) return;
 		boolean lit = tap ? portalNear() : mc.level.getBlockState(base.above()).is(Blocks.NETHER_PORTAL);
 		if (!lit && ticks < 400) return;
-		String line = (lit ? "lit after " + ticks + " ticks (" + String.format("%.2f", ticks / 20.0) + " s)" : "not lit after 400 ticks")
+		String line = (lit ? "lit after " + ticks + " ticks (" + String.format(Locale.ROOT, "%.2f", ticks / 20.0) + " s)" : "not lit after 400 ticks")
 			+ "; off hand " + mc.player.getOffhandItem();
 		if (tap) line += "; module " + (Modules.get(AutoPortal.class).isEnabled() ? "still on" : "turned itself off");
 		tap = false;

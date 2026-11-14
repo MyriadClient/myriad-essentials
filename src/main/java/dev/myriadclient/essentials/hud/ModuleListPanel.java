@@ -2,14 +2,14 @@ package dev.myriadclient.essentials.hud;
 
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.module.Module;
-import dev.myriadclient.api.render.Animated;
-import dev.myriadclient.api.render.Bezier;
-import dev.myriadclient.api.render.Canvas;
-import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.ui.Rect;
+import dev.myriadclient.api.ui.draw.Animated;
+import dev.myriadclient.api.ui.draw.Bezier;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
 import dev.myriadclient.api.ui.hud.HudPanel;
 import dev.myriadclient.api.ui.hud.HudStyle;
 
@@ -21,16 +21,18 @@ import java.util.Map;
 
 /**
  * The classic "array list": enabled modules, longest first, sliding in and out. A module another holds off for now
- * (Search holding Elytra Fly) stays listed, faded, as "suspended": it's still on as far as you're concerned.
+ * (a module flying for you holding Elytra Fly, say) stays listed, faded, as "suspended": it's still on as far as you're
+ * concerned.
  */
 public final class ModuleListPanel extends HudPanel {
 	public enum Sort {
 		WIDTH, ALPHABETICAL
 	}
 
-	private final EnumSetting<Sort> sort = sgGeneral.oneOf("Sort", Sort.WIDTH).build();
+	private final EnumSetting<Sort> sort = sgGeneral.oneOf("Sort", Sort.WIDTH)
+		.description("Width: the longest line first. Alphabetical: by module name.").build();
 	private final BoolSetting info = sgGeneral.bool("Show Info").description("Show each module's status text (mode, target, …).").defaultValue(true).build();
-	private final BoolSetting background = sgGeneral.bool("Background").defaultValue(true).build();
+	private final BoolSetting background = sgGeneral.bool("Background").description("A dark strip behind each line, with an accent bar on its outer edge.").defaultValue(true).build();
 	private final DoubleSetting lineSpacing = sgGeneral.decimal("Line Spacing").description("Extra room between the lines.").defaultValue(0).range(0, 10).decimals(1).build();
 
 	private final HudStyle style = new HudStyle(settings, HudStyle.Mode.GRADIENT, true);

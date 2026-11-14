@@ -4,13 +4,16 @@ import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.ui.hud.HudStyle;
 import dev.myriadclient.api.ui.hud.TextHudPanel;
 
+import java.util.Locale;
+
 /** How fast you're moving horizontally. */
 public final class SpeedPanel extends TextHudPanel {
 	public enum Unit {
 		BLOCKS_PER_SECOND, KMH
 	}
 
-	private final EnumSetting<Unit> unit = sgGeneral.oneOf("Unit", Unit.BLOCKS_PER_SECOND).build();
+	private final EnumSetting<Unit> unit = sgGeneral.oneOf("Unit", Unit.BLOCKS_PER_SECOND)
+		.description("Blocks per second, or kilometres per hour (a block is a metre).").build();
 
 	public SpeedPanel() {
 		super("Speed", "", HudStyle.Mode.TEXT);
@@ -25,6 +28,6 @@ public final class SpeedPanel extends TextHudPanel {
 			double dx = moving.getX() - moving.xo, dz = moving.getZ() - moving.zo;
 			bps = Math.sqrt(dx * dx + dz * dz) * 20;
 		}
-		out.add("Speed", unit.get() == Unit.KMH ? String.format("%.1f km/h", bps * 3.6) : String.format("%.1f b/s", bps));
+		out.add("Speed", unit.get() == Unit.KMH ? String.format(Locale.ROOT, "%.1f km/h", bps * 3.6) : String.format(Locale.ROOT, "%.1f b/s", bps));
 	}
 }

@@ -53,4 +53,11 @@ max-players=20
 motd=Grim test server (2b2t-like)
 network-compression-threshold=256
 PROPS
+
+# No reconnect throttle: tests start a fresh session by kicking and rejoining at once (Bukkit waits 4 s by default).
+if [[ -f server/bukkit.yml ]]; then
+	sed -i 's/^  connection-throttle: .*/  connection-throttle: 0/' server/bukkit.yml
+else
+	printf 'settings:\n  connection-throttle: 0\n' > server/bukkit.yml
+fi
 echo "set up in $(pwd)/server"

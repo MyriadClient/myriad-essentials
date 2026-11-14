@@ -6,10 +6,9 @@ import dev.myriadclient.api.event.events.EntityRenderEvent;
 import dev.myriadclient.api.event.events.Render2DEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.event.events.WorldEvent;
+import dev.myriadclient.api.item.ItemInfo;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.render.Canvas;
-import dev.myriadclient.api.render.FontFamily;
 import dev.myriadclient.api.render.PlayerHeads;
 import dev.myriadclient.api.render.Projection;
 import dev.myriadclient.api.render.WorldLabel;
@@ -18,9 +17,10 @@ import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
 import dev.myriadclient.api.util.ColorUtil;
-import dev.myriadclient.api.util.Entities;
-import dev.myriadclient.api.util.ItemInfo;
+import dev.myriadclient.api.world.Entities;
 import dev.myriadclient.essentials.util.PearlOwners;
 import dev.myriadclient.essentials.util.PopColors;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
@@ -63,29 +63,29 @@ import java.util.WeakHashMap;
 public class Nametags extends Module {
 	private static final float PAD_X = 3, PAD_Y = 2, GAP = 3, ITEM = 12, ITEM_GAP = 14;
 
-	private final DoubleSetting scale = sgGeneral.decimal("Scale").defaultValue(1.1).range(0.3, 4).decimals(1).build();
+	private final DoubleSetting scale = sgGeneral.decimal("Scale").description("How large the tags are.").defaultValue(1.1).range(0.3, 4).decimals(1).build();
 	private final DoubleSetting range = sgGeneral.decimal("Range").description("0 = no limit.").defaultValue(0).range(0, 256).decimals(0).build();
-	private final BoolSetting background = sgGeneral.bool("Background").defaultValue(true).build();
-	private final ColorSetting fill = sgGeneral.color("Fill").defaultValue(0x64000000).visible(background::get).build();
-	private final ColorSetting line = sgGeneral.color("Line").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, 0xC0)).visible(background::get).build();
+	private final BoolSetting background = sgGeneral.bool("Background").description("A rounded box behind each tag.").defaultValue(true).build();
+	private final ColorSetting fill = sgGeneral.color("Fill").description("The box's colour.").defaultValue(0x64000000).visible(background::get).build();
+	private final ColorSetting line = sgGeneral.color("Line").description("The outline around players' boxes (fully transparent: none).").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, 0xC0)).visible(background::get).build();
 
 	private final SettingGroup sgPlayers = settings.group("Players");
-	private final BoolSetting players = sgPlayers.bool("Players").defaultValue(true).build();
+	private final BoolSetting players = sgPlayers.bool("Players").description("Tags over players.").defaultValue(true).build();
 	private final BoolSetting self = sgPlayers.bool("Self").description("Your own tag in third person.").defaultValue(true).visible(players::get).build();
 	private final BoolSetting head = sgPlayers.bool("Head").description("The player's face before the name.").defaultValue(true).visible(players::get).build();
-	private final BoolSetting health = sgPlayers.bool("Health").defaultValue(true).visible(players::get).build();
-	private final BoolSetting ping = sgPlayers.bool("Ping").defaultValue(true).visible(players::get).build();
-	private final BoolSetting totemPops = sgPlayers.bool("Totem Pops").defaultValue(true).visible(players::get).build();
-	private final BoolSetting distance = sgPlayers.bool("Distance").visible(players::get).build();
-	private final BoolSetting gamemode = sgPlayers.bool("Gamemode").visible(players::get).build();
+	private final BoolSetting health = sgPlayers.bool("Health").description("Health with absorption, from red to green as it fills.").defaultValue(true).visible(players::get).build();
+	private final BoolSetting ping = sgPlayers.bool("Ping").description("Their ping, in milliseconds.").defaultValue(true).visible(players::get).build();
+	private final BoolSetting totemPops = sgPlayers.bool("Totem Pops").description("How many totems they've popped, once they have.").defaultValue(true).visible(players::get).build();
+	private final BoolSetting distance = sgPlayers.bool("Distance").description("How far away they are, in blocks.").visible(players::get).build();
+	private final BoolSetting gamemode = sgPlayers.bool("Gamemode").description("[S], [C] or [SP] before the name: survival, creative or spectator.").visible(players::get).build();
 	private final DoubleSetting offset = sgPlayers.decimal("Offset").description("Height above the head, in blocks.").defaultValue(0.4).range(-2, 3).decimals(1).visible(players::get).build();
-	private final ColorSetting nameColor = sgPlayers.color("Name").defaultValue(SettingColor.role(SettingColor.Mode.TEXT)).visible(players::get).build();
-	private final ColorSetting friendColor = sgPlayers.color("Friends").defaultValue(SettingColor.role(SettingColor.Mode.CYAN)).visible(players::get).build();
+	private final ColorSetting nameColor = sgPlayers.color("Name").description("The colour of names (players, mobs and pearl throwers).").defaultValue(SettingColor.role(SettingColor.Mode.TEXT)).visible(players::get).build();
+	private final ColorSetting friendColor = sgPlayers.color("Friends").description("The colour of friends' names.").defaultValue(SettingColor.role(SettingColor.Mode.CYAN)).visible(players::get).build();
 
 	private final SettingGroup sgGear = settings.group("Gear");
-	private final BoolSetting armor = sgGear.bool("Armor").defaultValue(true).build();
-	private final BoolSetting heldItems = sgGear.bool("Held Items").defaultValue(true).build();
-	private final BoolSetting heldItemName = sgGear.bool("Held Item Name").defaultValue(true).visible(heldItems::get).build();
+	private final BoolSetting armor = sgGear.bool("Armor").description("The armour they wear, above the tag.").defaultValue(true).build();
+	private final BoolSetting heldItems = sgGear.bool("Held Items").description("What they hold, off hand on the left and main hand on the right.").defaultValue(true).build();
+	private final BoolSetting heldItemName = sgGear.bool("Held Item Name").description("The name of what's in their main hand, above their gear.").defaultValue(true).visible(heldItems::get).build();
 	private final BoolSetting durability = sgGear.bool("Durability").description("Durability percentage under each piece.").build();
 	private final BoolSetting enchants = sgGear.bool("Enchantments").description("Short enchantment names over each item.").build();
 	private final ColorSetting useProgress = sgGear.color("Use Progress").description("Bar over the item being eaten or used.").defaultValue(0x5000C800).visible(heldItems::get).build();
@@ -96,10 +96,16 @@ public class Nametags extends Module {
 	private final BoolSetting groupItems = sgOthers.bool("Group Items").description("One tag per item type for items lying together.").defaultValue(true).visible(items::get).build();
 	/** Vanilla's: how many ticks an item lies on the ground. */
 	private static final int ITEM_LIFETIME = 6000;
-	/** First seen this young and moving faster than a tick of gravity, an item has just been dropped, and its age here is its age. */
+	/**
+	 * First seen this young and moving faster than a tick of gravity, an item has just been dropped, and its age here
+	 * is its age.
+	 */
 	private static final int ITEM_JUST_DROPPED_TICKS = 10;
 	private static final double ITEM_MOVING_SQR = 0.0036;
-	/** The game time each item despawns at, worked out once when it's first seen; {@link #AGE_UNKNOWN} if it wasn't seen dropped. */
+	/**
+	 * The game time each item despawns at, worked out once when it's first seen; {@link #AGE_UNKNOWN} if it wasn't seen
+	 * dropped.
+	 */
 	private final Map<ItemEntity, Long> despawnsAt = new WeakHashMap<>();
 	private static final long AGE_UNKNOWN = -1;
 	private final BoolSetting despawnTimer = sgOthers.bool("Despawn Timer")
@@ -107,17 +113,16 @@ public class Nametags extends Module {
 		.visible(items::get).build();
 	/** Rows a pile of items shows at most, the last saying how many more kinds there are. */
 	private static final int MAX_ITEM_ROWS = 8;
-	private final DoubleSetting itemRange = sgOthers.decimal("Item Range").defaultValue(32).range(1, 128).decimals(0).visible(items::get).build();
+	private final DoubleSetting itemRange = sgOthers.decimal("Item Range").description("How near items have to be for a tag, in blocks.").defaultValue(32).range(1, 128).decimals(0).visible(items::get).build();
 	private final BoolSetting pearls = sgOthers.bool("Pearls").description("Who threw each ender pearl.").defaultValue(true).build();
 
 	private record Segment(String text, int color) {
 	}
 
 	public Nametags() {
-		super(Tags.RENDER, "Nametags", "Readable name tags for players, mobs, items and pearls.");
+		super(Tags.RENDER, "Nametags", "Draws readable name tags for players, mobs, items and pearls.");
 	}
 
-	/** Whether this draws {@code entity}'s label, so vanilla's should be hidden. */
 	/** Vanilla's tag stays off whatever this module draws its own for. */
 	@Subscribe
 	private void onVanillaTag(EntityRenderEvent.Nametag e) {
@@ -198,7 +203,7 @@ public class Nametags extends Module {
 		segs.add(new Segment(p.getGameProfile().name(), Entities.isFriend(p) ? friendColor.argb() : nameColor.argb()));
 		if (health.get()) segs.add(healthSegment(p));
 		if (ping.get()) segs.add(new Segment((entry == null ? 0 : entry.getLatency()) + "ms", 0xFFCCCCCC));
-		if (distance.get() && p != mc.player) segs.add(new Segment(String.format("%.0fm", mc.player.distanceTo(p)), 0xFFCCCCCC));
+		if (distance.get() && p != mc.player) segs.add(new Segment(String.format(Locale.ROOT, "%.0fm", mc.player.distanceTo(p)), 0xFFCCCCCC));
 		if (totemPops.get()) {
 			int pops = Myriad.server().totemPops(p);
 			if (pops > 0) segs.add(new Segment("-" + pops, PopColors.of(pops)));
@@ -208,7 +213,7 @@ public class Nametags extends Module {
 
 	private static Segment healthSegment(LivingEntity e) {
 		float hp = e.getHealth() + e.getAbsorptionAmount();
-		return new Segment(String.format("%.1f", hp), ColorUtil.lerp(0xFFFF5555, 0xFF55FF55, Math.clamp(hp / e.getMaxHealth(), 0f, 1f)));
+		return new Segment(String.format(Locale.ROOT, "%.1f", hp), ColorUtil.lerp(0xFFFF5555, 0xFF55FF55, Math.clamp(hp / e.getMaxHealth(), 0f, 1f)));
 	}
 
 	private void drawGear(Canvas c, Player p, float centerX, float bottom, float k, float textSize) {

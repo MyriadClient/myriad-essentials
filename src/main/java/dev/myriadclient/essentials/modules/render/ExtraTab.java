@@ -52,18 +52,18 @@ public class ExtraTab extends Module {
 		.defaultValue(true).build();
 
 	private final SettingGroup sgHighlight = settings.group("Highlight");
-	public final BoolSetting friends = sgHighlight.bool("Friends").defaultValue(true).build();
-	public final ColorSetting friendColor = sgHighlight.color("Friend Color").defaultValue(SettingColor.role(SettingColor.Mode.CYAN)).visible(friends::get).build();
+	public final BoolSetting friends = sgHighlight.bool("Friends").description("Colour your friends' names.").defaultValue(true).build();
+	public final ColorSetting friendColor = sgHighlight.color("Friend Color").description("The colour of friends' names.").defaultValue(SettingColor.role(SettingColor.Mode.CYAN)).visible(friends::get).build();
 	public final BoolSetting enemies = sgHighlight.bool("Enemies").description("Players added with .enemy.").defaultValue(true).build();
-	public final ColorSetting enemyColor = sgHighlight.color("Enemy Color").defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(enemies::get).build();
-	public final BoolSetting you = sgHighlight.bool("You").defaultValue(true).build();
-	public final ColorSetting youColor = sgHighlight.color("Your Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(you::get).build();
+	public final ColorSetting enemyColor = sgHighlight.color("Enemy Color").description("The colour of enemies' names.").defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(enemies::get).build();
+	public final BoolSetting you = sgHighlight.bool("You").description("Colour your own name.").defaultValue(true).build();
+	public final ColorSetting youColor = sgHighlight.color("Your Color").description("The colour of your name.").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(you::get).build();
 
 	private final TabRenderer renderer = new TabRenderer(this);
 	private boolean layerAdded;
 
 	public ExtraTab() {
-		super(Tags.RENDER, "Extra Tab", "The player list in Myriad's look: more players and rows, choose what's shown, friends, enemies and you picked out.");
+		super(Tags.RENDER, "Extra Tab", "Draws the player list in Myriad's look: more players and rows, your pick of what's shown, friends, enemies and you picked out.");
 		Myriad.events().subscribe(new Layer());
 	}
 

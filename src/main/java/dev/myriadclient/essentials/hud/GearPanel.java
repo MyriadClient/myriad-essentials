@@ -1,19 +1,19 @@
 package dev.myriadclient.essentials.hud;
 
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.render.Canvas;
-import dev.myriadclient.api.render.FontFamily;
+import dev.myriadclient.api.item.ItemInfo;
+import dev.myriadclient.api.item.Slots;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.ui.Rect;
+import dev.myriadclient.api.ui.draw.Canvas;
+import dev.myriadclient.api.ui.draw.FontFamily;
 import dev.myriadclient.api.ui.hud.HudPanel;
 import dev.myriadclient.api.ui.hud.HudStyle;
 import dev.myriadclient.api.ui.hud.ItemHud;
-import dev.myriadclient.api.util.ItemInfo;
-import dev.myriadclient.api.util.Slots;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -24,7 +24,7 @@ import java.util.List;
 /**
  * What you hold and wear: your main hand and off hand, then your armour, helmet first, each with its durability as the
  * uses left, a percentage or a bar. Stacks in your hands show their count. The text is in the durability's colour or one
- * of your own. Registered under the id {@code myriad-essentials:armor}, its name before, so HUDs placed then keep it.
+ * of your own. Its id is {@code myriad-essentials:armor}, the id saved HUDs know it by.
  */
 public final class GearPanel extends HudPanel {
 	public enum Layout {
@@ -35,9 +35,8 @@ public final class GearPanel extends HudPanel {
 		DURABILITY, CUSTOM
 	}
 
-	private static final EquipmentSlot[] ARMOR = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
-
-	private final EnumSetting<Layout> layout = sgGeneral.oneOf("Layout", Layout.HORIZONTAL).build();
+	private final EnumSetting<Layout> layout = sgGeneral.oneOf("Layout", Layout.HORIZONTAL)
+		.description("Horizontal: the items in a row. Vertical: in a column.").build();
 	private final BoolSetting mainHand = sgGeneral.bool("Main Hand").description("Show what's in your main hand, first.").defaultValue(true).build();
 	private final BoolSetting offHand = sgGeneral.bool("Off Hand").description("Show what's in your off hand, after the main hand.").defaultValue(true).build();
 	private final EnumSetting<ItemHud.Durability> durability = sgGeneral.oneOf("Durability", ItemHud.Durability.NUMBER)
@@ -48,11 +47,11 @@ public final class GearPanel extends HudPanel {
 		.range(0.5, 1.5).decimals(2).visible(() -> ItemHud.showsPercent(durability.get())).build();
 	private final EnumSetting<TextColor> textColor = sgGeneral.oneOf("Text Color", TextColor.DURABILITY)
 		.description("Durability: green to red as it wears, counts in the theme's text. Custom: one colour for all of it.").build();
-	private final ColorSetting color = sgGeneral.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.TEXT))
+	private final ColorSetting color = sgGeneral.color("Color").description("The colour of the counts and durability.").defaultValue(SettingColor.role(SettingColor.Mode.TEXT))
 		.visible(() -> textColor.get() == TextColor.CUSTOM).build();
 	private final BoolSetting skipEmpty = sgGeneral.bool("Skip Empty").description("Close up gaps left by empty slots.").build();
 	private final BoolSetting avoidAir = sgGeneral.bool("Avoid Air Bar").description("Move up while the air bubbles are showing, like vanilla HUD rows.").defaultValue(true).build();
-	private final BoolSetting shadow = sgGeneral.bool("Shadow").defaultValue(true).build();
+	private final BoolSetting shadow = sgGeneral.bool("Shadow").description("Draw a shadow under the counts and durability.").defaultValue(true).build();
 
 	public GearPanel() {
 		super("Gear", "\uf132");
@@ -73,7 +72,7 @@ public final class GearPanel extends HudPanel {
 		// What each slot shows: a masked swap (a silent slot switch, No Durability's chestplate swaps) doesn't flicker it.
 		if (mainHand.get()) add(list, Myriad.inventory().shown(mc.player.getInventory().getSelectedSlot()));
 		if (offHand.get()) add(list, Myriad.inventory().shown(Slots.OFF_HAND));
-		for (EquipmentSlot slot : ARMOR) add(list, Myriad.inventory().shown(Slots.FEET + slot.getIndex()));
+		for (EquipmentSlot slot : Slots.ARMOR) add(list, Myriad.inventory().shown(Slots.FEET + slot.getIndex()));
 		return list;
 	}
 
@@ -83,7 +82,7 @@ public final class GearPanel extends HudPanel {
 
 	/** Slots shown when none are skipped: the hands switched on, and the four armour slots. */
 	private int slots() {
-		return (mainHand.get() ? 1 : 0) + (offHand.get() ? 1 : 0) + ARMOR.length;
+		return (mainHand.get() ? 1 : 0) + (offHand.get() ? 1 : 0) + Slots.ARMOR.size();
 	}
 
 	private float slot() {

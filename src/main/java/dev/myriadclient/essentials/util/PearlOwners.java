@@ -2,11 +2,11 @@ package dev.myriadclient.essentials.util;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.addon.AddonStorage;
-import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -106,10 +106,9 @@ public final class PearlOwners {
 		storage.writeJson(FILE, json);
 	}
 
+	/** The server or singleplayer world the owners are kept under. */
 	private static String server() {
-		var mc = Minecraft.getInstance();
-		if (mc.getCurrentServer() != null) return mc.getCurrentServer().ip.toLowerCase(java.util.Locale.ROOT);
-		var server = mc.getSingleplayerServer();
-		return server != null ? "singleplayer:" + server.getWorldData().getLevelName() : "unknown";
+		String key = Myriad.server().serverKey();
+		return key != null ? key : "unknown";
 	}
 }

@@ -41,7 +41,7 @@ public class FreeLook extends Module {
 	private long lastFrameNanos;
 
 	public FreeLook() {
-		super(Tags.RENDER, "Free Look", "Orbit the camera without turning your player; scroll to move it nearer or further.");
+		super(Tags.RENDER, "Free Look", "Orbits the camera without turning your player; scroll to move it nearer or further.");
 		conflictsWith(Freecam.class);
 	}
 

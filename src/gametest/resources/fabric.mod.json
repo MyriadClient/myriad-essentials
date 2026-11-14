@@ -1,0 +1,39 @@
+{
+	"schemaVersion": 1,
+	"id": "myriad-essentials-tests",
+	"version": "${version}",
+	"name": "Myriad Essentials Tests",
+	"description": "Essentials' in-game tests, for Myriad Testing. Loaded only in the test client.",
+	"environment": "client",
+	"entrypoints": {
+		"myriad-tests": [
+			"dev.myriadclient.essentials.gametest.ScaffoldTests",
+			"dev.myriadclient.essentials.gametest.GeneralTests",
+			"dev.myriadclient.essentials.gametest.KillAuraTests",
+			"dev.myriadclient.essentials.gametest.PacketMineTests",
+			"dev.myriadclient.essentials.gametest.NoSlowTests",
+			"dev.myriadclient.essentials.gametest.ConnectionTests",
+			"dev.myriadclient.essentials.gametest.OffhandTests",
+			"dev.myriadclient.essentials.gametest.AutoArmorTests",
+			"dev.myriadclient.essentials.gametest.ReplenishTests",
+			"dev.myriadclient.essentials.gametest.AutoEatTests",
+			"dev.myriadclient.essentials.gametest.MiddleClickTests",
+			"dev.myriadclient.essentials.gametest.AutoToolTests",
+			"dev.myriadclient.essentials.gametest.PrinterTests",
+			"dev.myriadclient.essentials.gametest.AutoPortalTests",
+			"dev.myriadclient.essentials.gametest.AutoSortTests",
+			"dev.myriadclient.essentials.gametest.InventoryTweaksTests",
+			"dev.myriadclient.essentials.gametest.CraftingTests",
+			"dev.myriadclient.essentials.gametest.SwapBarTests",
+			"dev.myriadclient.essentials.gametest.OpenBoxTests",
+			"dev.myriadclient.essentials.gametest.RemoteEnderChestTests",
+			"dev.myriadclient.essentials.gametest.RecastTests",
+			"dev.myriadclient.essentials.gametest.AltitudeTests",
+			"dev.myriadclient.essentials.gametest.NoDurabilityTests"
+		]
+	},
+	"depends": {
+		"myriad-essentials": "*",
+		"myriad-testing": "*"
+	}
+}

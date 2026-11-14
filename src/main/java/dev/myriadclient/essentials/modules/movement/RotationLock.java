@@ -8,8 +8,12 @@ import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.EnumSetting;
+import dev.myriadclient.essentials.modules.movement.elytra.Altitude;
+import dev.myriadclient.essentials.modules.movement.elytra.ElytraFly;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
+
+import java.util.Locale;
 
 /**
  * Keeps flights going one way whatever the camera does: the heading is locked when the glide starts (or when you turn
@@ -50,7 +54,7 @@ public class RotationLock extends Module {
 	private float locked = Float.NaN;
 
 	public RotationLock() {
-		super(Tags.MOVEMENT, "Rotation Lock", "Keep flying the way you faced, whatever the camera does.");
+		super(Tags.MOVEMENT, "Rotation Lock", "Keeps you flying the way you faced, whatever the camera does.");
 		formerNames("Lock Rotation");
 	}
 
@@ -85,7 +89,7 @@ public class RotationLock extends Module {
 
 	@Override
 	public String hudInfo() {
-		return Float.isNaN(locked) ? null : String.format("%.0f°", Mth.wrapDegrees(locked));
+		return Float.isNaN(locked) ? null : String.format(Locale.ROOT, "%.0f°", Mth.wrapDegrees(locked));
 	}
 
 	/** Before the flights tick, so they fly this tick's heading. */

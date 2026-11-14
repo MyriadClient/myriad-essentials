@@ -6,6 +6,7 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.EntityEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.hook.Hook;
+import dev.myriadclient.api.item.Slots;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -13,8 +14,6 @@ import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SettingGroup;
-import dev.myriadclient.api.util.Slots;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -110,8 +109,7 @@ public class Offhand extends Module {
 			wait = 0;
 			if (notify.get()) info("Popped a totem, " + Myriad.inventory().count(TOTEM) + " left");
 		}
-		// Clicks in an open container would land in it, so wait until it's closed.
-		if (mc.gui.screen() != null && !(mc.gui.screen() instanceof InventoryScreen) && mc.player.containerMenu != mc.player.inventoryMenu) return;
+		if (Myriad.inventory().containerOpen()) return;
 		if (wait > 0) {
 			wait--;
 			return;

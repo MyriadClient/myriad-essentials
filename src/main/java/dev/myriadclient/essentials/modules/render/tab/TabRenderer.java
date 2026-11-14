@@ -1,9 +1,9 @@
 package dev.myriadclient.essentials.modules.render.tab;
 
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.render.Canvas;
 import dev.myriadclient.api.render.PlayerHeads;
+import dev.myriadclient.api.ui.draw.Canvas;
 import dev.myriadclient.api.util.TickCached;
 import dev.myriadclient.essentials.modules.render.ExtraTab;
 import net.minecraft.client.gui.GuiGraphicsExtractor;

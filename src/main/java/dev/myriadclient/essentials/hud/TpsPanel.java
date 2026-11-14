@@ -4,6 +4,8 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.ui.hud.HudStyle;
 import dev.myriadclient.api.ui.hud.TextHudPanel;
 
+import java.util.Locale;
+
 /** The server's ticks per second, averaged over the last ~20 seconds. */
 public final class TpsPanel extends TextHudPanel {
 	public TpsPanel() {
@@ -12,6 +14,6 @@ public final class TpsPanel extends TextHudPanel {
 
 	@Override
 	protected void lines(Lines out) {
-		out.add("TPS", preview() ? "20.0" : String.format("%.1f", Myriad.server().tps()));
+		out.add("TPS", preview() ? "20.0" : String.format(Locale.ROOT, "%.1f", Myriad.server().tps()));
 	}
 }

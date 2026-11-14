@@ -34,8 +34,8 @@ the Control Panels window.
 
 ### Printer
 
-Install [Litematica](https://modrinth.com/mod/litematica) 0.28.8 and [MaLiLib](https://modrinth.com/mod/malilib)
-0.29.6 next to Essentials (nothing else needs them). Load and place a schematic in Litematica as usual (the layer
+Install [Litematica](https://modrinth.com/mod/litematica) 0.29.1 and [MaLiLib](https://modrinth.com/mod/malilib)
+0.30.2 next to Essentials (nothing else needs them). Load and place a schematic in Litematica as usual (the layer
 range limits what's printed), put the blocks in your inventory and turn the Printer on. It places within Range of your
 eyes, so walk along the build; a block that can't be placed from where you are (it's shown outlined) is tried again
 as you move or as the blocks around it go in. Repeaters, comparators, note blocks, doors, trapdoors, gates and levers
@@ -59,9 +59,46 @@ It runs as a job, so the Jobs window shows what it's doing and waiting for.
 
 ## For addon developers
 
-Essentials is written as a reference for addons: everything goes through Myriad's public API. Other addons can
-change how some of its modules decide things with hooks (see core's README, "Hooks"), compiling against Essentials
-(`compileOnly`) and registering only when it's installed:
+Essentials is written as a reference for addons: everything goes through Myriad's public API (the addon plugin's
+`checkApiOnly` fails the build otherwise). Start with core's `example-addon` for the first steps; read Essentials for
+how real modules use the services.
+
+### Reading the code
+
+`src/main/java/dev/myriadclient/essentials/`:
+
+| Package | What's there |
+|---|---|
+| `modules/<window>` | the modules, one package per window in the menu: `combat`, `movement` (and `movement/elytra` for Elytra Fly and what it's made of), `player`, `render` (and `render/tab` for Extra Tab), `world`, `automation`; a module's package matches the tag it registers with |
+| `hud` | HUD elements (coordinates, speed, totems, gear, the module list, ...) |
+| `mixin` | every mixin, named after the Minecraft class it targets (`LocalPlayerMixin`, `HudMixin`); a mixin asks a module through its statics (`Reach.blockRange(original)`), never the other way round |
+| `litematica` | the Printer's view of Litematica's schematics, loaded only when Litematica is installed |
+| `util` | what several modules share (pearl owners, container layouts, the build plan drawing, pop colours) |
+| `dev` | commands for testing in a dev client, registered only there |
+
+A module, read in this order:
+
+| To see | Read |
+|---|---|
+| the smallest module there is | `automation/AutoWalk` (an `InputEvent` handler) |
+| a setting and a mixin | `render/TimeOfDay` with `ClientClockManagerMixin` |
+| a mixin a module drives | `world/Reach` with `PlayerMixin` |
+| core's services (placement, rotations, targets) | `world/AirPlace`, `combat/KillAura` |
+| a hook other addons can use | `KillAura.TARGET` |
+| the building service | `world/Scaffold` (a blueprint worked out each tick) |
+| jobs (long work with steps, status and remedies) | `automation/Printer` |
+| saved settings changed between versions | `world/PacketMine`'s `migrateSettings` |
+| a HUD element | `hud/CoordinatesPanel` (text), `hud/TotemsPanel` (drawn) |
+| drawing in the world | `render/Tracers`, `render/EntityESP` |
+
+Conventions: a module's description says what it does ("Keeps a block under you as you walk."); every setting has a
+description; mixin members are prefixed `essentials$`; a renamed or reshaped setting gets a `settingsVersion` and a
+`migrateSettings` step so saved profiles carry over.
+
+### Hooks
+
+Other addons can change how some of its modules decide things with hooks (see core's README, "Hooks"), compiling
+against Essentials (`compileOnly`) and registering only when it's installed:
 
 | Hook | Decides | Caller |
 |---|---|---|
@@ -69,6 +106,7 @@ change how some of its modules decide things with hooks (see core's README, "Hoo
 | `RotationLock.HEADING` | the yaw a flight flies while Rotation Lock holds its heading | the flight |
 | `KillAura.TARGET` | which entity Kill Aura attacks, from the candidates in reach (best first) | Kill Aura |
 | `Offhand.FORCE_TOTEM` | whether Offhand forces a totem now, from the reasons it found | Offhand |
+| `InventoryTweaks.BOX_GRID` | who handles a chest's Box Grid panels (what a press on a box's slot does); by default a press puts the box down with a swap bar tab | Inventory Tweaks, once per chest opened |
 
 ```java
 if (FabricLoader.getInstance().isModLoaded("myriad-essentials")) {
@@ -86,7 +124,7 @@ Requires JDK 25+. Myriad comes from its maven (`https://maven.myriadclient.dev/r
 
 ```bash
 ./gradlew build                      # build/libs/myriad-essentials-<v>.jar
-./gradlew runClient -PopenDesktop    # Myriad + Essentials, the menu open on the title screen
+./gradlew runClient -PopenUi    # Myriad + Essentials, the menu open on the title screen
 ./gradlew runClient -PquickPlay="New World"               # …or straight into a singleplayer world
 ./gradlew runClient -PquickPlayServer=localhost:25565 -Pusername=GrimTester   # …or onto the Grim test server
 ```
@@ -115,9 +153,3 @@ Grim's flags. Run it after changing core or Essentials; add a test when you add 
 Bump `mod_version` in `gradle.properties`, add the section to `CHANGELOG.md`, then
 `git tag v<version> && git push origin v<version>`. The workflow builds, attaches the jar to a GitHub release and
 publishes it to Myriad's maven.
-
-## Credits
-
-Several modules take their ideas from [Lambda](https://github.com/lambda-client/lambda), whose take on 2b2t
-utilities (packet mining, elytra bouncing, inventory tweaks) was a big inspiration. The code here is written from
-scratch for Myriad's services.

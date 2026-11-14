@@ -1,10 +1,14 @@
 package dev.myriadclient.essentials.modules.combat;
 
 import com.google.gson.JsonPrimitive;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.platform.NativeImage;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.combat.Threats;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.item.ItemInfo;
+import dev.myriadclient.api.item.Slots;
 import dev.myriadclient.api.map.Waypoint;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
@@ -18,9 +22,6 @@ import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.Format;
-import dev.myriadclient.api.util.ItemInfo;
-import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
@@ -35,7 +36,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,24 +118,24 @@ public class AutoDisconnect extends Module {
 
 	private final SettingGroup sgHealth = settings.group("Health");
 	private final BoolSetting health = sgHealth.bool("Health").description("Leave at low health (absorption included).").defaultValue(true).build();
-	private final DoubleSetting healthThreshold = sgHealth.decimal("Threshold").defaultValue(6).range(1, 36).decimals(1).visible(health::get).build();
+	private final DoubleSetting healthThreshold = sgHealth.decimal("Threshold").description("Leave at this health or less, in half hearts (20 is full health).").defaultValue(6).range(1, 36).decimals(1).visible(health::get).build();
 	private final BoolSetting pops = sgHealth.bool("Totem Pops").description("Leave after this many totems pop in one life.").build();
-	private final IntSetting popCount = sgHealth.integer("Pops").defaultValue(3).range(1, 20).visible(pops::get).build();
+	private final IntSetting popCount = sgHealth.integer("Pops").description("How many pops in one life make you leave.").defaultValue(3).range(1, 20).visible(pops::get).build();
 	private final BoolSetting totems = sgHealth.bool("Totems Left").description("Leave when you have this many totems or fewer.").build();
-	private final IntSetting totemCount = sgHealth.integer("Totems").defaultValue(0).range(0, 20).visible(totems::get).build();
+	private final IntSetting totemCount = sgHealth.integer("Totems").description("Leave once you're down to this many (0: once the last one is gone).").defaultValue(0).range(0, 20).visible(totems::get).build();
 	private final BoolSetting armor = sgHealth.bool("Armor").description("Leave when a piece of armour you wear is about to break.").build();
 	private final IntSetting armorDurability = sgHealth.integer("Armor Durability").description("Durability left, in percent.").defaultValue(10).range(1, 50).visible(armor::get).build();
 
 	private final SettingGroup sgDanger = settings.group("Danger");
 	private final BoolSetting players = sgDanger.bool("Players").description("Leave when a player who isn't a friend comes close.").build();
-	private final DoubleSetting playerRange = sgDanger.decimal("Player Range").defaultValue(16).range(1, 128).decimals(0).visible(players::get).build();
+	private final DoubleSetting playerRange = sgDanger.decimal("Player Range").description("How close a player has to come, in blocks.").defaultValue(16).range(1, 128).decimals(0).visible(players::get).build();
 	private final BoolSetting beds = sgDanger.bool("Beds").description("Leave when a bed nearby could kill you (outside the Overworld).").defaultValue(true).build();
 	private final BoolSetting anchors = sgDanger.bool("Anchors").description("Leave when a charged respawn anchor nearby could kill you (outside the Nether).").defaultValue(true).build();
 	private final BoolSetting crystals = sgDanger.bool("Crystals").description("Leave when end crystals nearby could kill you.").build();
 	private final BoolSetting creepers = sgDanger.bool("Creepers").description("Leave when a creeper comes close.").build();
-	private final DoubleSetting creeperRange = sgDanger.decimal("Creeper Range").defaultValue(5).range(1, 16).decimals(1).visible(creepers::get).build();
+	private final DoubleSetting creeperRange = sgDanger.decimal("Creeper Range").description("How close a creeper has to come, in blocks.").defaultValue(5).range(1, 16).decimals(1).visible(creepers::get).build();
 	private final RegistryListSetting<EntityType<?>> entities = sgDanger.entityTypes("Entities").description("Leave when one of these comes close (TNT minecarts, withers...).").build();
-	private final DoubleSetting entityRange = sgDanger.decimal("Entity Range").defaultValue(10).range(1, 64).decimals(0).visible(() -> !entities.get().isEmpty()).build();
+	private final DoubleSetting entityRange = sgDanger.decimal("Entity Range").description("How close one of those entities has to come, in blocks.").defaultValue(10).range(1, 64).decimals(0).visible(() -> !entities.get().isEmpty()).build();
 
 	private final SettingGroup sgPosition = settings.group("Position");
 	private final BoolSetting hardDeck = sgPosition.bool("Hard Deck")
@@ -153,9 +154,9 @@ public class AutoDisconnect extends Module {
 	private final ChoiceSetting waypoint = sgPosition.choice("Waypoint", AutoDisconnect::waypointNames)
 		.description("The waypoint to leave near, from your map's waypoints for this server.")
 		.visible(() -> destination.get() && target.get() == Target.WAYPOINT).build();
-	private final IntSetting x = sgPosition.integer("X").defaultValue(0).range(-30_000_000, 30_000_000).typed()
+	private final IntSetting x = sgPosition.integer("X").description("The spot's X.").defaultValue(0).range(-30_000_000, 30_000_000).typed()
 		.visible(() -> destination.get() && target.get() == Target.COORDS).build();
-	private final IntSetting z = sgPosition.integer("Z").defaultValue(0).range(-30_000_000, 30_000_000).typed()
+	private final IntSetting z = sgPosition.integer("Z").description("The spot's Z.").defaultValue(0).range(-30_000_000, 30_000_000).typed()
 		.visible(() -> destination.get() && target.get() == Target.COORDS).build();
 	private final IntSetting within = sgPosition.integer("Within").description("How close to the spot, in blocks.")
 		.defaultValue(16).range(1, 1_000_000).typed().visible(destination::get).build();
@@ -187,7 +188,7 @@ public class AutoDisconnect extends Module {
 
 	public AutoDisconnect() {
 		super(Tags.COMBAT, "Auto Disconnect", "Leaves the server when you're about to die.");
-		trigger("health", health::get, () -> Threats.health() <= healthThreshold.get() ? String.format("health %.1f", Threats.health()) : null);
+		trigger("health", health::get, () -> Threats.health() <= healthThreshold.get() ? String.format(Locale.ROOT, "health %.1f", Threats.health()) : null);
 		trigger("pops", pops::get, () -> {
 			int n = Myriad.server().totemPops(mc.player);
 			return n >= popCount.get() ? n + " totem pops" : null;
@@ -215,7 +216,10 @@ public class AutoDisconnect extends Module {
 		triggers.put(key, new Trigger(enabled, check));
 	}
 
-	/** Version 2 replaced the Auto Disable toggle with After Leaving; version 3 dropped Falls and Void; version 4 named Coords Destination. */
+	/**
+	 * Version 2 replaced the Auto Disable toggle with After Leaving; version 3 dropped Falls and Void; version 4 named
+	 * Coords Destination.
+	 */
 	@Override
 	public int settingsVersion() {
 		return 4;
@@ -224,7 +228,7 @@ public class AutoDisconnect extends Module {
 	@Override
 	protected void migrateSettings(int fromVersion, SavedSettings saved) {
 		if (fromVersion == 1) {
-			// Only "off" was ever saved (on was the default): staying on now means waiting for the reason to clear.
+			// Only "off" is saved (on was the default), and staying on means waiting for the reason to clear.
 			saved.get("General", "Auto Disable").ifPresent(v -> {
 				if (!v.getAsBoolean()) saved.set("General", "After Leaving", new JsonPrimitive("WAIT_FOR_CLEAR"));
 			});
@@ -235,7 +239,7 @@ public class AutoDisconnect extends Module {
 			saved.remove("Danger", "Void");
 		}
 		if (fromVersion <= 3) {
-			// Coords became Destination, which takes a waypoint too (Target).
+			// Coords is Destination's old name (Destination takes a waypoint too, by Target).
 			saved.get("Position", "Coords").ifPresent(v -> saved.set("Position", "Destination", v));
 			saved.remove("Position", "Coords");
 		}
@@ -243,7 +247,7 @@ public class AutoDisconnect extends Module {
 
 	@Override
 	public String hudInfo() {
-		return mc.player == null ? null : String.format("%.1f", Threats.health());
+		return mc.player == null ? null : String.format(Locale.ROOT, "%.1f", Threats.health());
 	}
 
 	@Override
@@ -292,12 +296,11 @@ public class AutoDisconnect extends Module {
 
 	/** In 2b2t's queue: a world of its own that holds you at 0, 64, 0 until your turn. Nothing there can hurt you. */
 	private boolean inQueue() {
-		var server = mc.getCurrentServer();
-		return server != null && server.ip.toLowerCase(Locale.ROOT).contains("2b2t.org") && mc.player.position().distanceTo(QUEUE_SPOT) < 1;
+		return Myriad.server().onHost("2b2t.org") && mc.player.position().distanceTo(QUEUE_SPOT) < 1;
 	}
 
 	private @Nullable String wornOut() {
-		for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+		for (EquipmentSlot slot : Slots.ARMOR) {
 			ItemStack s = mc.player.getItemBySlot(slot);
 			if (s.isDamageableItem() && ItemInfo.durabilityFraction(s) * 100 < armorDurability.get()) return s.getHoverName().getString() + " is about to break";
 		}
@@ -323,12 +326,13 @@ public class AutoDisconnect extends Module {
 			what = "waypoint " + w.get().name();
 		} else {
 			spot = new Vec3(x.get() + 0.5, 0, z.get() + 0.5);
-			// Not its coordinates: the disconnect screen shows the reason, and a stream or a screenshot would give the place away.
+			// Not its coordinates: the disconnect screen shows the reason, and a stream or a screenshot would give the
+			// place away.
 			what = "your destination";
 		}
 		if (spot == null) return null;
 		double d = Math.hypot(mc.player.getX() - spot.x, mc.player.getZ() - spot.z);
-		return d <= within.get() ? String.format("%d blocks from %s", Math.round(d), what) : null;
+		return d <= within.get() ? String.format(Locale.ROOT, "%d blocks from %s", Math.round(d), what) : null;
 	}
 
 	/** Your map's waypoints for this server, by name, this dimension's first. */
@@ -344,9 +348,9 @@ public class AutoDisconnect extends Module {
 		}
 		double y = mc.player.getY();
 		if (y >= floorY.get()) aboveFloor = true;
-		else if (aboveFloor) return String.format("below the hard deck (Y %.0f, Floor Y %d)", y, floorY.get());
+		else if (aboveFloor) return String.format(Locale.ROOT, "below the hard deck (Y %.0f, Floor Y %d)", y, floorY.get());
 		if (y <= ceilingY.get()) belowCeiling = true;
-		else if (belowCeiling) return String.format("above the hard deck (Y %.0f, Ceiling Y %d)", y, ceilingY.get());
+		else if (belowCeiling) return String.format(Locale.ROOT, "above the hard deck (Y %.0f, Ceiling Y %d)", y, ceilingY.get());
 		return null;
 	}
 
@@ -358,7 +362,10 @@ public class AutoDisconnect extends Module {
 		return null;
 	}
 
-	/** When this module last made you leave ({@code System.currentTimeMillis}), 0 if never: Auto Reconnect doesn't go back after it. */
+	/**
+	 * When this module last made you leave ({@code System.currentTimeMillis}), 0 if never: Auto Reconnect doesn't go
+	 * back after it.
+	 */
 	public long leftAt() {
 		return leftAt;
 	}
@@ -388,7 +395,7 @@ public class AutoDisconnect extends Module {
 		shotWidth = shotHeight = 0;
 		pictured = screenshot.get();
 		if (pictured) capture();
-		if (copyCoords.get()) mc.keyboardHandler.setClipboard(String.format("%d %d %d", mc.player.getBlockX(), mc.player.getBlockY(), mc.player.getBlockZ()));
+		if (copyCoords.get()) mc.keyboardHandler.setClipboard(String.format(Locale.ROOT, "%d %d %d", mc.player.getBlockX(), mc.player.getBlockY(), mc.player.getBlockZ()));
 		if (afterLeaving.get() == AfterLeaving.TURN_OFF) disable();
 		else waiting.add(key);
 		mc.getConnection().getConnection().disconnect(Component.literal(PREFIX + reason));
@@ -416,7 +423,7 @@ public class AutoDisconnect extends Module {
 		var p = mc.player;
 		List<Row> rows = new ArrayList<>();
 		float abs = p.getAbsorptionAmount();
-		rows.add(new Row(Section.YOU, "Health", String.format("%.1f of %.0f", p.getHealth(), p.getMaxHealth()) + (abs > 0 ? String.format(", %.1f absorption", abs) : ""), key.equals("health")));
+		rows.add(new Row(Section.YOU, "Health", String.format(Locale.ROOT, "%.1f of %.0f", p.getHealth(), p.getMaxHealth()) + (abs > 0 ? String.format(Locale.ROOT, ", %.1f absorption", abs) : ""), key.equals("health")));
 		int totems = Myriad.inventory().count(st -> st.is(Items.TOTEM_OF_UNDYING)), popped = Myriad.server().totemPops(p);
 		rows.add(new Row(Section.YOU, "Totems", totems + " left, " + popped + " popped", key.equals("pops") || key.equals("totems")));
 		rows.add(new Row(Section.YOU, "Armor", armorLeft(), key.equals("armor")));
@@ -425,10 +432,10 @@ public class AutoDisconnect extends Module {
 		rows.add(new Row(Section.AROUND, "Worst hit", worstHit(), key.equals("beds") || key.equals("anchors") || key.equals("crystals")));
 		// The height alone gives no place away; no X or Z.
 		rows.add(new Row(Section.AROUND, "Where", dimensionName() + ", Y " + Math.round(p.getY()) + ", " + motion(), key.equals("hard_deck") || key.equals("destination")));
-		rows.add(new Row(Section.AROUND, "Speed", String.format("%.1f blocks/s", Math.hypot(p.getX() - p.xo, p.getZ() - p.zo) * 20), false));
+		rows.add(new Row(Section.AROUND, "Speed", String.format(Locale.ROOT, "%.1f blocks/s", Math.hypot(p.getX() - p.xo, p.getZ() - p.zo) * 20), false));
 		String effects = effects();
 		if (!effects.isEmpty()) rows.add(new Row(Section.YOU, "Effects", effects, false));
-		rows.add(new Row(Section.CONNECTION, "Server", "ping " + Myriad.server().ping() + " ms, " + String.format("%.1f TPS", Myriad.server().tps()), false));
+		rows.add(new Row(Section.CONNECTION, "Server", "ping " + Myriad.server().ping() + " ms, " + String.format(Locale.ROOT, "%.1f TPS", Myriad.server().tps()), false));
 		if (joinedAt > 0) rows.add(new Row(Section.CONNECTION, "Session", Format.duration(leftAt - joinedAt) + " on", false));
 		float[] health = new float[historyCount];
 		for (int i = 0; i < historyCount; i++) health[i] = healthHistory[(historyAt - historyCount + i + HISTORY) % HISTORY];
@@ -438,16 +445,16 @@ public class AutoDisconnect extends Module {
 	/** What made you leave, said with its setting. */
 	private String triggerName(String key) {
 		return switch (key) {
-			case "health" -> String.format("Health at %.1f or less", healthThreshold.get());
+			case "health" -> String.format(Locale.ROOT, "Health at %.1f or less", healthThreshold.get());
 			case "pops" -> popCount.get() + " totem pops";
 			case "totems" -> totemCount.get() + (totemCount.get() == 1 ? " totem" : " totems") + " or fewer";
 			case "armor" -> "Armour under " + armorDurability.get() + "%";
-			case "players" -> String.format("A player within %.0f blocks", playerRange.get());
+			case "players" -> String.format(Locale.ROOT, "A player within %.0f blocks", playerRange.get());
 			case "beds" -> "A bed could kill you";
 			case "anchors" -> "A respawn anchor could kill you";
 			case "crystals" -> "End crystals could kill you";
-			case "creepers" -> String.format("A creeper within %.1f blocks", creeperRange.get());
-			case "entities" -> String.format("An entity within %.0f blocks", entityRange.get());
+			case "creepers" -> String.format(Locale.ROOT, "A creeper within %.1f blocks", creeperRange.get());
+			case "entities" -> String.format(Locale.ROOT, "An entity within %.0f blocks", entityRange.get());
 			case "hard_deck" -> "Hard Deck";
 			case "destination" -> "Reached your destination";
 			default -> key;
@@ -457,7 +464,7 @@ public class AutoDisconnect extends Module {
 	/** The armour piece nearest breaking, with what it has left. */
 	private String armorLeft() {
 		ItemStack worst = null;
-		for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+		for (EquipmentSlot slot : Slots.ARMOR) {
 			ItemStack s = mc.player.getItemBySlot(slot);
 			if (s.isDamageableItem() && (worst == null || ItemInfo.durabilityFraction(s) < ItemInfo.durabilityFraction(worst))) worst = s;
 		}
@@ -488,7 +495,7 @@ public class AutoDisconnect extends Module {
 		if (worst < 0.5f) return "nothing near could hurt you";
 		String what = worst == crystals ? "end crystals" : worst == beds ? "a bed" : worst == anchors ? "a respawn anchor" : worst == creepers ? "a creeper"
 			: worst == players ? "a player's hit" : "the fall";
-		return String.format("%.1f from %s", worst, what);
+		return String.format(Locale.ROOT, "%.1f from %s", worst, what);
 	}
 
 	private String dimensionName() {

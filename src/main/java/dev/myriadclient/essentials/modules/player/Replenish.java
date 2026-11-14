@@ -3,12 +3,12 @@ package dev.myriadclient.essentials.modules.player;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.item.Slots;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.SavedSettings;
-import dev.myriadclient.api.util.Slots;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
@@ -17,10 +17,11 @@ import java.util.Arrays;
 /**
  * Keeps hotbar stacks topped up from the rest of your inventory: a stack running low is refilled with the same item
  * (from the biggest stack of it, or, when none alone would fill it, gathered from all of them with a double click:
- * three clicks either way), and a slot you've just used up gets the same item back (the biggest stack, one click). Every slot that needs it at once (as far as the packet budget
- * goes; the rest the next tick), the first tick there's no screen open, so it never fights you rearranging your
- * inventory. Sprinting doesn't hold it up (core gets a click past Grim in the same tick); where Grim judges the keys you
- * hold (newer versions, not 2b2t), it waits for a moment you aren't pressing any.
+ * three clicks either way), and a slot you've just used up gets the same item back (the biggest stack, one click).
+ * Every slot that needs it at once (as far as the packet budget goes; the rest the next tick), the first tick there's
+ * no screen open, so it never fights you rearranging your inventory. Sprinting doesn't hold it up (core gets a click
+ * past Grim in the same tick); where Grim judges the keys you hold (newer versions, not 2b2t), it waits for a moment
+ * you aren't pressing any.
  */
 public class Replenish extends Module {
 	private final IntSetting threshold = sgGeneral.integer("Threshold").description("Refill a stack when it drops to this percent of a full one.")

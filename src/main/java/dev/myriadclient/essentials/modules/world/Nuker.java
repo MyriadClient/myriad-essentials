@@ -7,6 +7,7 @@ import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
+import dev.myriadclient.api.player.Reach;
 import dev.myriadclient.api.render.HighlightStyle;
 import dev.myriadclient.api.render.RenderLook;
 import dev.myriadclient.api.service.Breaking;
@@ -19,9 +20,8 @@ import dev.myriadclient.api.setting.KeybindSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
-import dev.myriadclient.api.util.BlockInfo;
-import dev.myriadclient.api.util.Positions;
-import dev.myriadclient.api.util.Reach;
+import dev.myriadclient.api.world.BlockInfo;
+import dev.myriadclient.api.world.Positions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Block;
@@ -84,7 +84,7 @@ public class Nuker extends Module {
 
 	private final SettingGroup sgRender = settings.group("Render");
 	private final BoolSetting render = sgRender.bool("Highlight").description("Show the blocks being mined, filling in as they break.").defaultValue(true).build();
-	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, 140)).visible(render::get).build();
+	private final ColorSetting color = sgRender.color("Color").description("The highlight's colour.").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT, 140)).visible(render::get).build();
 
 	/** What this has queued and the service hasn't finished. */
 	private final Set<BlockPos> queued = new HashSet<>();
@@ -185,8 +185,8 @@ public class Nuker extends Module {
 	}
 
 	private Breaking.Options options() {
-		// No swings on screen (the swing each packet needs is sent either way); the block stays until the server says it's gone, so a refused
-		// finish never leaves you walking into a block that's only gone on your side.
+		// No swings on screen (the swing each packet needs is sent either way); the block stays until the server says
+		// it's gone, so a refused finish never leaves you walking into a block that's only gone on your side.
 		return breaking.options().withRotate(rotate.get()).withSwing(false).withRange(Math.min(range.get(), Reach.blockRange())).withWaitForServer(true);
 	}
 

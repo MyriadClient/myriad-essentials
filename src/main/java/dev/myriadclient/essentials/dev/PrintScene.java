@@ -11,7 +11,7 @@ import fi.dy.masa.litematica.selection.AreaSelection;
 import fi.dy.masa.litematica.selection.Box;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.core.BlockPos;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Development only, for the Grim suite: {@code .printscene <x1> <y1> <z1> <x2> <y2> <z2> <dx> <dy> <dz>} saves the box

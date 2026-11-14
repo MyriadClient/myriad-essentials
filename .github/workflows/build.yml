@@ -1,5 +1,9 @@
 name: build
-on: [pull_request, push]
+# Branch pushes only: a tag runs the release workflow, which builds and tests the same commit.
+on:
+  pull_request:
+  push:
+    branches: ['**']
 
 jobs:
   build:

@@ -10,12 +10,12 @@ import dev.myriadclient.api.event.events.WorldEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
+import dev.myriadclient.api.network.Packets;
 import dev.myriadclient.api.setting.BoolSetting;
-import dev.myriadclient.api.util.Packets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -57,7 +57,7 @@ public class NoSlow extends Module {
 	private final DigTarget digTarget = new DigTarget();
 
 	public NoSlow() {
-		super(Tags.MOVEMENT, "No Slow", "Move at speed while eating or using items, and through cobwebs.");
+		super(Tags.MOVEMENT, "No Slow", "Keeps your speed while eating or using items, and through cobwebs.");
 		Myriad.events().subscribe(digTarget);
 	}
 

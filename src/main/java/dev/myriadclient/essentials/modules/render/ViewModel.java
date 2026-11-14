@@ -19,14 +19,15 @@ import dev.myriadclient.api.ui.widget.Widget;
 
 /**
  * First-person hand options: move, rotate and scale the held item and arm, stop the camera sway, render at full
- * brightness, or hide either hand (applied by this addon's HeldItemRendererMixin), and highlight your bare hand, the
- * items you hold, or both, with Myriad's shader highlights. Hand and items that look alike share one outline.
+ * brightness, or hide either hand (applied by this addon's FirstPersonHandsAndItemsRendererMixin; No Switch Animation
+ * by FirstPersonHandsAndItemsMixin), and highlight your bare hand, the items you hold, or both, with Myriad's shader
+ * highlights. Hand and items that look alike share one outline.
  */
 public class ViewModel extends Module {
 
 	public final BoolSetting brighten = sgGeneral.bool("Brighten").description("Draw the hands at full brightness.").build();
 	public final BoolSetting noSway = sgGeneral.bool("No Sway").description("Stop the hands lagging behind camera movement.").build();
-	public final BoolSetting hideMain = sgGeneral.bool("Hide Main Hand").build();
+	public final BoolSetting hideMain = sgGeneral.bool("Hide Main Hand").description("Don't draw your main hand or what it holds.").build();
 	public final BoolSetting hideOff = sgGeneral.bool("Hide Offhand").description("Handy for big shields and totems.").build();
 	public final DoubleSetting swingSpeed = sgGeneral.decimal("Swing Speed").description("How fast your hands swing; 1 is vanilla (Haste and Mining Fatigue still count).")
 		.defaultValue(1).range(0.25, 4).decimals(2).build();
@@ -34,31 +35,31 @@ public class ViewModel extends Module {
 
 	private final SettingGroup sgPosition = settings.group("Position");
 	public final DoubleSetting x = sgPosition.decimal("X").description("Sideways; mirrored for the other hand.").defaultValue(0).range(-2, 2).build();
-	public final DoubleSetting y = sgPosition.decimal("Y").defaultValue(0).range(-2, 2).build();
-	public final DoubleSetting z = sgPosition.decimal("Z").defaultValue(0).range(-2, 2).build();
+	public final DoubleSetting y = sgPosition.decimal("Y").description("Up or down.").defaultValue(0).range(-2, 2).build();
+	public final DoubleSetting z = sgPosition.decimal("Z").description("Towards you (positive) or away (negative).").defaultValue(0).range(-2, 2).build();
 	public final BoolSetting separateOffhand = sgPosition.bool("Separate Offhand").description("Position the off hand on its own instead of mirroring the main hand.").build();
 	public final DoubleSetting offX = sgPosition.decimal("Offhand X").description("Sideways, outwards from the body.").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
-	public final DoubleSetting offY = sgPosition.decimal("Offhand Y").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
-	public final DoubleSetting offZ = sgPosition.decimal("Offhand Z").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
+	public final DoubleSetting offY = sgPosition.decimal("Offhand Y").description("Up or down.").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
+	public final DoubleSetting offZ = sgPosition.decimal("Offhand Z").description("Towards you (positive) or away (negative).").defaultValue(0).range(-2, 2).visible(separateOffhand::get).build();
 
 	private final SettingGroup sgRotation = settings.group("Rotation");
-	public final IntSetting rotX = sgRotation.integer("Pitch").defaultValue(0).range(-180, 180).build();
+	public final IntSetting rotX = sgRotation.integer("Pitch").description("Tilt up or down, in degrees.").defaultValue(0).range(-180, 180).build();
 	public final IntSetting rotY = sgRotation.integer("Yaw").description("Mirrored for the other hand.").defaultValue(0).range(-180, 180).build();
 	public final IntSetting rotZ = sgRotation.integer("Roll").description("Mirrored for the other hand.").defaultValue(0).range(-180, 180).build();
 
 	private final SettingGroup sgScale = settings.group("Scale");
-	public final DoubleSetting scale = sgScale.decimal("Scale").defaultValue(1).range(0.1, 3).build();
-	public final DoubleSetting offhandScale = sgScale.decimal("Offhand Scale").defaultValue(1).range(0.1, 3).build();
+	public final DoubleSetting scale = sgScale.decimal("Scale").description("Size of the main hand and its item; 1 is vanilla.").defaultValue(1).range(0.1, 3).build();
+	public final DoubleSetting offhandScale = sgScale.decimal("Offhand Scale").description("Size of the off hand and its item; 1 is vanilla.").defaultValue(1).range(0.1, 3).build();
 
 	private final SettingGroup sgRender = settings.group("Render");
 	private final BoolSetting handHighlight = sgRender.bool("Hand").description("Highlight your bare hand (vanilla only shows it while your main hand is empty).")
 		.onChanged(v -> listenForHighlights()).build();
-	private final ColorSetting handColor = sgRender.color("Hand Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(handHighlight::get).build();
+	private final ColorSetting handColor = sgRender.color("Hand Color").description("The hand highlight's colour.").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(handHighlight::get).build();
 	/** Hands are only ever drawn by the shader: they have no box. */
 	private final RenderSettings handStyle = RenderSettings.builder(sgRender).named("Hand").visible(handHighlight::get).noThroughWalls().alwaysShader().build();
 	private final BoolSetting itemHighlight = sgRender.bool("Item").description("Highlight the items in your hands.")
 		.onChanged(v -> listenForHighlights()).build();
-	private final ColorSetting itemColor = sgRender.color("Item Color").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(itemHighlight::get).build();
+	private final ColorSetting itemColor = sgRender.color("Item Color").description("The item highlight's colour.").defaultValue(SettingColor.role(SettingColor.Mode.ACCENT)).visible(itemHighlight::get).build();
 	private final RenderSettings itemStyle = RenderSettings.builder(sgRender).named("Item").visible(itemHighlight::get).noThroughWalls().alwaysShader().build();
 
 	/**
@@ -88,7 +89,7 @@ public class ViewModel extends Module {
 	}
 
 	public ViewModel() {
-		super(Tags.RENDER, "View Model", "Move, rotate, scale, hide or highlight your first-person hands.");
+		super(Tags.RENDER, "View Model", "Moves, rotates, scales, hides or highlights your first-person hands.");
 		whileEnabled(this::listenForHighlights, this::listenForHighlights);
 	}
 

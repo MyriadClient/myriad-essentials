@@ -7,6 +7,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 /** Your potion effects and how long each has left, longest first. */
 public final class EffectsPanel extends TextHudPanel {
@@ -34,6 +35,6 @@ public final class EffectsPanel extends TextHudPanel {
 
 	private static String time(int ticks) {
 		int s = ticks / 20;
-		return s / 60 + ":" + String.format("%02d", s % 60);
+		return s / 60 + ":" + String.format(Locale.ROOT, "%02d", s % 60);
 	}
 }

@@ -1,0 +1,21 @@
+package dev.myriadclient.essentials.modules.automation;
+
+import dev.myriadclient.api.event.Subscribe;
+import dev.myriadclient.api.event.events.InputEvent;
+import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Tags;
+
+/**
+ * Holds forward for you, screens open or not (chat, your inventory), so you can type or sort while you walk. Holding
+ * back stops you; sprint, jump and the sides still work as usual.
+ */
+public class AutoWalk extends Module {
+	public AutoWalk() {
+		super(Tags.AUTOMATION, "Auto Walk", "Walks forward without you holding the key.");
+	}
+
+	@Subscribe
+	private void onInput(InputEvent e) {
+		e.forward = true;
+	}
+}

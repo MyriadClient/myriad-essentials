@@ -5,7 +5,7 @@ import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.render.RenderLook;
 import dev.myriadclient.api.setting.SettingColor;
 import net.minecraft.world.phys.AABB;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Shows a build's plan in a module's look, in the render mode: what's about to happen in the accent colour, what's

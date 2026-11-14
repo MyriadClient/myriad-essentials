@@ -7,21 +7,21 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.hook.Hook;
+import dev.myriadclient.api.item.ItemInfo;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
+import dev.myriadclient.api.player.Interactions;
+import dev.myriadclient.api.player.Reach;
 import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.service.RotationSettings;
 import dev.myriadclient.api.service.Rotations;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.ColorSetting;
 import dev.myriadclient.api.setting.EnumSetting;
-import dev.myriadclient.api.setting.SettingColor;
-import dev.myriadclient.api.util.Interactions;
-import dev.myriadclient.api.util.ItemInfo;
-import dev.myriadclient.api.util.MathUtil;
-import dev.myriadclient.api.util.Reach;
 import dev.myriadclient.api.setting.SavedSettings;
+import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
+import dev.myriadclient.api.util.MathUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -31,7 +31,7 @@ import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
@@ -85,7 +85,7 @@ public class KillAura extends Module {
 
 	private final SettingGroup sgRender = settings.group("Render");
 	private final BoolSetting render = sgRender.bool("Show Target").description("Outline the target.").defaultValue(true).build();
-	private final ColorSetting color = sgRender.color("Color").defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(render::get).build();
+	private final ColorSetting color = sgRender.color("Color").description("The target's outline colour.").defaultValue(SettingColor.role(SettingColor.Mode.RED)).visible(render::get).build();
 	private final RenderSettings look = RenderSettings.builder(sgRender).visible(render::get).throughWalls(false).build();
 
 	/** Switch: blocks beyond reach a target may be when the weapon is taken in hand, so its charge is full on arrival. */

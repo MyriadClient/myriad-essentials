@@ -31,7 +31,7 @@ public class AutoReconnect extends Module {
 	private boolean held;
 
 	public AutoReconnect() {
-		super(Tags.PLAYER, "Auto Reconnect", "Join the server you were on again after you're kicked or lose connection.");
+		super(Tags.PLAYER, "Auto Reconnect", "Joins the server you were on again after you're kicked or lose connection.");
 	}
 
 	@Override

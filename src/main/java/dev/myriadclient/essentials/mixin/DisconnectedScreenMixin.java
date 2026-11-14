@@ -84,7 +84,7 @@ public abstract class DisconnectedScreenMixin extends Screen {
 		repositionElements();
 	}
 
-	// Without the report (it left before this version, say): just after the reason, before init's second
+	// Without the report (none was made as it left): just after the reason, before init's second
 	// defaultCellSetting(), which narrows the padding for the buttons.
 	@Inject(method = "init", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/layouts/LinearLayout;defaultCellSetting()Lnet/minecraft/client/gui/layouts/LayoutSettings;", ordinal = 1))
 	private void essentials$leftAt(CallbackInfo ci) {
