@@ -3,6 +3,14 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 1.10.1
+
+Needs Myriad 1.8.0.
+
+- **Nether portals take you through with Elytra Fly left on.** Recast walks you out of a portal you stop in, so a run never
+  ends in another dimension, but it did so even with no elytra to fly with (Elytra Fly on, Recast standing by), so walking
+  into a portal yourself got you walked back out. It only does that now while it could fly you on.
+
 ## 1.10.0
 
 Needs Myriad 1.8.0.

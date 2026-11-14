@@ -554,8 +554,9 @@ public class Recast extends GlideMode {
 			pauseTicks = FLAG_PAUSE;
 			countSetback();
 		}
-		// Bouncing through one is fine (it takes you only after a while in it); stopped in one, not.
-		if (state != State.BOUNCING && mc.player.onGround() && inNetherPortal(mc.player.getBoundingBox())) {
+		// Bouncing through one is fine (it takes you only after a while in it); stopped in one, not. Only while it could fly
+		// you on: with no elytra to glide with it stands by, and you walked into the portal yourself to go through it.
+		if (state != State.BOUNCING && mc.player.onGround() && canGlide() && inNetherPortal(mc.player.getBoundingBox())) {
 			leavePortal();
 			return;
 		}
