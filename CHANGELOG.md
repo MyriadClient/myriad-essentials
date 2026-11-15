@@ -3,6 +3,22 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.2.0
+
+Needs Myriad 2.0.0, for Minecraft 26.3.
+
+- **Air Place is part of Placement Tweaks** and its own module is gone: turn it on there. Like Flexible Rotation and
+  Offset it works while its bind is held (Air Place Bind, Left Alt: Rotation needs a face under the crosshair, Air Place
+  nothing), and the spot in mid-air is outlined as Offset's target is. Block Highlight no longer outlines it.
+- **Fake Sneak** (Placement Tweaks): with its bind held (Left Alt), right-clicking a chest, crafting table, door or
+  anything else that opens or toggles places your block against it, as if sneaking, without crouching.
+- Placement Tweaks' edges sit on the block's own outline, so a lectern, slab or stair shows one face's edges, not those
+  of the part under the crosshair.
+- **Junk Dropper** picks its items from a list, as Block ESP picks blocks: Items, every one of an item whatever it's
+  called. Name text and single maps go in Named. A Junk list from before moves into the two by itself. Add Bind's left
+  click adds to Items, right click to Named.
+- **Full Bright works with ImmersiveVFX**, which lights the world in its own shaders past the game's light settings.
+
 ## 2.1.0
 
 Needs Myriad 2.0.0, for Minecraft 26.3 (2.1.0 shows a block it places the right way at once).

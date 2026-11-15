@@ -83,7 +83,7 @@ A module, read in this order:
 | the smallest module there is | `automation/AutoWalk` (an `InputEvent` handler) |
 | a setting and a mixin | `render/TimeOfDay` with `ClientClockManagerMixin` |
 | a mixin a module drives | `world/Reach` with `PlayerMixin` |
-| core's services (placement, rotations, targets) | `world/AirPlace`, `combat/KillAura` |
+| core's services (placement, rotations, targets) | `world/PlacementTweaks`, `combat/KillAura` |
 | a hook other addons can use | `KillAura.TARGET` |
 | the building service | `world/Scaffold` (a blueprint worked out each tick) |
 | jobs (long work with steps, status and remedies) | `automation/Printer` |

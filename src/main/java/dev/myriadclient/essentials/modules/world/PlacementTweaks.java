@@ -8,6 +8,10 @@ import dev.myriadclient.api.build.Target;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.InteractEvent;
 import dev.myriadclient.api.event.events.Render3DEvent;
+import dev.myriadclient.api.player.Reach;
+import dev.myriadclient.api.service.Placement;
+import dev.myriadclient.api.setting.DoubleSetting;
+import dev.myriadclient.api.world.BlockInfo;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
@@ -31,6 +35,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -39,11 +44,12 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Small changes to placing blocks by hand, each while its bind is held: the face you aim at shows its four edges, the
- * one under the crosshair lit. Flexible Rotation places the block facing that edge (anywhere else: out of the face);
- * Offset places it in the space beside the usual one, towards that edge (anywhere else: where it usually goes). Both
- * binds held, both at once. Core's build engine places it, finding the click and the look that make the game place it
- * that way.
+ * Small changes to placing blocks by hand. Flexible Rotation and Offset, each while its bind is held: the face you aim
+ * at shows its four edges, the one under the crosshair lit; Flexible Rotation places the block facing that edge
+ * (anywhere else: out of the face), Offset in the space beside the usual one towards that edge (anywhere else: where it
+ * usually goes), both binds held both at once. Core's build engine places those, finding the click and the look that
+ * make the game place it that way. Air Place, while its bind is held with nothing under the crosshair, puts a block in
+ * mid-air where you look, outlined as Offset's target is. Fake Sneak, while its bind is held, places against blocks that open or toggle.
  */
 public class PlacementTweaks extends Module {
 	private final BoolSetting flexibleRotation = sgGeneral.bool("Flexible Rotation")
@@ -56,9 +62,18 @@ public class PlacementTweaks extends Module {
 		.defaultValue(true).build();
 	private final KeybindSetting offsetBind = sgGeneral.keybind("Offset Bind").description("Hold for Offset.")
 		.defaultValue(Keybind.key(InputConstants.KEY_R)).visible(offset::get).build();
-	private final BoolSetting airPlace = sgGeneral.bool("Air Place").description("Place against nothing when there's no block to click: a block "
-		+ "that faces the way it's clicked (a hopper, a log, a shulker box) facing sideways, or an offset block with nothing beside it. 2b2t takes "
-		+ "it; current Grim refuses it.").visible(() -> flexibleRotation.get() || offset.get()).build();
+	private final BoolSetting fakeSneak = sgGeneral.bool("Fake Sneak").description("Hold its bind with a block in hand: right-clicking a block "
+		+ "that opens or toggles (a chest, a crafting table, a door) places against it instead, as if sneaking, without crouching. An empty hand "
+		+ "or another item still opens it.").defaultValue(false).build();
+	private final KeybindSetting fakeSneakBind = sgGeneral.keybind("Fake Sneak Bind").description("Hold for Fake Sneak. Left Alt, as Rotation "
+		+ "Bind: a block placed facing your way against a chest needs both.").defaultValue(Keybind.key(InputConstants.KEY_LALT)).visible(fakeSneak::get).build();
+	private final BoolSetting airPlace = sgGeneral.bool("Air Place").description("Hold its bind with a block in hand and nothing under the "
+		+ "crosshair: right-click places it in mid-air where you look, outlined beforehand. On, Flexible Rotation, Offset and Fake Sneak may click "
+		+ "against nothing too (a hopper facing sideways with nothing beside it). 2b2t takes it; current Grim refuses it.").build();
+	private final KeybindSetting airBind = sgGeneral.keybind("Air Place Bind").description("Hold for Air Place. Left Alt, as Rotation Bind: one "
+		+ "works on a block face, the other with nothing under the crosshair.").defaultValue(Keybind.key(InputConstants.KEY_LALT)).visible(airPlace::get).build();
+	private final DoubleSetting distance = sgGeneral.decimal("Distance").description("How far in front of you a block goes in mid-air.")
+		.defaultValue(3).range(1, 6).decimals(1).visible(airPlace::get).build();
 
 	private static final List<EnumProperty<Direction>> FACINGS = List.of(BlockStateProperties.FACING, BlockStateProperties.HORIZONTAL_FACING,
 		BlockStateProperties.FACING_HOPPER);
@@ -76,6 +91,8 @@ public class PlacementTweaks extends Module {
 	private static final int ARC = 6;
 	/** The overlay sits this far off the face, so the face doesn't show through it. */
 	private static final double LIFT = 0.002;
+	/** How far back along the look each try for a mid-air spot steps when it's out of reach. */
+	private static final double AIR_STEP = 0.2;
 	/** Ticks a placement may take before it's given up (it can't be placed that way from here). */
 	private static final int GIVE_UP_TICKS = 20;
 
@@ -83,14 +100,56 @@ public class PlacementTweaks extends Module {
 	/** What the placement under way was meant to do, for the message if it can't. */
 	private String placingWhat = "";
 	private int placingTicks;
+	/** Where a right-click would place in mid-air, worked out once a tick; null if it wouldn't. */
+	private @Nullable BlockPos airTarget;
 
 	public PlacementTweaks() {
-		super(Tags.WORLD, "Placement Tweaks", "Places blocks by hand facing the way you choose.");
+		super(Tags.WORLD, "Placement Tweaks", "Places blocks by hand the way you choose: facing, beside, against chests, in mid-air.");
 	}
 
 	@Override
 	protected void onDisable() {
 		placing = null;
+		airTarget = null;
+	}
+
+	private Placement.Options airOptions() {
+		return Placement.Options.DEFAULT.withAirPlace(true).withRange(Reach.blockRange());
+	}
+
+	/**
+	 * Where a right-click would place in mid-air now: the space {@link #distance} along your look, or the farthest one
+	 * before it within reach (your look has to enter the space within reach, so up to about 5 blocks ahead). Null with
+	 * Air Place off or its bind up, no block in hand, or something under the crosshair.
+	 */
+	private @Nullable BlockPos findAirTarget() {
+		if (!airPlace.get() || !airBind.get().isPressed() || !inGame() || mc.gui.screen() != null || !(mc.player.getMainHandItem().getItem() instanceof BlockItem)) return null;
+		if (mc.hitResult != null && mc.hitResult.getType() != HitResult.Type.MISS) return null;
+		Vec3 eyes = mc.player.getEyePosition(), look = mc.player.getViewVector(1);
+		BlockPos tried = null;
+		for (double d = distance.get(); d >= 1; d -= AIR_STEP) {
+			BlockPos pos = BlockPos.containing(eyes.add(look.scale(d)));
+			if (pos.equals(tried)) continue;
+			tried = pos;
+			if (Myriad.placement().check(pos, airOptions()).ok()) return pos;
+		}
+		return null;
+	}
+
+	@Subscribe
+	private void onTickStart(TickEvent.Pre e) {
+		airTarget = findAirTarget();
+	}
+
+	/** A right-click with nothing under the crosshair: the block placed in mid-air. */
+	@Subscribe
+	private void onUse(InteractEvent.Item e) {
+		if (e.hand() != InteractionHand.MAIN_HAND) return;
+		// The look may have moved since the tick started.
+		BlockPos pos = findAirTarget();
+		if (pos == null) return;
+		e.cancel();
+		Myriad.placement().place(this, pos, mc.player.getInventory().getSelectedSlot(), airOptions());
 	}
 
 	/** The block in your main hand, if it's one that can face more than one way; else null. */
@@ -105,6 +164,11 @@ public class PlacementTweaks extends Module {
 	/** Whether Flexible Rotation is in use: its bind held, with a block that can face more than one way. */
 	private boolean rotating() {
 		return flexibleRotation.get() && rotationBind.get().isPressed() && orientable() != null;
+	}
+
+	/** Whether Fake Sneak is in use: its bind held. */
+	private boolean fakeSneaking() {
+		return fakeSneak.get() && fakeSneakBind.get().isPressed();
 	}
 
 	/** Whether Offset is in use: its bind held. */
@@ -125,11 +189,26 @@ public class PlacementTweaks extends Module {
 		return offsetting() && way != hit.getDirection() ? usual.relative(way) : usual;
 	}
 
-	/** Where on its face {@code hit} is, from 0 to 1 along the face's two axes (the first and second in {@link #axes}). */
-	private static double[] onFace(BlockHitResult hit) {
+	/**
+	 * The block at {@code pos} as far as the overlay goes: the box round its whole shape, inside the block (a slab is half
+	 * a block high, a lectern's top is its top whichever of its parts the crosshair is on).
+	 */
+	private AABB bounds(BlockPos pos) {
+		VoxelShape shape = mc.level.getBlockState(pos).getShape(mc.level, pos);
+		return shape.isEmpty() ? new AABB(0, 0, 0, 1, 1, 1) : shape.bounds();
+	}
+
+	/** Where on the block's face {@code hit} is, from 0 to 1 along the face's two axes (the first and second in {@link #axes}). */
+	private double[] onFace(BlockHitResult hit) {
 		Direction.Axis[] axes = axes(hit.getDirection());
+		AABB b = bounds(hit.getBlockPos());
 		Vec3 local = hit.getLocation().subtract(Vec3.atLowerCornerOf(hit.getBlockPos()));
-		return new double[]{local.get(axes[0]), local.get(axes[1])};
+		double[] uv = new double[2];
+		for (int i = 0; i < 2; i++) {
+			double size = Math.max(b.max(axes[i]) - b.min(axes[i]), 1e-6);
+			uv[i] = Math.clamp((local.get(axes[i]) - b.min(axes[i])) / size, 0, 1);
+		}
+		return uv;
 	}
 
 	/** The two axes along a face. */
@@ -142,7 +221,7 @@ public class PlacementTweaks extends Module {
 	}
 
 	/** The way the block should face for a click at {@code hit}: the edge under the crosshair, or the face's own direction anywhere else. */
-	private static Direction chosen(BlockHitResult hit) {
+	private Direction chosen(BlockHitResult hit) {
 		double[] uv = onFace(hit);
 		double u = uv[0], v = uv[1];
 		Direction.Axis[] axes = axes(hit.getDirection());
@@ -168,7 +247,10 @@ public class PlacementTweaks extends Module {
 		// Only the crosshair's own click: the build engine's clicks come through here too, each with a hit of its own.
 		if (e.hand() != InteractionHand.MAIN_HAND || e.hit() != mc.hitResult) return;
 		BlockHitResult hit = aimedFace();
-		if (hit == null) return;
+		if (hit == null) {
+			fakeSneak(e);
+			return;
+		}
 		if (placing != null) {
 			e.cancel();
 			return;
@@ -199,9 +281,17 @@ public class PlacementTweaks extends Module {
 			return;
 		}
 		Building.Options options = Building.Options.forServer();
-		options = options.withPlacing(options.placing().withAirPlace(airPlace.get()));
+		options = options.withPlacing(options.placing().withAirPlace(airPlace.get()).withSneak(fakeSneaking()));
 		placing = Myriad.building().start(this, Blueprint.of(Map.of(pos, target)), options);
 		placingTicks = 0;
+	}
+
+	/** Fake Sneak: a right-click with a block on one that opens or toggles, placed against it as if sneaking. */
+	private void fakeSneak(InteractEvent.Block e) {
+		if (!fakeSneaking() || mc.player.isShiftKeyDown() || !(mc.player.getMainHandItem().getItem() instanceof BlockItem)) return;
+		if (!(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK || !BlockInfo.isClickable(mc.level.getBlockState(hit.getBlockPos()))) return;
+		e.cancel();
+		Myriad.placement().place(this, hit, mc.player.getInventory().getSelectedSlot(), Placement.Options.forServer().withSneak(true).withAirPlace(airPlace.get()));
 	}
 
 	@Subscribe
@@ -223,16 +313,23 @@ public class PlacementTweaks extends Module {
 	 */
 	@Subscribe
 	private void onRender(Render3DEvent e) {
-		BlockHitResult hit = aimedFace();
-		if (hit == null) return;
-		Direction face = hit.getDirection();
-		Direction.Axis[] axes = axes(face);
-		BlockPos pos = hit.getBlockPos();
-		// The plane the hit is on (a slab's top is half way up), lifted off it towards you.
-		double plane = hit.getLocation().get(face.getAxis()) + face.getAxisDirection().getStep() * LIFT;
 		int accent = Myriad.ui().theme().accent.argb();
 		int line = ColorUtil.withAlpha(accent, 0xE0), fill = ColorUtil.withAlpha(accent, 0x70);
 		ShapeBuilder shapes = e.shapes();
+		BlockHitResult hit = aimedFace();
+		if (hit == null) {
+			// Air Place: where the block will go, outlined as Offset's is.
+			BlockPos air = airTarget;
+			if (air != null) shapes.boxLines(new AABB(air), line, false);
+			return;
+		}
+		Direction face = hit.getDirection();
+		Direction.Axis[] axes = axes(face);
+		BlockPos pos = hit.getBlockPos();
+		// The block's own face, lifted off it towards you.
+		AABB bounds = bounds(pos);
+		double side = face.getAxisDirection() == Direction.AxisDirection.POSITIVE ? bounds.max(face.getAxis()) : bounds.min(face.getAxis());
+		double plane = pos.get(face.getAxis()) + side + face.getAxisDirection().getStep() * LIFT;
 		Direction chosen = chosen(hit);
 		// The edges in turn: 0 the low end of the face's second axis, 1 the high end of its first, 2 the
 		// high end of its second, 3 the low end of its first (each the one before turned a quarter round the middle).
@@ -242,7 +339,7 @@ public class PlacementTweaks extends Module {
 				: i == 1 ? Direction.fromAxisAndDirection(axes[0], Direction.AxisDirection.POSITIVE)
 				: i == 2 ? Direction.fromAxisAndDirection(axes[1], Direction.AxisDirection.POSITIVE)
 				: Direction.fromAxisAndDirection(axes[0], Direction.AxisDirection.NEGATIVE);
-			piece(shapes, pos, axes, face, plane, edge, line, chosen == way ? fill : 0);
+			piece(shapes, pos, axes, face, plane, bounds, edge, line, chosen == way ? fill : 0);
 			edge = edge.stream().map(c -> new double[]{1 - c[1], c[0]}).toList();
 		}
 		if (offsetting() && chosen != face) {
@@ -252,8 +349,9 @@ public class PlacementTweaks extends Module {
 	}
 
 	/** One piece of the overlay ({@code outline} as points on the face), outlined, and filled if {@code fill} isn't 0. */
-	private static void piece(ShapeBuilder shapes, BlockPos pos, Direction.Axis[] axes, Direction face, double plane, List<double[]> outline, int line, int fill) {
-		List<Vec3> points = outline.stream().map(c -> at(pos, axes, face, plane, c[0], c[1])).toList();
+	private static void piece(ShapeBuilder shapes, BlockPos pos, Direction.Axis[] axes, Direction face, double plane, AABB bounds, List<double[]> outline,
+		int line, int fill) {
+		List<Vec3> points = outline.stream().map(c -> at(pos, axes, face, plane, bounds, c[0], c[1])).toList();
 		for (int i = 0; i < points.size(); i++) shapes.line(points.get(i), points.get((i + 1) % points.size()), line, false);
 		if (fill == 0) return;
 		double u = 0, v = 0;
@@ -261,7 +359,7 @@ public class PlacementTweaks extends Module {
 			u += c[0];
 			v += c[1];
 		}
-		Vec3 middle = at(pos, axes, face, plane, u / outline.size(), v / outline.size());
+		Vec3 middle = at(pos, axes, face, plane, bounds, u / outline.size(), v / outline.size());
 		for (int i = 0; i < points.size(); i++) {
 			Vec3 b = points.get((i + 1) % points.size());
 			shapes.quad(middle, points.get(i), b, b, fill, false);
@@ -303,12 +401,12 @@ public class PlacementTweaks extends Module {
 		return new double[]{x / length, y / length};
 	}
 
-	/** The point {@code u}, {@code v} of the way along {@code face}'s axes of the block at {@code pos}, on {@code plane}. */
-	private static Vec3 at(BlockPos pos, Direction.Axis[] axes, Direction face, double plane, double u, double v) {
+	/** The point {@code u}, {@code v} of the way across the block's face along {@code face}'s axes (within {@code bounds}), on {@code plane}. */
+	private static Vec3 at(BlockPos pos, Direction.Axis[] axes, Direction face, double plane, AABB bounds, double u, double v) {
 		double[] c = new double[3];
 		c[face.getAxis().ordinal()] = plane;
-		c[axes[0].ordinal()] = pos.get(axes[0]) + u;
-		c[axes[1].ordinal()] = pos.get(axes[1]) + v;
+		c[axes[0].ordinal()] = pos.get(axes[0]) + bounds.min(axes[0]) + u * (bounds.max(axes[0]) - bounds.min(axes[0]));
+		c[axes[1].ordinal()] = pos.get(axes[1]) + bounds.min(axes[1]) + v * (bounds.max(axes[1]) - bounds.min(axes[1]));
 		return new Vec3(c[0], c[1], c[2]);
 	}
 }

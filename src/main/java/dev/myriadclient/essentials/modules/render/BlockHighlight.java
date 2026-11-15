@@ -14,7 +14,6 @@ import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.ui.widget.Preview;
 import dev.myriadclient.api.ui.widget.Widget;
-import dev.myriadclient.essentials.modules.world.AirPlace;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
@@ -73,9 +72,9 @@ public class BlockHighlight extends Module {
 		if (e.block() != null && !e.shown()) e.render(look, color.argb());
 	}
 
-	/** The block under the crosshair, or where Air Place would place with nothing under it, or null. */
+	/** The block under the crosshair, or null. */
 	private BlockPos target() {
-		if (!(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) return AirPlace.target();
+		if (!(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) return null;
 		return mc.level.getBlockState(hit.getBlockPos()).isAir() ? null : hit.getBlockPos();
 	}
 

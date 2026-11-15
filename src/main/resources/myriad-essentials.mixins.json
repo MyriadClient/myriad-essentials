@@ -10,6 +10,8 @@
 		"BlockStateBaseMixin",
 		"BossHealthOverlayMixin",
 		"CameraMixin",
+		"compat.immersivevfx.FallbackResourceManagerMixin",
+		"compat.immersivevfx.VfxShadowsMixin",
 		"ChatBackgroundMixin",
 		"ChatComponentMixin",
 		"ChatTextShadowMixin",
