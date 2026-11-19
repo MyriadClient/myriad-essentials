@@ -14,7 +14,7 @@ import net.minecraft.network.chat.Component;
  * One of {@link ElytraFly}'s types: {@link Recast}, which flies its bounce itself ({@link GlideMode}), and
  * {@link Altitude} and {@link ElytraControl}, settings over a core flight ({@link FlightMode}). The type flying hears
  * events only while it flies ({@link #start}, {@link #stop}); its settings are Elytra Fly's, shown only while it's the
- * one chosen. {@link ElytraSwap} decides whether its flight keeps the elytra from wearing, and Preserve is Elytra Fly's.
+ * one chosen. {@link ElytraTweaks} decides whether its flight keeps the elytra from wearing, and Preserve is Elytra Fly's.
  */
 public abstract class ElytraMode implements NoDurability.Owner, Identified {
 	protected static final Minecraft mc = Minecraft.getInstance();
@@ -98,15 +98,15 @@ public abstract class ElytraMode implements NoDurability.Owner, Identified {
 
 	protected void onEnable() {
 		// Where the server simulates the glide, an elytra worn through a flight goes fast: say how to keep it.
-		if (AntiCheat.inEffect().simulatesGlide() && !noDurability()) info("Elytra Swap is off: your elytra wears as you fly.");
+		if (AntiCheat.inEffect().simulatesGlide() && !noDurability()) info("Elytra Tweaks is off: your elytra wears as you fly.");
 	}
 
 	protected void onDisable() {
 	}
 
-	/** Elytra Swap's behaviour for this flight (see {@link ElytraSwap#BEHAVIOUR}). */
-	private ElytraSwap.Behaviour swap() {
-		return ElytraSwap.behaviourFor(this, waitsForElytra());
+	/** Elytra Tweaks's behaviour for this flight (see {@link ElytraTweaks#BEHAVIOUR}). */
+	private ElytraTweaks.Behaviour swap() {
+		return ElytraTweaks.behaviourFor(this, waitsForElytra());
 	}
 
 	/** Whether each glide start should wait for the server to have the elytra back on (Altitude's long, fast glides). */

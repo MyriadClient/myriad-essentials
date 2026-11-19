@@ -10,6 +10,8 @@ import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.RenderEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Modules;
+import dev.myriadclient.essentials.modules.automation.AutoTool;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.player.Interactions;
 import dev.myriadclient.api.player.Reach;
@@ -36,8 +38,9 @@ import java.util.function.IntUnaryOperator;
 
 /**
  * Hit a block once and it's mined for you with packets, through the shared breaking service, while your hand stays
- * free: the best tool is swapped in only to start and finish (brought into the hotbar from your inventory when you
- * stand still). Any block your crosshair reaches can be picked, measured as the server does, to the block's nearest
+ * free: with {@link AutoTool} on, the best tool is swapped in only to start and finish (brought into the hotbar from
+ * your inventory when you stand still), Silk Touch for blocks that break at once or that no tool mines faster (glass);
+ * with it off, what you hold. Any block your crosshair reaches can be picked, measured as the server does, to the block's nearest
  * point; one you walk out of reach of is dropped. A mined block stays on screen until the server says it's gone, so a
  * finish it refuses never shows the block gone while the server still has it. Hold the button and drag to line up
  * every block you pass over; your hand swings while you hold, and not otherwise (the swing Grim expects with each break
@@ -210,7 +213,9 @@ public class PacketMine extends Module {
 	private Breaking.Options options() {
 		// No swings of its own: your hand only moves while you hold the button.
 		// The block stays on screen until the server says it's gone: a refused finish never shows it gone.
-		return breaking.options().withRotate(rotate.get()).withSwing(false).withRange(Reach.blockRange()).withWaitForServer(true);
+		// The tool is Auto Tool's to pick: with it off, blocks are mined with what you hold.
+		return breaking.options().withRotate(rotate.get()).withSwing(false).withRange(Reach.blockRange()).withWaitForServer(true)
+			.withAutoTool(Modules.isActive(AutoTool.class));
 	}
 
 	@Subscribe(inGame = true)

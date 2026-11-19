@@ -6,7 +6,7 @@ import net.minecraft.client.Minecraft;
 /**
  * Who is flying the elytra, for this addon's mixins and the modules that keep out of its way (core's Elytra service
  * steers the glide and holds it open for them; see ElytraMode): {@link ElytraFly}'s type
- * ({@link Recast}, {@link Altitude}, {@link ElytraControl}), and {@link ElytraSwap}, which swaps for whoever flies.
+ * ({@link Recast}, {@link Altitude}, {@link ElytraControl}), and {@link ElytraTweaks}, which swaps for whoever flies.
  */
 public final class ElytraFlight {
 	private ElytraFlight() {
@@ -18,7 +18,7 @@ public final class ElytraFlight {
 		return m != null ? m.flying() : null;
 	}
 
-	/** Whether Elytra Fly is on: its types run their own swapping, and Elytra Swap's for you stands down. */
+	/** Whether Elytra Fly is on: its types run their own swapping, and Elytra Tweaks's for you stands down. */
 	public static boolean flightModuleOn() {
 		return Modules.active(ElytraFly.class) != null;
 	}
@@ -38,16 +38,16 @@ public final class ElytraFlight {
 		return flying() instanceof Recast r && r.onFoot();
 	}
 
-	/** Whether Elytra Swap swaps for whoever flies: Elytra Fly's type, or you. */
+	/** Whether Elytra Tweaks swaps for whoever flies: Elytra Fly's type, or you. */
 	public static boolean noDurability() {
 		ElytraMode m = flying();
 		if (m != null) return m.noDurability();
-		ElytraSwap swap = Modules.active(ElytraSwap.class);
+		ElytraTweaks swap = Modules.active(ElytraTweaks.class);
 		return swap != null && swap.swapsForYou();
 	}
 
 	/**
-	 * Whether the chest slot is Elytra Swap's (or the bounce's) to swap: while it swaps, and with Elytra Swap on any
+	 * Whether the chest slot is Elytra Tweaks's (or the bounce's) to swap: while it swaps, and with Elytra Tweaks on any
 	 * time you're off the ground, as a chestplate worn then is one of its swaps (or, where it breaks the glide without
 	 * one, the elytra it needs). Auto Armor leaves the slot alone meanwhile: putting the best elytra on over it would
 	 * wear each of your elytras in turn.
@@ -55,7 +55,7 @@ public final class ElytraFlight {
 	public static boolean holdsChest() {
 		ElytraMode m = flying();
 		if (m != null && m.holdsChest()) return true;
-		ElytraSwap swap = Modules.active(ElytraSwap.class);
+		ElytraTweaks swap = Modules.active(ElytraTweaks.class);
 		if (m == null && swap != null && swap.swappingForYou()) return true;
 		var p = Minecraft.getInstance().player;
 		return noDurability() && p != null && !p.onGround() && !p.isInWater();

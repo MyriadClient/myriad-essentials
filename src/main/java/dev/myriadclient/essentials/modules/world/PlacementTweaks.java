@@ -14,12 +14,14 @@ import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.world.BlockInfo;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.player.Interactions;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.ShapeBuilder;
 import dev.myriadclient.api.service.Building;
 import dev.myriadclient.api.input.Keybind;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.KeybindSetting;
+import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.util.ColorUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -74,6 +76,10 @@ public class PlacementTweaks extends Module {
 		+ "works on a block face, the other with nothing under the crosshair.").defaultValue(Keybind.key(InputConstants.KEY_LALT)).visible(airPlace::get).build();
 	private final DoubleSetting distance = sgGeneral.decimal("Distance").description("How far in front of you a block goes in mid-air.")
 		.defaultValue(3).range(1, 6).decimals(1).visible(airPlace::get).build();
+	private final BoolSetting fastPlace = sgGeneral.bool("Fast Place").description("Place blocks faster while you hold right-click: "
+		+ "vanilla waits 4 ticks between them.").build();
+	private final IntSetting fastPlaceSpeed = sgGeneral.integer("Speed").description("How much faster: 100% places twice as fast (every 2 "
+		+ "ticks), 300% every tick (20 a second, under the 30 servers take).").defaultValue(100).range(0, 300).visible(fastPlace::get).build();
 
 	private static final List<EnumProperty<Direction>> FACINGS = List.of(BlockStateProperties.FACING, BlockStateProperties.HORIZONTAL_FACING,
 		BlockStateProperties.FACING_HOPPER);
@@ -139,9 +145,21 @@ public class PlacementTweaks extends Module {
 	@Subscribe
 	private void onTickStart(TickEvent.Pre e) {
 		airTarget = findAirTarget();
+		fastPlace();
 	}
 
 	/** A right-click with nothing under the crosshair: the block placed in mid-air. */
+	/**
+	 * Fast Place: the wait before the next right-click shortened while you hold a block, before the game counts it down
+	 * this tick, so blocks go every {@code 4 / (1 + speed)} ticks (every tick at 300%).
+	 */
+	private void fastPlace() {
+		if (!fastPlace.get() || !inGame()) return;
+		if (!(mc.player.getMainHandItem().getItem() instanceof BlockItem) && !(mc.player.getOffhandItem().getItem() instanceof BlockItem)) return;
+		int every = (int) Math.round(4 / (1 + fastPlaceSpeed.get() / 100.0));
+		if (Interactions.itemUseCooldown() > every) Interactions.setItemUseCooldown(every);
+	}
+
 	@Subscribe
 	private void onUse(InteractEvent.Item e) {
 		if (e.hand() != InteractionHand.MAIN_HAND) return;

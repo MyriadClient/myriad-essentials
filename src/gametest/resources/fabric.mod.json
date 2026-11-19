@@ -29,7 +29,9 @@
 			"dev.myriadclient.essentials.gametest.RemoteEnderChestTests",
 			"dev.myriadclient.essentials.gametest.RecastTests",
 			"dev.myriadclient.essentials.gametest.AltitudeTests",
-			"dev.myriadclient.essentials.gametest.NoDurabilityTests"
+			"dev.myriadclient.essentials.gametest.NoDurabilityTests",
+			"dev.myriadclient.essentials.gametest.ElytraTweaksTests",
+			"dev.myriadclient.essentials.gametest.PlacementTweaksTests"
 		]
 	},
 	"depends": {

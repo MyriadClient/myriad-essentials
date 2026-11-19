@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 
 /**
  * Elytra Fly's Recast: bouncing along 2b2t's highways, straight (from x 3000 east, its floor at y 100) and diagonal (from
- * x 6000 along +x +z), round and through what's in the lane, with Elytra Swap keeping the elytra from wearing. The
+ * x 6000 along +x +z), round and through what's in the lane, with Elytra Tweaks keeping the elytra from wearing. The
  * highways are far outside the arena: each test builds its own, force-loaded first.
  */
 public final class RecastTests extends EssentialsSuite {
@@ -218,9 +218,9 @@ public final class RecastTests extends EssentialsSuite {
 
 	@Test(tags = "elytra", timeoutTicks = 3000)
 	public void noDurability(TestContext t) {
-		// 30 s of bouncing with Elytra Swap: the server's glides must never last the 20 ticks that wear the elytra.
+		// 30 s of bouncing with Elytra Tweaks: the server's glides must never last the 20 ticks that wear the elytra.
 		buildHighway(t, 3980, () -> t.player().give(1, "diamond_chestplate"));
-		t.module("myriad-essentials:elytra_swap").enable();
+		t.module("myriad-essentials:elytra_tweaks").enable();
 		elytraFly(t).set("obstacles", "stop");
 		recast(t, 600);
 		double x = t.player().serverPosition().x;
@@ -248,12 +248,12 @@ public final class RecastTests extends EssentialsSuite {
 
 	@Test(tags = "elytra", timeoutTicks = 3000)
 	public void diagonal(TestContext t) {
-		// 2b2t's diagonals: the server misses more landings here, so Elytra Swap's cut matters most; 15 s of bouncing with
+		// 2b2t's diagonals: the server misses more landings here, so Elytra Tweaks's cut matters most; 15 s of bouncing with
 		// the chestplate in the main inventory mustn't wear the elytra.
 		int x0 = DIAGONAL_X0;
 		Set<Chunk> chunks = buildDiagonal(t, 500, () -> t.player().give(14, "diamond_chestplate"));
 		try {
-			t.module("myriad-essentials:elytra_swap").enable();
+			t.module("myriad-essentials:elytra_tweaks").enable();
 			elytraFly(t).set("obstacles", "stop");
 			recast(t, 300);
 			Vec3 p = t.player().serverPosition();
@@ -377,7 +377,7 @@ public final class RecastTests extends EssentialsSuite {
 		// the same elytra keeps being used, spares stay where they are and don't wear, and nothing warns.
 		buildHighway(t, 3980, () -> t.player().give(14, "diamond_chestplate").give(19, "elytra").give(20, "elytra").give(21, "elytra"));
 		t.module("myriad-essentials:auto_armor").set("chest", "elytra").set("await_landing", "false").enable();
-		t.module("myriad-essentials:elytra_swap").enable();
+		t.module("myriad-essentials:elytra_tweaks").enable();
 		elytraFly(t).set("obstacles", "stop");
 		recast(t, 400);
 		t.waitTicks(20);
@@ -393,14 +393,14 @@ public final class RecastTests extends EssentialsSuite {
 
 	@Test(tags = "elytra", timeoutTicks = 2400)
 	public void fullHotbar(TestContext t) {
-		// No hotbar slot for the chestplate: Elytra Swap says so once and the bounce carries on (it used to release your
+		// No hotbar slot for the chestplate: Elytra Tweaks says so once and the bounce carries on (it used to release your
 		// keys every tick trying).
 		String[] blocks = {"dirt", "cobblestone", "stone", "oak_planks", "glass", "sand", "gravel", "netherrack", "andesite"};
 		buildHighway(t, () -> {
 			t.player().give(14, "diamond_chestplate");
 			for (int i = 0; i < blocks.length; i++) t.player().give(i, blocks[i], 64);
 		});
-		t.module("myriad-essentials:elytra_swap").enable();
+		t.module("myriad-essentials:elytra_tweaks").enable();
 		elytraFly(t).set("obstacles", "stop");
 		recast(t, 200);
 		double x = t.player().serverPosition().x;

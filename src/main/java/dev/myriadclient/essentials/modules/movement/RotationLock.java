@@ -17,7 +17,7 @@ import java.util.Locale;
 
 /**
  * Keeps flights going one way whatever the camera does: the heading is locked when the glide starts (or when you turn
- * this on, with Lock At: Turned On) to the exact yaw you faced, kept through a glide Elytra Swap restarts in mid-air,
+ * this on, with Lock At: Turned On) to the exact yaw you faced, kept through a glide Elytra Tweaks restarts in mid-air,
  * and let go when you land. The camera stays yours to look around. Flights that steer by heading follow it
  * ({@link ElytraFly}'s Altitude and Control); put it in a control panel with them for a straight cruise.
  * <p>
@@ -96,7 +96,7 @@ public class RotationLock extends Module {
 	@Subscribe(priority = Priority.BEFORE_ACTIONS + 30, inGame = true)
 	private void onTick(TickEvent.Pre e) {
 		LocalPlayer p = mc.player;
-		// The lock lasts the flight: a glide Elytra Swap restarts in the air keeps it, a landing ends it.
+		// The lock lasts the flight: a glide Elytra Tweaks restarts in the air keeps it, a landing ends it.
 		if (lockAt.get() == LockAt.TAKEOFF) {
 			if (p.onGround() || p.isInWater()) locked = Float.NaN;
 			else if (p.isFallFlying() && Float.isNaN(locked)) locked = p.getYRot();

@@ -64,12 +64,43 @@ public final class MiddleClickTests extends EssentialsSuite {
 		t.step("middle");
 		t.waitTicks(100);
 		t.module("myriad-essentials:middle_click").disable();
+		// Kept in the hotbar while you glide, the rockets go back once it's off.
+		t.waitTicks(10);
 		int rockets = t.player().count(14);
 		List<String> now = hotbar(t);
 		double x = t.player().serverPosition().x;
 		String detail = rockets + " rockets back in the inventory, hotbar " + (now.equals(FULL_HOTBAR) ? "as it was" : now)
 			+ String.format(Locale.ROOT, ", %.0f blocks", x - x0);
 		t.check(rockets == 15 && now.equals(FULL_HOTBAR), detail);
+		t.note(detail);
+	}
+
+	@Test(name = "rockets_repeated", tags = "inventory")
+	public void rocketsRepeated(TestContext t) {
+		// Six presses half a second apart while gliding, the rockets only in the inventory: every one fires (each used to
+		// borrow them again, waiting on the slot the last one went back to, and a press could come to nothing).
+		t.player().give(38, "elytra");
+		fillHotbar(t);
+		t.player().give(14, "firework_rocket", 16);
+		t.server().run("tp " + t.player().name() + " " + t.arena().at(5200.5, 220, 0.5) + " -90 0");
+		t.waitTicks(30);
+		t.flagsFromHere();
+		t.module("myriad-essentials:middle_click").set("flying", "rocket").enable();
+		t.player().look(-90, -10);
+		t.hold(Key.JUMP).forTicks(2);
+		t.waitTicks(2);
+		for (int i = 0; i < 6; i++) {
+			t.step("middle");
+			t.waitTicks(10);
+		}
+		t.waitTicks(20);
+		t.module("myriad-essentials:middle_click").disable();
+		t.waitTicks(10);
+		int left = 0;
+		for (int slot = 0; slot < 36; slot++) if (t.player().item(slot).equals("minecraft:firework_rocket")) left += t.player().count(slot);
+		List<String> now = hotbar(t);
+		String detail = (16 - left) + " of 6 presses fired, hotbar " + (now.equals(FULL_HOTBAR) ? "as it was" : now);
+		t.check(left == 10 && now.equals(FULL_HOTBAR), detail);
 		t.note(detail);
 	}
 }

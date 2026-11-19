@@ -15,6 +15,15 @@ final class ElytraScenes {
 		t.player().teleport(x, y, z, -90, 0);
 	}
 
+	/**
+	 * Back at the arena after a flight over terrain made for it, and time for the server to save and unload what it
+	 * made: meanwhile its ticks lag, and Grim flagged the next test's flight (Simulation).
+	 */
+	static void settleAfterNewTerrain(TestContext t) {
+		t.player().at(0.5, 0, 0.5, -90, 0);
+		t.waitTicks(200);
+	}
+
 	/** The elytra's damage, worn (chest) or swapped off into the hotbar; -1 if it's gone. */
 	static int elytraDamage(TestContext t) {
 		for (int slot : new int[] {38, 0, 1, 2}) {

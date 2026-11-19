@@ -12,9 +12,14 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.phys.Vec3;
+
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.List;
@@ -27,7 +32,8 @@ import java.util.function.Predicate;
  * The schematics placed in Litematica, as a {@link Blueprint}: what its schematic world holds inside the enabled
  * placements' boxes, limited to the layers Litematica is showing, the way it's drawn, each block as an exact target
  * (placed as it faces, as many, in its setting). Air inside a box counts (it means "empty here"), so a build that
- * breaks wrong blocks clears it; outside every box nothing is asked for.
+ * breaks wrong blocks clears it; outside every box nothing is asked for. Water and lava aren't placed by a build: their
+ * space counts as air (cleared when air counts, else left be), unless the blueprint is the one {@link #fluids} makes.
  * <p>
  * Only touch this class when Litematica is installed. {@link #forEach} only sees the schematic chunks Litematica has
  * loaded (those near you).
@@ -35,6 +41,7 @@ import java.util.function.Predicate;
 public final class LitematicaBlueprint implements Blueprint {
 	private final BooleanSupplier includeAir;
 	private final Predicate<BlockState> skip;
+	private final boolean fluids;
 	private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 	private final LongOpenHashSet seen = new LongOpenHashSet();
 
@@ -43,8 +50,21 @@ public final class LitematicaBlueprint implements Blueprint {
 	 * positions whose schematic block {@code skip} accepts are left out.
 	 */
 	public LitematicaBlueprint(BooleanSupplier includeAir, Predicate<BlockState> skip) {
+		this(includeAir, skip, false);
+	}
+
+	private LitematicaBlueprint(BooleanSupplier includeAir, Predicate<BlockState> skip, boolean fluids) {
 		this.includeAir = includeAir;
 		this.skip = skip;
+		this.fluids = fluids;
+	}
+
+	/**
+	 * The schematic's water and lava as they are (each an exact target), for pouring them from buckets; with everything
+	 * else that {@code skip} doesn't leave out, and no air.
+	 */
+	public static LitematicaBlueprint fluids(Predicate<BlockState> skip) {
+		return new LitematicaBlueprint(() -> false, skip, true);
 	}
 
 	@Override
@@ -82,8 +102,9 @@ public final class LitematicaBlueprint implements Blueprint {
 								pos.set(x, y, z);
 								BlockState state = chunk.getBlockState(pos);
 								if (state.isAir() ? !air : skip.test(state)) continue;
-								if (overlap && !seen.add(pos.asLong())) continue;
-								action.accept(pos, target(state));
+								Target target = target(state, air);
+								if (target == null || overlap && !seen.add(pos.asLong())) continue;
+								action.accept(pos, target);
 							}
 						}
 					}
@@ -109,13 +130,36 @@ public final class LitematicaBlueprint implements Blueprint {
 				if (!world.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()))) continue;
 				BlockState state = world.getBlockState(pos);
 				if (state.isAir() ? !includeAir.getAsBoolean() : skip.test(state)) continue;
+				Target target = target(state, includeAir.getAsBoolean());
+				if (target == null) continue;
 				BlockPos p = pos.immutable();
-				if (seen.add(p)) action.accept(p, target(state));
+				if (seen.add(p)) action.accept(p, target);
 			}
 		}
 	}
 
-	private static Target target(BlockState state) {
-		return state.isAir() ? Target.air() : Target.exact(state);
+	/**
+	 * The lines the schematic's sign at {@code pos} has on {@code side}, as plain text, four of them; null if the schematic
+	 * has no sign there.
+	 */
+	public static @Nullable List<String> signLines(BlockPos pos, SignTextSlot side) {
+		WorldSchematic world = SchematicWorldHandler.getSchematicWorld();
+		if (world == null || !(world.getBlockEntity(pos) instanceof SignBlockEntity sign)) return null;
+		return lines(sign, side);
+	}
+
+	/** {@code sign}'s four lines on {@code side}, as plain text. */
+	public static List<String> lines(SignBlockEntity sign, SignTextSlot side) {
+		var messages = sign.getText(side).getMessages(false);
+		List<String> lines = new java.util.ArrayList<>(4);
+		for (int i = 0; i < 4; i++) lines.add(i < messages.size() ? messages.get(i).getString() : "");
+		return lines;
+	}
+
+	/** What the build is asked for where the schematic has {@code state}; null for nothing. */
+	private @Nullable Target target(BlockState state, boolean air) {
+		if (state.isAir()) return Target.air();
+		if (!fluids && state.getBlock() instanceof LiquidBlock) return air ? Target.air() : null;
+		return Target.exact(state);
 	}
 }

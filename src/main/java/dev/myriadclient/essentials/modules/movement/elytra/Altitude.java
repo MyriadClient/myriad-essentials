@@ -33,7 +33,7 @@ public class Altitude extends FlightMode {
 		flight.onLanded(this::landed);
 	}
 
-	/** Long fast glides: each start waits for the server to have the elytra back on (see ElytraSwap.Behaviour). */
+	/** Long fast glides: each start waits for the server to have the elytra back on (see ElytraTweaks.Behaviour). */
 	@Override
 	protected boolean waitsForElytra() {
 		return true;

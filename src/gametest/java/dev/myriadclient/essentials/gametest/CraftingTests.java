@@ -75,7 +75,52 @@ public final class CraftingTests extends EssentialsSuite {
 		boolean ok = shows(t, "stick x4", seen);
 		SortScenes.script(t, "cursor slot 0", "mouse 0 click shift");
 		ok &= shows(t, "", seen);
+		// The grid empty and every stick in the inventory, on screen too (the game predicts one craft; the server makes 64).
+		for (int wait : new int[] {4, 20}) {
+			t.waitTicks(wait);
+			String screen = t.onGame(() -> {
+				var menu = Minecraft.getInstance().player.containerMenu;
+				int grid = 0, sticks = 0;
+				for (int i = 1; i <= 9; i++) grid += menu.getSlot(i).getItem().getCount();
+				for (int i = 10; i < menu.slots.size(); i++) if (menu.getSlot(i).getItem().is(net.minecraft.world.item.Items.STICK)) sticks += menu.getSlot(i).getItem().getCount();
+				return grid + " in the grid, " + sticks + " sticks";
+			});
+			boolean right = screen.equals("0 in the grid, 256 sticks");
+			seen.add(screen + (right ? "" : " (wanted 0 in the grid, 256 sticks)"));
+			ok &= right;
+		}
 		done(t, ok, seen);
+	}
+
+	@Test(tags = "crafting")
+	public void balanceWithinClickBudget(TestContext t) {
+		// A stack of 64 and one to eight in the other slots: evening that out by hand takes about 85 clicks, more than 2b2t
+		// takes in 4 s. The balance stops at the budget (72 in 5 s) and says so; a middle-click later finishes it.
+		table(t);
+		t.player().give(9, "iron_ingot", 64);
+		for (int i = 1; i <= 8; i++) t.player().give(9 + i, "iron_ingot", i);
+		t.module(SortScenes.INVENTORY_TWEAKS).set("middle_balance", "true").enable();
+		List<String> steps = new ArrayList<>(List.of("use", "wait 10"));
+		// Each stack into its own grid slot (shift-clicks would merge them): picked up and put down whole.
+		for (int i = 0; i <= 8; i++) steps.addAll(List.of("cursor slot " + (10 + i), "mouse 0 click", "cursor slot " + (1 + i), "mouse 0 click"));
+		SortScenes.script(t, steps.toArray(String[]::new));
+		t.waitTicks(110);
+		SortScenes.script(t, "cursor slot 5", "mouse 2 click");
+		t.waitTicks(2);
+		int used = t.onGame(() -> dev.myriadclient.api.Myriad.limits().used(dev.myriadclient.api.service.PacketLimits.Kind.INVENTORY));
+		boolean warned = t.chat().stream().anyMatch(l -> l.contains("click limit"));
+		t.waitTicks(110);
+		SortScenes.script(t, "cursor slot 5", "mouse 2 click");
+		t.waitTicks(20);
+		String counts = t.onGame(() -> {
+			var menu = Minecraft.getInstance().player.containerMenu;
+			List<String> c = new ArrayList<>();
+			for (int i = 1; i <= 9; i++) c.add(String.valueOf(menu.getSlot(i).getItem().getCount()));
+			return String.join(",", c) + (menu.getCarried().isEmpty() ? "" : " cursor " + menu.getCarried().getCount());
+		});
+		String detail = used + " clicks in the window after the first balance" + (warned ? ", warned" : "") + "; grid after the second: " + counts;
+		t.check(used <= 72 && counts.equals("12,11,11,11,11,11,11,11,11"), detail);
+		t.note(detail);
 	}
 
 	@Test(tags = "crafting")

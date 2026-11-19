@@ -25,7 +25,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.function.ToDoubleFunction;
 
 /**
- * Switches to the best tool for the block you're mining, and optionally the best weapon when you attack. Silent mode
+ * Switches to the best tool for the block you're mining (Silk Touch for blocks that break at once or that no tool
+ * mines faster, glass among them), and optionally the best weapon when you attack. It picks Packet Mine's tools too:
+ * with it off, Packet Mine mines with what you hold. Silent mode
  * swaps only on the server, so your hotbar doesn't move and mining still runs at the tool's speed; otherwise it selects
  * the tool and (with Swap Back) returns to your previous slot when you stop. Tools about to break are left alone.
  * A better tool in your inventory is brought into the hotbar (an empty slot, over a worse tool, or over building
@@ -59,8 +61,9 @@ public class AutoTool extends Module {
 	}
 
 	/**
-	 * After the others: Packet Mine cancels the clicks it mines itself, and the breaking service picks their tool, so
-	 * Auto Tool never hears of them (its own hold would fight the service's, a slot switch each way every few ticks).
+	 * After the others: Packet Mine cancels the clicks it mines itself, and the breaking service picks their tool (while
+	 * this module is on; off, Packet Mine mines with what you hold), so Auto Tool never hears of them (its own hold would
+	 * fight the service's, a slot switch each way every few ticks).
 	 */
 	@Subscribe(priority = Priority.LOW)
 	private void onStart(BlockBreakEvent.Start e) {
@@ -93,13 +96,14 @@ public class AutoTool extends Module {
 	private void equipFor(BlockPos pos) {
 		if (!inGame() || mc.player.isCreative()) return;
 		BlockState state = mc.level.getBlockState(pos);
-		ToDoubleFunction<ItemStack> score = s -> toolScore(s, state);
+		boolean silk = wantsSilk(state, pos);
+		ToDoubleFunction<ItemStack> score = s -> silk && !worn(s) && ItemInfo.enchantmentLevel(s, Enchantments.SILK_TOUCH) > 0 ? 10_000 : toolScore(s, state);
 		int slot = Myriad.inventory().bestInHotbar(score);
 		int best = Myriad.inventory().bestInInventory(score);
 		if (best >= 9) {
 			// Better than anything in the hotbar: borrow it (a worse tool makes room; a tick later while you move). It
 			// goes back to the inventory once you stop mining.
-			int pulled = Myriad.inventory().borrow(this, best, s -> toolScore(s, state) > 0);
+			int pulled = Myriad.inventory().borrow(this, best, s -> score.applyAsDouble(s) > 0);
 			if (pulled >= 0) slot = pulled;
 		}
 		if (slot >= 0) {
@@ -132,6 +136,18 @@ public class AutoTool extends Module {
 		}
 		if (previousSlot >= 0 && mc.player != null && swapBack.get()) Myriad.inventory().select(previousSlot);
 		previousSlot = -1;
+	}
+
+	/**
+	 * Whether a Silk Touch tool should mine {@code state}, when you have one: a block that breaks at once (a flower, glow
+	 * lichen, grass) or that no tool mines faster than a hand (glass, a pane). Not where a tool is faster (ores, stone),
+	 * so a Silk Touch pickaxe doesn't take a diamond ore's diamonds. As core's breaking service picks for Packet Mine.
+	 */
+	private boolean wantsSilk(BlockState state, BlockPos pos) {
+		if (state.getDestroySpeed(mc.level, pos) == 0) return true;
+		var inv = mc.player.getInventory();
+		for (int i = 0; i < 36; i++) if (inv.getItem(i).getDestroySpeed(state) > 1) return false;
+		return true;
 	}
 
 	/** How fast {@code s} mines {@code state}, with a bonus for actually getting the drops; 0 for no better than a hand. */

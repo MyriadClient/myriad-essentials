@@ -136,3 +136,9 @@ off hand came back as they were. The `2b2t` ones print with 2b2t's settings (Rot
 Grim would cancel those clicks (RotationPlace, AirLiquidPlace, PositionPlace), which 2b2t's takes, so for them the tester
 is deopped into `myriad.lenientplace` (see `start.sh`), where those checks only flag. For 2b2t's lag, run them through
 `./lag.py 120 25` (join localhost:25566).
+
+**Late chunks, as on 2b2t's new terrain** (`altitude/new_terrain*`, `no_durability/long_glide`, `rocket_flight`): stop
+the server, set `view-distance=4` and `simulation-distance=4` in `server/server.properties` and
+`player-max-chunk-send-rate: 12.0` in `server/config/paper-global.yml`, start it, and join through `./lag.py 120 30`.
+Chunks then come in just as you reach them when flying. Put the three back (8, 6, 75.0) afterwards. With them as shipped,
+those tests check the flights over the same far stretch with chunks in time.

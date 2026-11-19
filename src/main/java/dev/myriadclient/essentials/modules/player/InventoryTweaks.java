@@ -2,6 +2,7 @@ package dev.myriadclient.essentials.modules.player;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.myriadclient.api.Myriad;
+import dev.myriadclient.api.service.PacketLimits;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.ContainerEvent;
 import dev.myriadclient.api.event.events.ContainerScreenEvent;
@@ -431,6 +432,8 @@ public class InventoryTweaks extends Module {
 	private boolean balance(ScreenAccess screen, Slot slot) {
 		AbstractContainerMenu menu = screen.essentials$menu();
 		if (!menu.getCarried().isEmpty() || mc.player.isCreative()) return false;
+		if (!canClick()) return true;
+		budgetShort = false;
 		List<Slot> grid = menu.slots.stream().filter(s -> s.container == slot.container).toList();
 		List<ItemStack> kinds = new ArrayList<>();
 		for (Slot s : grid) {
@@ -438,9 +441,23 @@ public class InventoryTweaks extends Module {
 		}
 		for (ItemStack kind : kinds) {
 			balance(screen, menu, grid.stream().filter(s -> ItemStack.isSameItemSameComponents(s.getItem(), kind)).toList());
-			if (!menu.getCarried().isEmpty()) break;
+			if (!menu.getCarried().isEmpty() || budgetShort) break;
 		}
+		if (budgetShort) warn("Balanced as far as the server's click limit allows now: middle-click again in a few seconds for the rest.");
 		return true;
+	}
+
+	/** A balance stopped short of the click budget (core's, under what gets you dropped on 2b2t). */
+	private boolean budgetShort;
+
+	/**
+	 * Whether {@code clicks} more can go within core's click budget, one kept back so a stack on the cursor can always be
+	 * put down; if not, the balance stops there.
+	 */
+	private boolean affords(int clicks) {
+		if (Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, clicks + 1)) return true;
+		budgetShort = true;
+		return false;
 	}
 
 	/**
@@ -459,7 +476,7 @@ public class InventoryTweaks extends Module {
 				int over = slots.get(i).getItem().getCount() - goal[i];
 				if (over > 0 && (from < 0 || over > slots.get(from).getItem().getCount() - goal[from])) from = i;
 			}
-			if (from < 0) return;
+			if (from < 0 || !affords(1)) return;
 			Slot source = slots.get(from);
 			int carried = source.getItem().getCount();
 			screen.essentials$click(source, 0, ContainerInput.PICKUP);
@@ -502,6 +519,8 @@ public class InventoryTweaks extends Module {
 			if (to.isEmpty() || carried < to.size()) return;
 			boolean even = carried / to.size() <= least;
 			int each = even ? carried / to.size() : 1, type = even ? 0 : 1;
+			// A drag is a packet to start, one for each slot and one to end.
+			if (!affords(to.size() == 1 ? 1 : to.size() + 2)) return;
 			if (to.size() == 1) {
 				screen.essentials$click(to.getFirst(), type, ContainerInput.PICKUP);
 			} else {
@@ -525,7 +544,7 @@ public class InventoryTweaks extends Module {
 		if (!screen.essentials$menu().getCarried().isEmpty() || !shiftDrag.get() || !pressShift || !shift) return false;
 		if (pressed != null) handled.add(pressed);
 		if (!slot.hasItem() || !slot.mayPickup(mc.player) || !handled.add(slot)) return true;
-		if (!canClick()) {
+		if (!canClick() || !Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, 1)) {
 			handled.remove(slot);
 			return true;
 		}

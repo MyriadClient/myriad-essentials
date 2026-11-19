@@ -22,7 +22,7 @@ import java.util.List;
  * Control is only offered where the server's anti-cheat doesn't simulate the glide (6b6t's NoCheatPlus, singleplayer):
  * Grim (2b2t) sets it back from the first tick, so there Type lists only Recast and Altitude, and Control chosen
  * elsewhere waits. Preserve is shared by the types (see {@link ElytraMode}). Two modules of their own go with it,
- * often in one control panel: {@link ElytraSwap} keeps the elytra from wearing out, the way the server allows, and
+ * often in one control panel: {@link ElytraTweaks} keeps the elytra from wearing out, the way the server allows, and
  * {@link RotationLock} holds the heading for Altitude and Control. Snap rounds the way each type flies (Recast's lane,
  * a locked heading) to 45° or 90°, kept for each type. Only the chosen type's own settings show.
  */
@@ -101,7 +101,7 @@ public class ElytraFly extends Module {
 	}
 
 	/**
-	 * 2: version 1 configs hold No Durability and Lock Heading here, which are the Elytra Swap and Lock Rotation modules'
+	 * 2: version 1 configs hold No Durability and Lock Heading here, which are the Elytra Tweaks and Lock Rotation modules'
 	 * (so they go in control panels with any flight; those modules load first and take the settings over), and Control's
 	 * Auto Walk, which the Auto Walk module does.
 	 */
@@ -115,7 +115,7 @@ public class ElytraFly extends Module {
 		if (fromVersion == 1) {
 			// Only a change from the default is saved: No Durability is on unless saved off.
 			boolean noDurability = saved.get("General", "No Durability").map(JsonElement::getAsBoolean).orElse(true);
-			ElytraSwap.adoptFormerSetting(noDurability, null);
+			ElytraTweaks.adoptFormerSetting(noDurability);
 			if (saved.get("General", "Lock Heading").map(JsonElement::getAsBoolean).orElse(false)) {
 				RotationLock lock = Modules.get(RotationLock.class);
 				if (lock != null) lock.setEnabledSilently(true);

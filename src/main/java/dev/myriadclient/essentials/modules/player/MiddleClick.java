@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.MouseButtonEvent;
+import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.input.Keybind;
 import dev.myriadclient.api.module.Module;
@@ -13,6 +14,7 @@ import dev.myriadclient.api.service.AntiCheat;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.IntSetting;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundPunchPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
@@ -45,11 +47,17 @@ public class MiddleClick extends Module {
 	private int xpWait;
 	/**
 	 * An item to use once it can be brought from the inventory (a click waits while you move), for up to
-	 * {@link #PENDING_TICKS} after the click; a use that late would surprise you, so it's dropped then.
+	 * {@link #PENDING_TICKS} after the click (a round trip on a slow server, the slot it comes from waiting for the
+	 * server's answer to the last move); a use later than that would surprise you, so it's dropped then.
 	 */
 	private Item pending;
 	private int pendingTicks;
-	private static final int PENDING_TICKS = 5;
+	private static final int PENDING_TICKS = 20;
+	/** Rockets borrowed from the inventory, kept in the hotbar while you glide (-1 for none): the next press needn't wait for another borrow. */
+	private int rocketSlot = -1;
+	/** The tick the last glide start was sent: a press just after it is a press while flying, before the server's answer. */
+	private long glideStartAt = Long.MIN_VALUE / 2;
+	private static final int GLIDE_START_TICKS = 10;
 
 	public MiddleClick() {
 		super(Tags.PLAYER, "Middle Click", "Puts friends, experience, rockets or pearls on the middle mouse button.");
@@ -59,6 +67,8 @@ public class MiddleClick extends Module {
 	protected void onDisable() {
 		held = false;
 		pending = null;
+		if (rocketSlot >= 0) Myriad.inventory().giveBack(this);
+		rocketSlot = -1;
 	}
 
 	@Subscribe
@@ -76,13 +86,30 @@ public class MiddleClick extends Module {
 		if (mc.player.isUsingItem() && !whileUsing.get()) return;
 		held = true;
 		xpWait = 0;
+		// Each press waits its own while, not what's left of the last.
+		pending = null;
 		run(action, true);
 	}
 
 	@Subscribe
+	private void onGlideStart(PacketEvent.Send e) {
+		if (e.packet() instanceof ServerboundPlayerCommandPacket p && p.getAction() == ServerboundPlayerCommandPacket.Action.START_FALL_FLYING && mc.player != null)
+			glideStartAt = mc.player.tickCount;
+	}
+
+	@Subscribe
 	private void onTick(TickEvent.Pre e) {
+		// Borrowed rockets stay while you glide, so each press fires at once instead of borrowing them again.
+		if (rocketSlot >= 0 && inGame()) {
+			if (gliding() && mc.player.getInventory().getItem(rocketSlot).is(Items.FIREWORK_ROCKET)) Myriad.inventory().borrow(this, rocketSlot, null);
+			else {
+				Myriad.inventory().giveBack(this);
+				rocketSlot = -1;
+			}
+		}
 		if (pending != null && inGame()) {
-			if (--pendingTicks < 0) pending = null;
+			// A rocket that waited past the glide (you landed) would only go up in the air.
+			if (--pendingTicks < 0 || pending == Items.FIREWORK_ROCKET && !gliding()) pending = null;
 			else use(pending);
 		}
 		if (!held || !inGame()) return;
@@ -98,7 +125,7 @@ public class MiddleClick extends Module {
 
 	/** The action for what you're pointing at right now. */
 	private Action current() {
-		if (mc.player.isFallFlying()) return flying.get();
+		if (gliding()) return flying.get();
 		HitResult hit = mc.hitResult;
 		if (hit == null || hit.getType() == HitResult.Type.MISS) return air.get();
 		if (hit.getType() == HitResult.Type.ENTITY) {
@@ -106,6 +133,11 @@ public class MiddleClick extends Module {
 			return a == Action.FRIEND && !(((EntityHitResult) hit).getEntity() instanceof Player) ? Action.NONE : a;
 		}
 		return block.get();
+	}
+
+	/** Gliding, or the glide start just sent (the server hasn't said yet). */
+	private boolean gliding() {
+		return mc.player.isFallFlying() || !mc.player.onGround() && mc.player.tickCount - glideStartAt <= GLIDE_START_TICKS;
 	}
 
 	private void run(Action action, boolean press) {
@@ -160,6 +192,7 @@ public class MiddleClick extends Module {
 				pending = item;
 				return;
 			}
+			if (item == Items.FIREWORK_ROCKET) rocketSlot = slot;
 		}
 		pending = null;
 		if (slot < 0) return;

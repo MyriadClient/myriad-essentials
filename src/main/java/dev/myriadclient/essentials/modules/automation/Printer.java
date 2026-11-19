@@ -6,6 +6,14 @@ import dev.myriadclient.api.build.Build;
 import dev.myriadclient.api.build.Target;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.RenderEvent;
+import dev.myriadclient.api.event.events.PacketEvent;
+import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket;
+import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
+import net.minecraft.world.level.block.SignBlock;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.entity.SignTextSlot;
+import net.minecraft.world.phys.BlockHitResult;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.integration.Baritone;
 import dev.myriadclient.api.job.Job;
@@ -53,8 +61,13 @@ import java.util.function.Predicate;
  * first. Every block comes out the way the schematic has it, facing, half, axis, hinge and all, from a click worked
  * out by simulating the placement, with the look turned to it first where the server checks. Repeaters,
  * comparators, note blocks, doors, trapdoors, gates and levers are then clicked into the schematic's setting; candles,
- * sea pickles, snow layers and double slabs get as many as it has. Blocks are moved to the hotbar as they're needed.
- * It runs as a job ({@code Steps.keepUp}), so the Jobs window and HUD show what it's doing and what it's waiting for.
+ * sea pickles, snow layers and double slabs get as many as it has. Signs get the schematic's text, front and back
+ * ({@link #onSignEditor}); waterlogged blocks get their water and the schematic's water sources are poured, once what
+ * holds them in is built ({@link Waterlogging}). A block in the inventory is brought
+ * into a hotbar slot other than the one you hold and stays there till the Printer is off (one click a kind), every block
+ * of a kind in reach going before the next kind, as fast as the server takes placements; your inventory looks
+ * untouched meanwhile, and goes back as it was afterwards, the server asked for it again to be sure (core's builds). It runs as a job ({@code Steps.keepUp}), so the Jobs window and HUD show what it's doing and what
+ * it's waiting for.
  * <p>
  * Optionally it walks (Baritone) to the nearest unbuilt part once nothing in reach is left, and fetches a block that ran
  * out from the shulker boxes you carry and the chests, barrels and shulker boxes around you: a remedy on the job
@@ -113,6 +126,9 @@ public class Printer extends Module {
 	/** Containers that had none of a block when opened for it: by position, the blocks (as described) and until when. */
 	private final Map<Long, Map<String, Long>> emptyFor = new HashMap<>();
 	private boolean warnedNoBaritone;
+	/** Water for waterlogged blocks, and whether it has work in reach now. */
+	private final Waterlogging water = new Waterlogging(this);
+	private boolean watering;
 	/** The build behind the job, found once a tick: the plan drawn every frame and the count in the module list read it. */
 	private final TickCached<@Nullable Build> build = TickCached.of(this::findBuild);
 
@@ -171,7 +187,21 @@ public class Printer extends Module {
 			old.cancel();
 			start();
 		}
+		pourWater();
 		walkWhenIdle();
+		writeSigns();
+	}
+
+	/**
+	 * Once the build has nothing to place or break in reach, water for the blocks the schematic has waterlogged
+	 * ({@link Waterlogging}); meanwhile it isn't walked on from.
+	 */
+	private void pourWater() {
+		Build b = job != null ? build() : null;
+		boolean idle = b != null && b.steps().stream().noneMatch(st -> st.status() == Build.Status.PLACE || st.status() == Build.Status.BREAK
+			|| st.status() == Build.Status.WAITING);
+		watering = idle && water.tick(LitematicaBlueprint.fluids(state -> skip.contains(state.getBlock())), running.placing().range());
+		if (!idle) water.release();
 	}
 
 	/**
@@ -180,7 +210,7 @@ public class Printer extends Module {
 	 */
 	private void walkWhenIdle() {
 		Build b = job != null && runningWalk ? build() : null;
-		boolean idle = b != null && b.steps().stream().allMatch(st -> st.status() == Build.Status.DONE || fixedByMoving(st.status()));
+		boolean idle = b != null && !watering && b.steps().stream().allMatch(st -> st.status() == Build.Status.DONE || fixedByMoving(st.status()));
 		idleTicks = idle ? idleTicks + 1 : 0;
 		if (idleTicks < IDLE_TICKS || walking != null && !walking.result().isDone()) return;
 		idleTicks = 0;
@@ -196,9 +226,12 @@ public class Printer extends Module {
 		walking = null;
 		if (w != null) w.cancel();
 		idleTicks = 0;
+		water.release();
+		watering = false;
 		triedSpots.clear();
 		passedOver.clear();
 		emptyFor.clear();
+		signAsked.clear();
 	}
 
 	/** The schematic as Litematica shows it, without the blocks in Skip. */
@@ -402,6 +435,61 @@ public class Printer extends Module {
 	private static Job<?> root(Job<?> j) {
 		while (j.parent() != null) j = j.parent();
 		return j;
+	}
+
+	// ---- sign text ----------------------------------------------------------------------------------------------
+
+	/** Signs whose text was last asked for, by position, and until when (ticks) they're left to the server's answer. */
+	private final Map<Long, Long> signAsked = new HashMap<>();
+	/** How long a sign that was clicked for its text isn't clicked again. */
+	private static final int SIGN_RETRY_TICKS = 40;
+
+	/**
+	 * The server opens the sign editor for a sign you place (its front), and for one you click (the side you're on): for
+	 * a sign of the schematic, it's answered with the schematic's text instead, and no editor shows. Others open as usual.
+	 * Plain text only: colour and glowing need dye and ink.
+	 */
+	@Subscribe(packets = ClientboundOpenSignEditorPacket.class)
+	private void onSignEditor(PacketEvent.Receive e) {
+		if (!(e.packet() instanceof ClientboundOpenSignEditorPacket p) || job == null) return;
+		e.cancel();
+		mc.execute(() -> {
+			List<String> lines = mc.getConnection() == null ? null : LitematicaBlueprint.signLines(p.pos(), p.slot());
+			if (lines == null) {
+				if (mc.getConnection() != null) p.handle(mc.getConnection());
+				return;
+			}
+			mc.getConnection().send(new ServerboundSignUpdatePacket(p.pos(), lines, p.slot()));
+		});
+	}
+
+	/**
+	 * Clicks one sign in reach whose text isn't the schematic's yet, from the side you're on (the side the server opens),
+	 * if that side's text is wrong: the editor that opens is answered with the text ({@link #onSignEditor}). A sign's
+	 * back is written once you pass behind it.
+	 */
+	private void writeSigns() {
+		if (job == null || mc.player.tickCount % 2 != 0 || Myriad.placement().offHandSlot() >= 0) return;
+		long now = mc.player.tickCount;
+		signAsked.values().removeIf(until -> until <= now);
+		double range = running.placing().range();
+		BlockPos[] found = {null};
+		blueprint().near(mc.player.getEyePosition(), range, (pos, target) -> {
+			if (found[0] != null || !(target.orientedState() instanceof BlockState state) || !(state.getBlock() instanceof SignBlock)) return;
+			if (signAsked.containsKey(pos.asLong()) || !mc.level.getBlockState(pos).is(state.getBlock())) return;
+			if (!(mc.level.getBlockEntity(pos) instanceof SignBlockEntity sign) || sign.isWaxed()) return;
+			SignTextSlot side = sign.getSlotPlayerIsFacing(mc.player);
+			List<String> want = LitematicaBlueprint.signLines(pos, side);
+			if (want == null || want.equals(LitematicaBlueprint.lines(sign, side))) return;
+			found[0] = pos.immutable();
+		});
+		BlockPos pos = found[0];
+		if (pos == null) return;
+		Vec3 eyes = mc.player.getEyePosition();
+		Direction face = Direction.getApproximateNearest(eyes.x - (pos.getX() + 0.5), 0, eyes.z - (pos.getZ() + 0.5));
+		BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), face, pos, false);
+		var o = running.placing().withRotate(rotate.get()).withVisibleFaces(false).withSneak(false);
+		if (Myriad.placement().use(this, hit, -1, o).sent()) signAsked.put(pos.asLong(), now + SIGN_RETRY_TICKS);
 	}
 
 	@Override

@@ -3,6 +3,47 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.3.0
+
+Needs Myriad 2.2.0, for Minecraft 26.3. With it the Printer places a kind at a time as fast as the server takes it,
+from hotbar slots your inventory seems never to leave (put back and resynced once it's off), without Actions Per Tick.
+
+- **Printer: sign text.** Signs get the schematic's text, front and back. The editor the server opens for a sign you
+  place is answered with the text instead of showing, and a sign whose text is wrong is clicked from the side you're on
+  (its back once you pass behind it). Plain text: colour and glowing ink aren't set.
+- **Printer: waterlogged blocks** get their water once placed, poured from a bucket. The bucket is filled only from
+  water that fills itself back in (the middle of a row of three sources, any of a two by two), never from a lone source
+  or a pair, and nothing is poured where water dries up.
+- **Printer: water sources.** The schematic's water is poured from a bucket too, once the blocks that hold it in are
+  built (all the way round the water it joins up with, so nothing runs out over the rest), and with as few buckets as
+  the water allows: the spots that let others fill in by themselves go first (both ends of a row of three, two corners
+  across a two by two), the bottom layer first, and spots about to fill in are waited for. The bucket is filled as for
+  waterlogged blocks. A channel of three: the stone first, then two buckets. Flowing water isn't poured (it comes of
+  the sources); Break Wrong Blocks clears whatever is where the schematic has water or lava.
+- **Scaffold: Width** lays a path up to 7 blocks wide, across the way you're going (or facing, standing still).
+- **Elytra Swap is Elytra Tweaks**, its settings kept. No Durability is now one of its options (on, as before), for
+  whoever flies: Elytra Fly's flights and your own (When You Fly is gone; No Durability covers both). With:
+  - **Air Brake**: gliding at a wall fast enough for the hit to hurt, the server sees you look back the way you're
+    moving (your view stays yours, your up and down angle too) until it's safe, so the glide, or a rocket's push, takes
+    the speed off whichever way you fly. It comes on only within Brake Distance of the wall (3 blocks), so the rest of
+    the flight is left alone. Rocketing into a wall at 1.5 blocks a tick: no damage with it (on 1 to 2 blocks out),
+    15.4 without.
+  - **Glide Bind**: starts the glide, at once in the air or with one jump from the ground, the second press made for
+    you as vanilla takes it (Grim's ElytraB included).
+  `ElytraSwap.BEHAVIOUR` is `ElytraTweaks.BEHAVIOUR` (hook id `myriad-essentials:elytra_tweaks`).
+- **Packet Mine's tool is Auto Tool's to pick**: with Auto Tool on it mines with the best tool as before, and now Silk
+  Touch for blocks that break at once or that no tool mines faster (glass drops glass); with Auto Tool off it mines
+  with what you hold, for the odd block you want mined your way. Auto Tool's own mining picks Silk Touch the same way.
+- **Placement Tweaks: Fast Place** places blocks faster while you hold right-click, by a percentage: 100% twice as fast
+  (every 2 ticks instead of vanilla's 4), 300% every tick.
+- **Middle Click: rockets fire every time.** A press waits up to a second for rockets from the inventory (a slow
+  server's round trip) instead of 5 ticks, each press waits its own while, borrowed rockets stay in the hotbar while you
+  glide (each press used to borrow them again, waiting on the slot they'd just gone back to), and a press just after
+  you open the elytra counts as flying.
+- **Middle Balance stays within the click budget.** One middle-click on an uneven grid could take 85 clicks, more than
+  2b2t takes before dropping you; it stops at core's budget now (saying so), and a middle-click a few seconds later
+  finishes it. Shift Drag checks the budget too.
+
 ## 2.2.0
 
 Needs Myriad 2.0.0, for Minecraft 26.3.

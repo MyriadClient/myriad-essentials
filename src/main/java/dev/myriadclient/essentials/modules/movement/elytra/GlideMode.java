@@ -19,7 +19,7 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * A type that flies the glide itself ({@link Recast}'s bounce): with a rotation of its own that only goes to the server
- * and the flight physics (the camera stays yours), opening the elytra the way vanilla does, {@link ElytraSwap} (core's
+ * and the flight physics (the camera stays yours), opening the elytra the way vanilla does, {@link ElytraTweaks} (core's
  * {@link NoDurability}, which also catches a glide dropped in mid-air) while that module is on, and <b>Preserve</b>:
  * elytras worn down to it are put aside, the freshest other one going on (in mid-air too). While it flies, Elytra
  * Swap's own swapping (for when you fly yourself) stands down.

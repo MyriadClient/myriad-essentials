@@ -16,6 +16,7 @@ import dev.myriadclient.api.render.RenderSettings;
 import dev.myriadclient.api.service.Building;
 import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.setting.BoolSetting;
+import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.essentials.modules.automation.Printer;
@@ -47,6 +48,7 @@ import java.util.Set;
  *   <li>Moving diagonally, a cell beside the path goes in between, so every cell has the one before it to be placed
  *   against.</li>
  *   <li>Over nothing at all (you ran off a corner, or fell), it bridges from the nearest block it can reach.</li>
+ *   <li>Width lays a wider path, across the way you're going, the side cells against the one on your path.</li>
  *   <li>Jumping raises the height it builds at: holding jump in place builds a tower. Jumping while you run doesn't, so
  *   you land back on the line you were building.</li>
  *   <li>If the block where you're about to step hasn't gone out yet (waiting on the server's placement limit, or on a
@@ -63,6 +65,8 @@ public class Scaffold extends Module {
 		+ "see, for servers that check where you look. You walk along each turn for a moment; 2b2t doesn't need it.").build();
 	private final BoolSetting airPlace = sgGeneral.bool("Air Place").description("Place under you with nothing next to it, through the off "
 		+ "hand, so it never has to bridge. 2b2t takes it; current Grim refuses it.").build();
+	private final IntSetting width = sgGeneral.integer("Width").description("How wide a path to lay, across the way you're going (or facing, "
+		+ "standing still), centred on you; an even width takes the extra block on your right. Not while towering.").defaultValue(1).range(1, 7).build();
 
 	private final SettingGroup sgRender = settings.group("Render");
 	private final BoolSetting showPlan = sgRender.bool("Show Plan").description("Outline the blocks about to be placed and those waiting.").build();
@@ -167,6 +171,7 @@ public class Scaffold extends Module {
 		Target target = target();
 		List<BlockPos> path = path();
 		boolean air = airPlace.get();
+		Direction side = sideways();
 		for (int i = 0; i < path.size(); i++) {
 			BlockPos cell = path.get(i);
 			// The first cell with nothing to go against: a way to it from a block in reach goes first.
@@ -174,8 +179,27 @@ public class Scaffold extends Module {
 				for (BlockPos p : bridge(cell)) plan.put(p, target);
 			}
 			plan.put(cell, target);
+			// Wider: outwards from the cell on your path either side, each against the one before it.
+			if (side != null) {
+				int w = width.get(), right = w / 2, left = (w - 1) / 2;
+				for (int k = 1; k <= Math.max(left, right); k++) {
+					if (k <= right) plan.putIfAbsent(cell.relative(side, k), target);
+					if (k <= left) plan.putIfAbsent(cell.relative(side, -k), target);
+				}
+			}
 		}
 		return plan;
+	}
+
+	/**
+	 * Your right, across the way you're going (or facing, standing still), for a path wider than one; null at a width of
+	 * one or while towering.
+	 */
+	private @Nullable Direction sideways() {
+		if (width.get() <= 1 || mc.player.input.keyPresses.jump() && !moving()) return null;
+		Vec3 motion = step();
+		Direction ahead = moving() ? Direction.getApproximateNearest(motion.x, 0, motion.z) : mc.player.getDirection();
+		return ahead.getClockWise();
 	}
 
 	/**

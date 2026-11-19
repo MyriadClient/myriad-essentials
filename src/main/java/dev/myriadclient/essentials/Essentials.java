@@ -47,7 +47,7 @@ import dev.myriadclient.essentials.modules.movement.InventoryMove;
 import dev.myriadclient.essentials.modules.movement.NoSlow;
 import dev.myriadclient.essentials.modules.movement.RotationLock;
 import dev.myriadclient.essentials.modules.movement.elytra.ElytraFly;
-import dev.myriadclient.essentials.modules.movement.elytra.ElytraSwap;
+import dev.myriadclient.essentials.modules.movement.elytra.ElytraTweaks;
 import dev.myriadclient.essentials.modules.movement.elytra.RocketBoost;
 import dev.myriadclient.essentials.modules.player.AutoReconnect;
 import dev.myriadclient.essentials.modules.player.InventoryTweaks;
@@ -95,7 +95,7 @@ public final class Essentials implements MyriadAddon {
 	public void initialize(AddonContext ctx) {
 		PearlOwners.load(ctx.storage());
 		// Modules the ready-made control panels below combine.
-		ElytraSwap elytraSwap = new ElytraSwap();
+		ElytraTweaks elytraTweaks = new ElytraTweaks();
 		RotationLock rotationLock = new RotationLock();
 		ElytraFly elytraFly = new ElytraFly();
 		AutoEat autoEat = new AutoEat();
@@ -110,7 +110,7 @@ public final class Essentials implements MyriadAddon {
 
 		// Building blocks other modules use (and control panels combine with them). They register first, so they exist
 		// when Elytra Fly and Auto Armor hand them settings those modules saved for them in older configs.
-		ctx.registerModules(movement, elytraSwap, rotationLock);
+		ctx.registerModules(movement, elytraTweaks, rotationLock);
 		ctx.registerModules(combat, new KillAura(), new Offhand(), new AutoArmor(), new Velocity(), new AutoDisconnect());
 		ctx.registerModules(movement, elytraFly, new RocketBoost(), new InventoryMove(), new NoSlow());
 		ctx.registerModules(world, new Scaffold(), new PlacementTweaks(), new PacketMine(), new Nuker(), new Reach(), new WallInteract());
@@ -125,12 +125,12 @@ public final class Essentials implements MyriadAddon {
 		// Ready-made control panels: one bind turns the set on, Elytra Fly flying the type given while it's on.
 		ctx.registerControlPanel(ControlPreset.builder("Highway")
 			.module(elytraFly, m -> m.set(elytraFly.type, ElytraFly.RECAST))
-			.module(elytraSwap)
+			.module(elytraTweaks)
 			.module(autoEat)
 			.build());
 		ctx.registerControlPanel(ControlPreset.builder("Cruise")
 			.module(elytraFly, m -> m.set(elytraFly.type, ElytraFly.ALTITUDE))
-			.module(elytraSwap)
+			.module(elytraTweaks)
 			.module(rotationLock)
 			.module(autoEat)
 			.build());

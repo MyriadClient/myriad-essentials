@@ -25,7 +25,8 @@ public final class ScaffoldTests extends EssentialsSuite {
 		t.player().at(0.5, 0, -10.5, yaw, 0);
 		if (clear) t.arena().fill(-20, -1, -8, 40, -1, 20, "air");
 		t.player().give(0, "dirt", 64).give(9, "dirt", 64).select(0);
-		t.module("myriad-essentials:scaffold").set("rotate", String.valueOf(rotate)).set("air_place", String.valueOf(air)).set("blocks", "clear");
+		t.module("myriad-essentials:scaffold").set("rotate", String.valueOf(rotate)).set("air_place", String.valueOf(air)).set("blocks", "clear")
+			.set("width", "1");
 		if (!rotate || air) t.server().likeTwoBTwoT();
 		Vec3 from = t.player().serverPosition();
 		t.module("myriad-essentials:scaffold").enable();
@@ -97,5 +98,28 @@ public final class ScaffoldTests extends EssentialsSuite {
 		int last = (int) Math.floor(to.z), n = last + 7 + 1, placed = bridged(t, -7, last);
 		t.check(n >= 4 && placed == n && to.y >= -0.1, String.format(Locale.ROOT, "%d/%d blocks bridged under the path, y=%.2f", placed, n, to.y));
 		t.note(placed + "/" + n + " blocks bridged under the path");
+	}
+
+	@Test(name = "width_2b2t", tags = {"world", "2b2t"}, allowFlags = "RotationPlace")
+	public void width2b2t(TestContext t) {
+		// Width 3 walking south off the edge: x -1 to 1 bridged on every row passed, nothing beyond.
+		t.module("myriad-essentials:scaffold").set("width", "3");
+		t.player().at(0.5, 0, -10.5, 0, 0);
+		t.arena().fill(-20, -1, -8, 40, -1, 20, "air");
+		t.player().give(0, "dirt", 64).give(9, "dirt", 64).select(0);
+		t.module("myriad-essentials:scaffold").set("rotate", "false").set("air_place", "false").set("blocks", "clear");
+		t.server().likeTwoBTwoT();
+		t.module("myriad-essentials:scaffold").enable();
+		t.waitTicks(2);
+		t.hold(Key.FORWARD).forTicks(30);
+		t.waitTicks(10);
+		Vec3 to = t.player().serverPosition();
+		int last = (int) Math.floor(to.z) - 1, rows = last + 8 + 1;
+		int strip = t.arena().count(-1, -1, -8, 1, -1, last, "dirt"), outside = t.arena().count(-3, -1, -8, -2, -1, last + 2, "dirt")
+			+ t.arena().count(2, -1, -8, 3, -1, last + 2, "dirt");
+		String detail = String.format(Locale.ROOT, "%d/%d of the 3-wide strip, %d outside it, y=%.2f", strip, rows * 3, outside, to.y);
+		t.module("myriad-essentials:scaffold").set("width", "1");
+		t.check(strip == rows * 3 && outside == 0 && to.y >= -0.1, detail);
+		t.note(detail);
 	}
 }

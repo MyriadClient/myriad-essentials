@@ -18,7 +18,7 @@ import dev.myriadclient.api.setting.KeybindSetting;
 import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.essentials.modules.movement.elytra.ElytraFlight;
-import dev.myriadclient.essentials.modules.movement.elytra.ElytraSwap;
+import dev.myriadclient.essentials.modules.movement.elytra.ElytraTweaks;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
@@ -33,7 +33,7 @@ import net.minecraft.world.item.enchantment.Enchantments;
  * them over too.
  * <p>
  * For the chest slot you choose between a chestplate and an elytra, and the Chest Swap bind flips between them (and
- * swaps straight away). Until you land, an elytra you're flying with is never taken off, and while {@link ElytraSwap}
+ * swaps straight away). Until you land, an elytra you're flying with is never taken off, and while {@link ElytraTweaks}
  * swaps it for a chestplate the chest slot is left to it.
  */
 public class AutoArmor extends Module {
@@ -48,7 +48,7 @@ public class AutoArmor extends Module {
 
 	private static final EquipmentSlot[] SLOTS = {EquipmentSlot.CHEST, EquipmentSlot.HEAD, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
-	// Not 0: a chestplate put back at once undoes Elytra Swap's elytra before the glide starts.
+	// Not 0: a chestplate put back at once undoes Elytra Tweaks's elytra before the glide starts.
 	private final IntSetting delay = sgGeneral.integer("Delay").description("Ticks after equipping before looking again (every piece that's "
 		+ "better goes on in one tick).").defaultValue(2).range(0, 20).build();
 	private final EnumSetting<Protection> prefer = sgGeneral.oneOf("Prefer", Protection.BLAST_LEGS)
@@ -86,7 +86,7 @@ public class AutoArmor extends Module {
 		return ItemInfo.armorSlot(s) != null && s.isDamageableItem() && ItemInfo.durabilityFraction(s) * 100 < preserve.get();
 	}
 
-	/** 2: No Durability Elytra became the Elytra Swap module (its When You Fly), which takes the setting over. */
+	/** 2: No Durability Elytra became the Elytra Tweaks module (its No Durability), which takes the setting over. */
 	@Override
 	public int settingsVersion() {
 		return 2;
@@ -96,7 +96,7 @@ public class AutoArmor extends Module {
 	protected void migrateSettings(int fromVersion, SavedSettings saved) {
 		if (fromVersion == 1) {
 			boolean swapped = saved.get("Chest Swap", "No Durability Elytra").map(JsonElement::getAsBoolean).orElse(false);
-			ElytraSwap.adoptFormerSetting(swapped, swapped);
+			ElytraTweaks.adoptFormerSetting(swapped);
 			saved.remove("Chest Swap", "No Durability Elytra");
 		}
 	}
