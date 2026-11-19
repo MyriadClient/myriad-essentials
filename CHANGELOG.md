@@ -3,6 +3,14 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.3.1
+
+Needs Myriad 2.2.0, for Minecraft 26.3.
+
+- **Auto Disconnect: Disable Auto Reconnect** (on) turns Auto Reconnect off as it leaves, so you can keep Auto Reconnect
+  on for server restarts and kicks while a leave from danger (a totem pop, a player close by) stays left until you turn
+  it back on. Off, Auto Reconnect stays on and skips only the join straight after the leave, as before.
+
 ## 2.3.0
 
 Needs Myriad 2.2.0, for Minecraft 26.3. With it the Printer places a kind at a time as fast as the server takes it,

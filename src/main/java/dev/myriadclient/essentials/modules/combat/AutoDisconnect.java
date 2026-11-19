@@ -11,6 +11,7 @@ import dev.myriadclient.api.item.ItemInfo;
 import dev.myriadclient.api.item.Slots;
 import dev.myriadclient.api.map.Waypoint;
 import dev.myriadclient.api.module.Module;
+import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.setting.ActionSetting;
 import dev.myriadclient.api.setting.BoolSetting;
@@ -22,6 +23,7 @@ import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.Format;
+import dev.myriadclient.essentials.modules.player.AutoReconnect;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
@@ -66,7 +68,9 @@ import java.util.function.Supplier;
  * same goes for leaving in the air by Hard Deck or Destination: you're in the air when you rejoin.
  * <p>
  * Afterwards it either turns itself off, or stays on and waits for the reason it left to clear before that reason can
- * trigger again, so you can rejoin (say with no totems left) without leaving again straight away.
+ * trigger again, so you can rejoin (say with no totems left) without leaving again straight away. It turns Auto Reconnect
+ * off as it leaves (Disable Auto Reconnect), so Auto Reconnect can be on for server restarts and kicks while a leave
+ * from danger stays left.
  */
 public class AutoDisconnect extends Module {
 	public enum AfterLeaving {
@@ -168,6 +172,10 @@ public class AutoDisconnect extends Module {
 
 	private final EnumSetting<AfterLeaving> afterLeaving = sgGeneral.oneOf("After Leaving", AfterLeaving.TURN_OFF)
 		.description("Turn off, or stay on and wait for the reason you left to clear before it can make you leave again.").build();
+	private final BoolSetting stopReconnect = sgGeneral.bool("Disable Auto Reconnect")
+		.description("Turn Auto Reconnect off as it leaves, so nothing joins you back (a totem pop, a player close by) until you turn it "
+			+ "on again. Off, Auto Reconnect stays on for later kicks (a server restart) and only skips joining back right after this.")
+		.defaultValue(true).build();
 	private final BoolSetting copyCoords = sgGeneral.bool("Copy Coords").description("Copy where you were to the clipboard.").build();
 	private final BoolSetting screenshot = sgGeneral.bool("Screenshot")
 		.description("Show what was on your screen as you left (HUD and all) on the disconnect screen, beside the report. Kept only until you next leave; never saved.")
@@ -398,6 +406,10 @@ public class AutoDisconnect extends Module {
 		if (copyCoords.get()) mc.keyboardHandler.setClipboard(String.format(Locale.ROOT, "%d %d %d", mc.player.getBlockX(), mc.player.getBlockY(), mc.player.getBlockZ()));
 		if (afterLeaving.get() == AfterLeaving.TURN_OFF) disable();
 		else waiting.add(key);
+		if (stopReconnect.get()) {
+			AutoReconnect reconnect = Modules.get(AutoReconnect.class);
+			if (reconnect != null && reconnect.isEnabled()) reconnect.disable();
+		}
 		mc.getConnection().getConnection().disconnect(Component.literal(PREFIX + reason));
 	}
 

@@ -16,7 +16,8 @@ import net.minecraft.client.gui.screens.DisconnectedScreen;
 /**
  * Joins the server you were on again when you're kicked or the connection drops, after a few seconds, and keeps
  * trying while it can't get in (a server restarting, a full queue). The disconnect screen shows when, on a button that
- * joins at once; going back to the server list stops it. Never after Auto Disconnect made you leave, nor in singleplayer.
+ * joins at once; going back to the server list stops it. Never after Auto Disconnect made you leave, nor in singleplayer;
+ * Auto Disconnect turns it off as it leaves, unless its Disable Auto Reconnect is off.
  */
 public class AutoReconnect extends Module {
 	/** A disconnect this soon after Auto Disconnect left is its own. */

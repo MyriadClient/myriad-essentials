@@ -12,7 +12,8 @@ import java.util.regex.Pattern;
 
 /**
  * Leaving and coming back: Auto Reconnect after a kick, Auto Disconnect at low health and next to a charged respawn
- * anchor, and Anti AFK's sneak tap when idle (none while walking). Every test ends back in the game.
+ * anchor (and not joined back by Auto Reconnect after), and Anti AFK's sneak tap when idle (none while walking). Every
+ * test ends back in the game.
  */
 public final class ConnectionTests extends EssentialsSuite {
 	/** Whether the server lists {@code name} as online. */
@@ -122,6 +123,42 @@ public final class ConnectionTests extends EssentialsSuite {
 		rejoin(t);
 		String detail = "left at low health: " + hurt + ", left next to a charged anchor: " + anchor;
 		t.check(hurt && anchor, detail);
+		t.note(detail);
+	}
+
+	@Test(tags = "connection")
+	public void autoDisconnectStopsReconnect(TestContext t) {
+		// Auto Reconnect on for restarts, Auto Disconnect leaving at low health: not joined back, and Auto Reconnect turned
+		// off with the leave (Disable Auto Reconnect); with that off, Auto Reconnect stays on yet still doesn't join back.
+		String name = t.player().name();
+		var reconnect = t.module("myriad-essentials:auto_reconnect").set("delay", "1");
+		var ad = t.module("myriad-essentials:auto_disconnect");
+		for (String trigger : List.of("totem_pops", "totems_left", "armor", "players", "beds", "anchors", "crystals", "creepers")) ad.set(trigger, "false");
+		ad.set("health", "true").set("threshold", "6").set("after_leaving", "turn_off");
+		boolean[] left = new boolean[2], stayedOut = new boolean[2], reconnectOn = new boolean[2];
+		for (int i = 0; i < 2; i++) {
+			t.server().run("effect give " + name + " instant_health 1 5 true");
+			t.waitTicks(10);
+			reconnect.enable();
+			ad.set("disable_auto_reconnect", String.valueOf(i == 0)).enable();
+			t.waitTicks(10);
+			t.server().run("damage " + name + " 15");
+			left[i] = leavesWithin(t, name, 3);
+			// Auto Reconnect's 1 s and the server's 4 s connection throttle: back within 10 s if it were going to join.
+			long until = System.currentTimeMillis() + 10_000;
+			stayedOut[i] = true;
+			while (System.currentTimeMillis() < until && stayedOut[i]) {
+				t.waitTicks(10);
+				stayedOut[i] = !onServer(t, name);
+			}
+			reconnectOn[i] = t.onGame(() -> reconnect.get().isEnabled());
+			if (stayedOut[i]) rejoin(t);
+		}
+		t.server().run("effect give " + name + " instant_health 1 5 true");
+		reconnect.disable();
+		String detail = String.format("Disable Auto Reconnect on: left %b, stayed out %b, Auto Reconnect on %b; off: left %b, stayed out %b, Auto Reconnect on %b",
+			left[0], stayedOut[0], reconnectOn[0], left[1], stayedOut[1], reconnectOn[1]);
+		t.check(left[0] && stayedOut[0] && !reconnectOn[0] && left[1] && stayedOut[1] && reconnectOn[1], detail);
 		t.note(detail);
 	}
 }
