@@ -81,6 +81,7 @@ import dev.myriadclient.essentials.modules.world.PlacementTweaks;
 import dev.myriadclient.essentials.modules.world.Reach;
 import dev.myriadclient.essentials.modules.world.Scaffold;
 import dev.myriadclient.essentials.modules.world.WallInteract;
+import dev.myriadclient.essentials.util.HiddenPosSetting;
 import dev.myriadclient.essentials.util.NamedChoiceSetting;
 import dev.myriadclient.essentials.util.PearlOwners;
 import dev.myriadclient.essentials.util.VillagerTrades;
@@ -103,6 +104,7 @@ public final class Essentials implements MyriadAddon {
 		PearlOwners.load(ctx.storage());
 		VillagerTrades.load(ctx.storage());
 		NamedChoiceSetting.register(ctx.settingWidgets());
+		HiddenPosSetting.register(ctx.settingWidgets());
 		// Modules the ready-made control panels below combine.
 		ElytraTweaks elytraTweaks = new ElytraTweaks();
 		RotationLock rotationLock = new RotationLock();

@@ -5,10 +5,20 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.ScreenOpenEvent;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.event.events.Render2DEvent;
+import dev.myriadclient.api.event.events.RenderEvent;
+import dev.myriadclient.api.render.RenderSettings;
+import dev.myriadclient.api.render.WorldLabel;
+import dev.myriadclient.api.setting.BoolSetting;
+import dev.myriadclient.api.setting.ColorSetting;
+import dev.myriadclient.api.setting.SettingColor;
+import dev.myriadclient.api.setting.SettingGroup;
+import dev.myriadclient.essentials.util.HiddenPosSetting;
 import dev.myriadclient.api.integration.Baritone;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.player.Reach;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import dev.myriadclient.api.service.Containers;
 import dev.myriadclient.api.service.PacketLimits;
 import dev.myriadclient.api.service.Placement;
@@ -16,15 +26,12 @@ import dev.myriadclient.api.service.Rotations;
 import dev.myriadclient.api.setting.ActionSetting;
 import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.RegistrySetting;
-import dev.myriadclient.api.setting.StringSetting;
 import dev.myriadclient.essentials.util.NamedChoiceSetting;
 import dev.myriadclient.essentials.util.VillagerTrades;
 import net.minecraft.client.gui.screens.inventory.MerchantScreen;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.HopperBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.resources.Identifier;
@@ -56,10 +63,12 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Makes one trade with every villager of a kind, over and over: what it costs (emeralds, emerald blocks crafted into
@@ -76,13 +85,10 @@ import java.util.Map;
 public class AutoTrader extends Module {
 	private static final String ANY = "Any";
 
-	private final StringSetting input = sgGeneral.string("Input Chest").description("Where the payment comes from (emeralds, emerald blocks, "
-		+ "books, carrots: whatever the trade costs): look at it and press Set Input.").build();
-	private final StringSetting output = sgGeneral.string("Output Chest").description("Where what's bought goes: look at it and press Set Output.").build();
-	@SuppressWarnings("unused")
-	private final ActionSetting setInput = sgGeneral.action("Set Input", () -> pick(true)).description("The container you look at is the input chest.").build();
-	@SuppressWarnings("unused")
-	private final ActionSetting setOutput = sgGeneral.action("Set Output", () -> pick(false)).description("The container you look at is the output chest.").build();
+	private final HiddenPosSetting input = sgGeneral.add(HiddenPosSetting.of("Input Chest", "Where the payment comes from (emeralds, emerald "
+		+ "blocks, books, carrots: whatever the trade costs): look at it and press Set.", () -> pick(true)));
+	private final HiddenPosSetting output = sgGeneral.add(HiddenPosSetting.of("Output Chest", "Where what's got goes: look at it and press Set.",
+		() -> pick(false)));
 	@SuppressWarnings("unused")
 	private final ActionSetting forgetTrades = sgGeneral.action("Forget Known Trades", () -> info("Forgot " + VillagerTrades.forgetAll()
 		+ " villagers' trades on this server")).description("Trades are remembered per villager once seen (until its level or job changes): this "
@@ -97,14 +103,26 @@ public class AutoTrader extends Module {
 	private final IntSetting range = sgGeneral.integer("Range").defaultValue(24).range(4, 64)
 		.description("How far from you villagers are looked for, in blocks.").build();
 
-	private enum Step { START, TO_INPUT, STOCK, CONVERT, PICK, TO_VILLAGER, LOOK, TRADES, TRADE, TO_OUTPUT, DEPOSIT, RESTOCK, REFILL }
+	private final SettingGroup sgRender = settings.group("Render");
+	private final BoolSetting showChests = sgRender.bool("Show Chests").description("Outline the input and output chests, labelled, while it runs.")
+		.defaultValue(true).build();
+	private final ColorSetting inputColor = sgRender.color("Input Color").defaultValue(SettingColor.role(SettingColor.Mode.GREEN)).visible(showChests::get).build();
+	private final ColorSetting outputColor = sgRender.color("Output Color").defaultValue(SettingColor.role(SettingColor.Mode.BLUE)).visible(showChests::get).build();
+	private final RenderSettings look = RenderSettings.builder(sgRender).visible(showChests::get).throughWalls(true).build();
 
-	/** Ticks a sold-out villager is left before it's looked at again (for a restock). */
+	private enum Step { START, TO_INPUT, STOCK, CONVERT, PICK, TO_VILLAGER, LOOK, TRADES, TRADE, TO_OUTPUT, DEPOSIT, WAIT }
+
+	private enum Walk { THERE, WALKING, FAILED }
+
+	/** Ticks a villager is left before it's looked at again: sold out (for a restock), out of reach or not answering. */
 	private static final int RESTOCK_TICKS = 1200;
 	/** Ticks a walk, an open or the trades may take. */
 	private static final int WALK_TICKS = 1200, OPEN_TICKS = 40, TRADES_TICKS = 60;
-	/** Ticks between looks into an empty input chest that hoppers feed. */
-	private static final int REFILL_TICKS = 600;
+	/** Opens a chest gets before it's left for a wait, and the ticks between them. */
+	private static final int OPEN_TRIES = 3, OPEN_RETRY_TICKS = 10;
+	private int openTries;
+	/** Ticks between looks into the input chest while there's nothing to do (by hand or by hoppers, it may fill up). */
+	private static final int WAIT_TICKS = 600;
 	/** Inventory slots kept free for what's bought when stocking up. */
 	private static final int ROOM = 9;
 
@@ -115,16 +133,29 @@ public class AutoTrader extends Module {
 	private @Nullable MerchantOffers offers;
 	/** The offer being bought, and how many of its result you had before the last buy. */
 	private int offer = -1, boughtBefore;
-	/** Villagers sold out (or with nothing to sell), by entity id: the tick they're looked at again. */
+	/** Villagers sold out (or out of reach, or not answering), by entity id: the tick they're looked at again. */
 	private final Map<Integer, Integer> soldOut = new HashMap<>();
 	private int clock;
-	private boolean inputEmpty, learned, waitingForInput;
+	private boolean inputEmpty, learned;
+	/** What's waited for (said once), or null while trading. */
+	private @Nullable String waitingFor;
 	private Containers.@Nullable View view;
+	/** One way to pay for the trade: a first payment and a second (null if none), as much as one trade asks (the most seen). */
+	private record Cost(Item a, int countA, @Nullable Item b, int countB) {}
 	/**
-	 * What the trade costs, item by item, as much as one trade asks for (the most any villager seen asks): learned from the
+	 * The ways the trade is paid for, each on its own (a farmer takes wheat or carrots for emeralds): learned from the
 	 * offers seen (and remembered ones), emeralds (and books, for books) until then.
 	 */
-	private final Map<Item, Integer> need = new LinkedHashMap<>();
+	private final Map<String, Cost> costs = new LinkedHashMap<>();
+	/**
+	 * Villagers with the trade in stock that what you carry can't pay for, by entity id: left till you stock up with
+	 * something new, or (their prices may have dropped) the tick they're looked at again.
+	 */
+	private final Map<Integer, Integer> cantPay = new HashMap<>();
+	/** The offers tried at the villager being traded with that came to nothing (sold out on the server, or unpaid). */
+	private final Set<Integer> tried = new HashSet<>();
+	/** Whether the input has been stocked from since you turned it on. */
+	private boolean stocked;
 
 	public AutoTrader() {
 		super(Tags.AUTOMATION, "Auto Trader", "Trades with villagers from one chest into another: buys with emeralds, or sells them carrots, paper and the like.");
@@ -135,12 +166,31 @@ public class AutoTrader extends Module {
 		go(Step.START);
 		soldOut.clear();
 		inputEmpty = false;
-		waitingForInput = false;
-		need.clear();
+		waitingFor = null;
+		openTries = 0;
+		costs.clear();
+		cantPay.clear();
 		learned = false;
+		stocked = false;
 		if (selling()) return;
-		need.put(Items.EMERALD, 1);
-		if (trade.get() == Items.ENCHANTED_BOOK) need.put(Items.BOOK, 1);
+		addCost(Items.EMERALD, 1, trade.get() == Items.ENCHANTED_BOOK ? Items.BOOK : null, 1);
+	}
+
+	/** Whether it's waiting: for the input chest to fill, villagers to restock or room in the output chest. */
+	public boolean waiting() {
+		return isEnabled() && step == Step.WAIT;
+	}
+
+	/** Waits (see WAIT), saying why once. */
+	private void idle(String why) {
+		if (!why.equals(waitingFor)) info(why);
+		waitingFor = why;
+		go(Step.WAIT);
+	}
+
+	/** Drops the timers in {@code until} that have run out; true if any did. */
+	private boolean expire(Map<Integer, Integer> until) {
+		return until.values().removeIf(t -> t <= clock);
 	}
 
 	/** Whether emeralds are what's got (selling to villagers), not what's paid. */
@@ -191,19 +241,8 @@ public class AutoTrader extends Module {
 			warn("Look at a chest (or any container) first");
 			return;
 		}
-		BlockPos p = hit.getBlockPos();
-		(isInput ? input : output).set(p.getX() + " " + p.getY() + " " + p.getZ());
+		(isInput ? input : output).set(hit.getBlockPos());
 		info((isInput ? "Input" : "Output") + " chest set");
-	}
-
-	private static @Nullable BlockPos parse(String text) {
-		String[] parts = text.trim().split("[ ,]+");
-		if (parts.length != 3) return null;
-		try {
-			return new BlockPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
-		} catch (NumberFormatException e) {
-			return null;
-		}
 	}
 
 	// ---- Inventory ----------------------------------------------------------------------------------------------
@@ -251,26 +290,46 @@ public class AutoTrader extends Module {
 
 	// ---- Walking ------------------------------------------------------------------------------------------------
 
-	/** Walks within reach of {@code pos} with Baritone; true once you're there. False and stops if it can't. */
-	private boolean reach(BlockPos pos) {
-		if (Reach.canReach(pos)) {
+	/**
+	 * Walks within reach of {@code pos} ({@code there}: whether you're close enough) with Baritone: THERE once you are,
+	 * FAILED without Baritone or after a while. Reach is the server's, not yours: Reach (the module) may stretch yours
+	 * past what it takes, and a click from there would go unanswered.
+	 */
+	private Walk reach(BlockPos pos, boolean there) {
+		if (there) {
 			if (walking) {
 				Baritone.stop();
 				walking = false;
 			}
-			return true;
+			return Walk.THERE;
 		}
-		if (!Baritone.isAvailable()) {
-			warn("Out of reach, and Baritone isn't there to walk you");
-			toggle();
-			return false;
-		}
+		if (!Baritone.isAvailable() || ticks > WALK_TICKS) return Walk.FAILED;
 		if (!walking || !Baritone.isPathing() && ticks % 40 == 0) walking = Baritone.pathNear(pos, 2);
-		if (ticks > WALK_TICKS) {
-			warn("Couldn't get there");
-			toggle();
+		return Walk.WALKING;
+	}
+
+	/**
+	 * Walks to a chest, then {@code next}. Out of reach without Baritone stops it (that won't change); a walk that fails
+	 * is tried again after a wait.
+	 */
+	private void toChest(@Nullable BlockPos pos, String name, Step next) {
+		// As far as the open reaches (the server's reach), not Reach's.
+		Walk w = pos == null ? Walk.FAILED : reach(pos, Reach.canReach(pos, Placement.Options.forServer().range()));
+		if (w == Walk.THERE) go(next);
+		else if (w == Walk.FAILED) {
+			if (pos != null && Baritone.isAvailable()) idle("Couldn't get to the " + name + ": trying again soon");
+			else {
+				warn("The " + name + " is out of reach, and Baritone isn't there to walk you");
+				toggle();
+			}
 		}
-		return false;
+	}
+
+	/** Leaves the villager being gone to alone for a while (out of reach, asleep, trading with someone else). */
+	private void skipVillager() {
+		closeTrades();
+		if (villager != null) soldOut.put(villager.getId(), clock + RESTOCK_TICKS);
+		go(Step.PICK);
 	}
 
 	// ---- Ticks --------------------------------------------------------------------------------------------------
@@ -281,10 +340,7 @@ public class AutoTrader extends Module {
 		clock++;
 		switch (step) {
 			case START -> start();
-			case TO_INPUT -> {
-				BlockPos in = parse(input.get());
-				if (in != null && reach(in)) go(Step.STOCK);
-			}
+			case TO_INPUT -> toChest(input.pos(), "input chest", Step.STOCK);
 			case STOCK -> stock();
 			case CONVERT -> convert();
 			case PICK -> pickVillager();
@@ -293,115 +349,155 @@ public class AutoTrader extends Module {
 					go(Step.PICK);
 					return;
 				}
-				if (reach(villager.blockPosition())) go(Step.LOOK);
+				// Its hitbox within the server's reach for entities (3 blocks in survival), as the server measures a use.
+				double r = mc.player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE);
+				Walk w = reach(villager.blockPosition(), villager.getBoundingBox().distanceToSqr(Reach.eyes()) <= r * r);
+				if (w == Walk.THERE) go(Step.LOOK);
+				else if (w == Walk.FAILED) skipVillager();
 			}
 			case LOOK -> {
 				if (ticks == 1) openTrades();
-				else if (ticks > TRADES_TICKS) go(Step.PICK);
+				else if (ticks > TRADES_TICKS) skipVillager();
 			}
 			case TRADES -> {
 				if (offers != null) chooseOffer();
-				else if (ticks > TRADES_TICKS) {
-					closeTrades();
-					go(Step.PICK);
-				}
+				else if (ticks > TRADES_TICKS) skipVillager();
 			}
 			case TRADE -> buy();
-			case TO_OUTPUT -> {
-				BlockPos out = parse(output.get());
-				if (out != null && reach(out)) go(Step.DEPOSIT);
-			}
+			case TO_OUTPUT -> toChest(output.pos(), "output chest", Step.DEPOSIT);
 			case DEPOSIT -> deposit();
-			case REFILL -> {
-				if (ticks >= REFILL_TICKS) {
+			case WAIT -> {
+				// A villager's wait over, or time for another look into the input chest (and the output's room).
+				if (ticks % 20 != 0) return;
+				boolean due = expire(soldOut) | expire(cantPay);
+				if (due || ticks >= WAIT_TICKS) {
 					inputEmpty = false;
 					go(Step.START);
 				}
 			}
-			case RESTOCK -> {
-				if (ticks % 20 == 0 && soldOut.values().stream().anyMatch(t -> t <= clock)) go(Step.PICK);
-			}
 		}
 	}
 
-	/** What to do next: put away what's bought, stock up, turn blocks into emeralds, or trade. */
+	/**
+	 * What to do next: put away what's got, turn blocks into emeralds, stock up or trade; with nothing to do, wait (for
+	 * the input chest to fill, villagers to restock), so it can be left running.
+	 */
 	private void start() {
-		if (parse(input.get()) == null || parse(output.get()) == null) {
+		if (input.pos() == null || output.pos() == null) {
 			warn("Set the input and output chests first");
 			toggle();
 			return;
 		}
 		learnKnown();
-		// Nothing known of what it costs yet (selling, no villager seen): a villager is looked at first.
-		if (need.isEmpty()) {
-			go(Step.PICK);
+		List<Villager> sellers = new ArrayList<>();
+		for (Villager v : villagersInRange()) if (wanted(v) && !knownWithout(v)) sellers.add(v);
+		if (sellers.isEmpty()) {
+			// They may be off somewhere (asleep in a bed out of range, say).
+			idle("No villager in range has that trade: waiting for one");
 			return;
 		}
-		if (!room() || boughtCount() > 0 && !paid()) {
+		boolean visit = false;
+		for (Villager v : sellers) visit |= worthVisiting(v);
+		if (!room() || boughtCount() > 0 && !visit) {
 			go(Step.TO_OUTPUT);
 			return;
 		}
-		if (!paid()) {
-			if (shortOf(Items.EMERALD) && count(Items.EMERALD_BLOCK) > 0) go(Step.CONVERT);
-			else if (inputEmpty) {
-				// A chest hoppers feed isn't done when it's empty: it's looked into again now and then.
-				if (fed()) {
-					if (!waitingForInput) info("The input chest is empty: waiting for its hoppers to bring more");
-					waitingForInput = true;
-					go(Step.REFILL);
-					return;
-				}
-				info("Nothing left in the input chest to pay with: done");
-				toggle();
-			} else go(Step.TO_INPUT);
+		// Too few emeralds for a trade, and blocks: made into emeralds before anyone's visited.
+		if (!selling() && !paid() && count(Items.EMERALD_BLOCK) > 0) {
+			go(Step.CONVERT);
 			return;
 		}
-		go(Step.PICK);
+		// Stocked up first; then whoever what you carry may pay.
+		if (visit && (stocked || paid() || inputEmpty)) {
+			go(Step.PICK);
+			return;
+		}
+		if (!inputEmpty) {
+			go(Step.TO_INPUT);
+			return;
+		}
+		// Nothing more to take and nobody to pay: waits for restocks and for the input chest to fill.
+		idle(soldOut.values().stream().anyMatch(t -> t > clock) ? "Villagers are sold out: waiting for them to restock"
+			: "Nothing left in the input chest to pay with: waiting for more");
 	}
 
-	/** Whether there's enough of {@code item} on you for a trade (blocks don't count: they're crafted into emeralds first). */
-	private boolean shortOf(Item item) {
-		Integer n = need.get(item);
-		return n != null && count(item) < n;
+	private List<Villager> villagersInRange() {
+		return mc.level.getEntitiesOfClass(Villager.class, mc.player.getBoundingBox().inflate(range.get()));
 	}
 
-	/** Whether you carry enough for a trade: of everything it costs. */
+	/**
+	 * Whether {@code v} is worth going to: of the kind, not sold out, and with an offer what you carry pays for, as far
+	 * as its remembered trades say; one not seen yet is, while you carry anything to pay with.
+	 */
+	private boolean worthVisiting(Villager v) {
+		if (!wanted(v) || soldOut.getOrDefault(v.getId(), Integer.MIN_VALUE) > clock || cantPay.containsKey(v.getId())) return false;
+		VillagerTrades.Known known = VillagerTrades.of(v);
+		if (known == null) return carriesPayment();
+		for (VillagerTrades.Trade t : known.trades()) {
+			Cost c = cost(t);
+			if (c != null && affords(c)) return true;
+		}
+		return false;
+	}
+
+	/** Whether you carry anything a trade might be paid with: emeralds to buy, anything but emeralds to sell. */
+	private boolean carriesPayment() {
+		if (!selling()) return paid();
+		var inv = mc.player.getInventory();
+		for (int i = 0; i < 36; i++) if (!inv.getItem(i).isEmpty() && !bought(inv.getItem(i))) return true;
+		return false;
+	}
+
+	/** What remembered trade {@code t} costs, if it gives what's wanted; else null. */
+	private @Nullable Cost cost(VillagerTrades.Trade t) {
+		String item = BuiltInRegistries.ITEM.getKey(trade.get()).toString();
+		String ench = trade.get() == Items.ENCHANTED_BOOK && !enchantment.get().equals(ANY) ? enchantment.get() : null;
+		if (!t.gives(item, ench, 1)) return null;
+		Item a = BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(t.payment())).orElse(null);
+		Item b = t.paymentB().isEmpty() ? null : BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(t.paymentB())).orElse(null);
+		return a == null ? null : new Cost(a, t.price(), b, t.priceB());
+	}
+
+	private void addCost(Item a, int countA, @Nullable Item b, int countB) {
+		String key = BuiltInRegistries.ITEM.getKey(a) + "|" + (b == null ? "" : BuiltInRegistries.ITEM.getKey(b));
+		costs.merge(key, new Cost(a, countA, b, countB), (x, y) -> new Cost(a, Math.max(x.countA(), y.countA()), b, Math.max(x.countB(), y.countB())));
+	}
+
+	/** Whether you carry what {@code c} asks for (emerald blocks not counted: they're made into emeralds first). */
+	private boolean affords(Cost c) {
+		return count(c.a()) >= c.countA() && (c.b() == null || count(c.b()) >= c.countB());
+	}
+
+	/** Whether you carry enough for one trade, paid any of the ways it's paid. */
 	private boolean paid() {
-		for (Item item : need.keySet()) if (shortOf(item)) return false;
-		return true;
+		for (Cost c : costs.values()) if (affords(c)) return true;
+		return false;
 	}
 
-	/** Whether {@code stack} is something a trade is paid with. */
-	private boolean payment(ItemStack stack) {
-		return need.containsKey(stack.getItem()) || stack.is(Items.EMERALD_BLOCK) && need.containsKey(Items.EMERALD);
-	}
-
-	/** What {@code o} costs, noted. */
+	/** What {@code o} costs, noted as one more way to pay. */
 	private void learn(MerchantOffer o) {
 		if (!learned) {
 			// The defaults give way to what's really asked.
-			need.clear();
+			costs.clear();
 			learned = true;
 		}
-		need.merge(o.getCostA().getItem(), o.getCostA().getCount(), Math::max);
-		if (!o.getCostB().isEmpty()) need.merge(o.getCostB().getItem(), o.getCostB().getCount(), Math::max);
+		ItemStack b = o.getCostB();
+		addCost(o.getCostA().getItem(), o.getCostA().getCount(), b.isEmpty() ? null : b.getItem(), b.isEmpty() ? 0 : b.getCount());
 	}
 
 	/** What remembered villagers in range (VillagerTrades) ask for the trade, noted. */
 	private void learnKnown() {
-		String item = BuiltInRegistries.ITEM.getKey(trade.get()).toString();
-		String ench = trade.get() == Items.ENCHANTED_BOOK && !enchantment.get().equals(ANY) ? enchantment.get() : null;
-		for (Villager v : mc.level.getEntitiesOfClass(Villager.class, mc.player.getBoundingBox().inflate(range.get()))) {
+		for (Villager v : villagersInRange()) {
 			VillagerTrades.Known known = wanted(v) ? VillagerTrades.of(v) : null;
 			if (known == null) continue;
 			for (VillagerTrades.Trade t : known.trades()) {
-				if (!t.gives(item, ench, 1)) continue;
+				Cost c = cost(t);
+				if (c == null) continue;
 				if (!learned) {
-					need.clear();
+					costs.clear();
 					learned = true;
 				}
-				BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(t.payment())).ifPresent(i -> need.merge(i, t.price(), Math::max));
-				if (!t.paymentB().isEmpty()) BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(t.paymentB())).ifPresent(i -> need.merge(i, t.priceB(), Math::max));
+				addCost(c.a(), c.countA(), c.b(), c.countB());
 			}
 		}
 	}
@@ -409,66 +505,114 @@ public class AutoTrader extends Module {
 	// ---- Chests -------------------------------------------------------------------------------------------------
 
 	/**
-	 * Takes what the trade costs from the input (emerald blocks for emeralds too), as many trades' worth as fit while
-	 * leaving room for what's got.
+	 * Takes what the trade is paid with from the input, leaving room for what's got: to buy, what the trade costs
+	 * (emerald blocks for emeralds too), as many trades' worth as fit; to sell, what villagers are known to take (and,
+	 * while some haven't been seen, everything else too), shared out over the free slots.
 	 */
 	private void stock() {
 		if (view == null) {
-			if (ticks > 1) return;
-			Myriad.containers().open(this, parse(input.get()), OPEN_TICKS, Placement.Options.forServer()).whenComplete((v, t) -> {
+			if (ticks != 1) return;
+			Myriad.containers().open(this, input.pos(), OPEN_TICKS, Placement.Options.forServer()).whenComplete((v, t) -> {
 				if (t != null || v == null) {
-					warn("Couldn't open the input chest");
-					toggle();
+					openFailed("input chest", input.pos());
 					return;
 				}
 				view = v;
-				int trades = tradesThatFit(Math.max(1, emptySlots() - (selling() ? 1 : ROOM)));
+				openTries = 0;
+				int reserve = selling() ? 1 : ROOM;
+				List<Item> order = new ArrayList<>();
+				for (Cost c : costs.values()) {
+					if (!order.contains(c.a())) order.add(c.a());
+					if (c.b() != null && !order.contains(c.b())) order.add(c.b());
+				}
+				// To sell: what villagers not seen yet may take is anyone's guess, so then everything; else what's known to sell.
+				boolean unseen = villagersInRange().stream().anyMatch(vi -> wanted(vi) && VillagerTrades.of(vi) == null);
+				if (selling() && (unseen || costs.isEmpty()))
+					for (ItemStack st : v.stacks()) if (!st.isEmpty() && !bought(st) && !order.contains(st.getItem())) order.add(st.getItem());
+				order.removeIf(i -> v.count(st -> takes(i, st)) == 0);
+				Map<Item, Integer> perTrade = new LinkedHashMap<>();
+				for (Cost c : costs.values()) {
+					perTrade.merge(c.a(), c.countA(), Math::max);
+					if (c.b() != null) perTrade.merge(c.b(), c.countB(), Math::max);
+				}
+				int trades = selling() ? 0 : tradesThatFit(perTrade, Math.max(1, emptySlots() - reserve));
+				int[] took = {0};
 				CompletableFuture<Integer> chain = CompletableFuture.completedFuture(0);
-				for (var e : need.entrySet()) {
-					Item item = e.getKey();
-					int amount = Math.max(1, trades * e.getValue() - count(item));
-					chain = chain.thenCompose(n -> v.take(s -> s.is(item) || item == Items.EMERALD && s.is(Items.EMERALD_BLOCK), Containers.Transfer.upTo(amount)));
+				for (int k = 0; k < order.size(); k++) {
+					Item item = order.get(k);
+					int left = order.size() - k;
+					chain = chain.thenCompose(n -> {
+						took[0] += n;
+						int amount = selling() ? Math.max(1, (emptySlots() - reserve) / left) * item.getDefaultMaxStackSize()
+							: Math.max(1, trades * perTrade.getOrDefault(item, 1) - count(item));
+						return v.take(st -> takes(item, st), Containers.Transfer.upTo(amount));
+					});
 				}
 				chain.whenComplete((n, t2) -> {
+					if (n != null) took[0] += n;
 					closeView();
-					// Still not enough to pay for one (blocks counted): there's no more.
-					boolean enough = true;
-					for (var e : need.entrySet()) {
-						int have = count(e.getKey()) + (e.getKey() == Items.EMERALD ? count(Items.EMERALD_BLOCK) * 9 : 0);
-						if (have < e.getValue()) enough = false;
+					// Nothing more came: the input has nothing left to give. Something new: who couldn't be paid may be now.
+					stocked = true;
+					if (took[0] == 0) inputEmpty = true;
+					else {
+						waitingFor = null;
+						cantPay.clear();
 					}
-					if (!enough) inputEmpty = true;
-					else waitingForInput = false;
 					go(Step.START);
 				});
 			});
 		}
 	}
 
-	/** Whether a hopper feeds the input chest (either half of a double): then it may fill up again once empty. */
-	private boolean fed() {
-		BlockPos in = parse(input.get());
-		if (in == null) return false;
-		List<BlockPos> halves = new ArrayList<>(List.of(in));
-		BlockState state = mc.level.getBlockState(in);
-		if (state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE)
-			halves.add(in.relative(ChestBlock.getConnectedDirection(state)));
-		for (BlockPos half : halves) {
-			for (Direction d : Direction.values()) {
-				BlockPos next = half.relative(d);
-				BlockState hopper = mc.level.getBlockState(next);
-				if (hopper.getBlock() instanceof HopperBlock && next.relative(hopper.getValue(HopperBlock.FACING)).equals(half)) return true;
-			}
-		}
-		return false;
+	/** Whether {@code stack} in the input is taken as {@code item} (emerald blocks as emeralds). */
+	private static boolean takes(Item item, ItemStack stack) {
+		return stack.is(item) || item == Items.EMERALD && stack.is(Items.EMERALD_BLOCK);
 	}
 
-	/** How many trades' payment fits in {@code slots} free slots. */
-	private int tradesThatFit(int slots) {
+	/** The chest at {@code pos}: both halves of a double one. */
+	private List<BlockPos> halves(BlockPos pos) {
+		List<BlockPos> halves = new ArrayList<>(List.of(pos));
+		BlockState state = mc.level.getBlockState(pos);
+		if (state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE)
+			halves.add(pos.relative(ChestBlock.getConnectedDirection(state)));
+		return halves;
+	}
+
+	@Subscribe
+	private void onRender(RenderEvent e) {
+		if (!showChests.get() || mc.level == null) return;
+		BlockPos in = input.pos(), out = output.pos();
+		if (in != null) for (BlockPos p : halves(in)) e.block(p, look, inputColor.argb());
+		if (out != null) for (BlockPos p : halves(out)) e.block(p, look, outputColor.argb());
+	}
+
+	/** "Input" and "Output" over the chests (the middle of a double one). */
+	@Subscribe
+	private void onLabels(Render2DEvent e) {
+		if (!showChests.get() || mc.level == null) return;
+		label(e, input.pos(), "Input", inputColor.argb());
+		label(e, output.pos(), "Output", outputColor.argb());
+	}
+
+	private void label(Render2DEvent e, @Nullable BlockPos pos, String text, int color) {
+		if (pos == null) return;
+		List<BlockPos> halves = halves(pos);
+		double x = 0, z = 0;
+		for (BlockPos p : halves) {
+			x += p.getX() + 0.5;
+			z += p.getZ() + 0.5;
+		}
+		Vec3 top = new Vec3(x / halves.size(), pos.getY() + 1.3, z / halves.size());
+		WorldLabel.draw(e.canvas(), top, WorldLabel.distanceScale(top), List.of(new WorldLabel.Segment(text, 0xFFFFFFFF)), WorldLabel.Background.ROUNDED,
+			0xAA000000, color, true);
+	}
+
+	/** How many trades' payment ({@code perTrade}: each item's most for one) fits in {@code slots} free slots. */
+	private static int tradesThatFit(Map<Item, Integer> perTrade, int slots) {
 		int n = 1;
 		while (n < 64 * 36) {
 			int used = 0;
-			for (var e : need.entrySet()) used += (int) Math.ceil((double) (n + 1) * e.getValue() / e.getKey().getDefaultMaxStackSize());
+			for (var e : perTrade.entrySet()) used += (int) Math.ceil((double) (n + 1) * e.getValue() / e.getKey().getDefaultMaxStackSize());
 			if (used > slots) break;
 			n++;
 		}
@@ -478,25 +622,40 @@ public class AutoTrader extends Module {
 	/** Puts everything bought into the output chest. */
 	private void deposit() {
 		if (view == null) {
-			if (ticks > 1) return;
-			Myriad.containers().open(this, parse(output.get()), OPEN_TICKS, Placement.Options.forServer()).whenComplete((v, t) -> {
+			if (ticks != 1) return;
+			Myriad.containers().open(this, output.pos(), OPEN_TICKS, Placement.Options.forServer()).whenComplete((v, t) -> {
 				if (t != null || v == null) {
-					warn("Couldn't open the output chest");
-					toggle();
+					openFailed("output chest", output.pos());
 					return;
 				}
 				view = v;
+				openTries = 0;
 				v.put(this::bought, Containers.Transfer.all()).whenComplete((n, t2) -> {
 					closeView();
-					if (!room() && boughtCount() > 0) {
-						warn("The output chest is full");
-						toggle();
-						return;
-					}
-					go(Step.START);
+					if (n != null && n > 0) waitingFor = null;
+					// Whatever's left didn't fit: waited on till there's room (a hopper may empty it).
+					if (boughtCount() > 0) idle("The output chest is full: waiting for room");
+					else if (!room()) idle("Your inventory is full: waiting");
+					else go(Step.START);
 				});
 			});
 		}
+	}
+
+	/** A chest that didn't open: stops if it's gone, else it's tried again: twice more soon, then after a wait. */
+	private void openFailed(String name, @Nullable BlockPos pos) {
+		if (pos == null || mc.level == null || !(mc.level.getBlockEntity(pos) instanceof Container)) {
+			warn("The " + name + " is gone");
+			toggle();
+			return;
+		}
+		if (++openTries < OPEN_TRIES) {
+			// The open goes at tick 1 of the step (see stock and deposit).
+			ticks = -OPEN_RETRY_TICKS;
+			return;
+		}
+		openTries = 0;
+		idle("Couldn't open the " + name + ": trying again soon");
 	}
 
 	private void closeView() {
@@ -510,7 +669,7 @@ public class AutoTrader extends Module {
 	 * and one shift-click crafts it all.
 	 */
 	private void convert() {
-		if (ticks == 1 && !need.containsKey(Items.EMERALD)) {
+		if (ticks == 1 && selling()) {
 			go(Step.START);
 			return;
 		}
@@ -530,8 +689,11 @@ public class AutoTrader extends Module {
 				mc.gameMode.handleContainerInput(InventoryMenu.CONTAINER_ID, InventoryMenu.RESULT_SLOT, 0, ContainerInput.QUICK_MOVE, mc.player);
 			}
 		}
-		// A round trip for the emeralds to arrive.
-		if (ticks > 2 + Myriad.server().ping() / 50) go(Step.START);
+		// A round trip for the emeralds to arrive; villagers they couldn't pay before may take them now.
+		if (ticks > 2 + Myriad.server().ping() / 50) {
+			cantPay.clear();
+			go(Step.START);
+		}
 	}
 
 	private @Nullable RecipeDisplayEntry emeraldRecipe() {
@@ -555,31 +717,20 @@ public class AutoTrader extends Module {
 		return v.getVillagerData().profession().unwrapKey().map(k -> k.identifier().toString().equals(profession.get())).orElse(false);
 	}
 
-	/** The nearest villager of the kind not known to be sold out; else waits for a restock. */
+	/** The nearest villager worth going to (see worthVisiting); with none, START decides what's next. */
 	private void pickVillager() {
 		Villager best = null;
 		double bestDist = Double.MAX_VALUE;
-		for (Villager v : mc.level.getEntitiesOfClass(Villager.class, mc.player.getBoundingBox().inflate(range.get()))) {
-			if (!wanted(v) || soldOut.getOrDefault(v.getId(), Integer.MIN_VALUE) > clock || knownWithout(v)) continue;
+		for (Villager v : villagersInRange()) {
+			if (!worthVisiting(v)) continue;
 			double d = v.distanceToSqr(mc.player);
 			if (d < bestDist) {
 				bestDist = d;
 				best = v;
 			}
 		}
-		if (best != null) {
-			villager = best;
-			go(Step.TO_VILLAGER);
-			return;
-		}
-		if (soldOut.isEmpty()) {
-			warn("No villager in range sells that");
-			toggle();
-			return;
-		}
-		// Everyone's sold out: what's bought goes away meanwhile, then the restock is waited for.
-		if (boughtCount() > 0) go(Step.TO_OUTPUT);
-		else go(Step.RESTOCK);
+		villager = best;
+		go(best != null ? Step.TO_VILLAGER : Step.START);
 	}
 
 	/** Looks at the villager, and once the server has the look, opens its trades (their screen stays hidden). */
@@ -594,6 +745,7 @@ public class AutoTrader extends Module {
 		float yaw = (float) Math.toDegrees(Math.atan2(-d.x, d.z));
 		float pitch = (float) -Math.toDegrees(Math.atan2(d.y, d.horizontalDistance()));
 		offers = null;
+		tried.clear();
 		Myriad.rotations().request(this, yaw, pitch, Rotations.PRIORITY_HIGH, Rotations.Options.INSTANT, () -> {
 			if (step != Step.LOOK || !isEnabled() || mc.player == null) return;
 			mc.gameMode.interact(mc.player, v, new EntityHitResult(v, at), InteractionHand.MAIN_HAND);
@@ -618,18 +770,28 @@ public class AutoTrader extends Module {
 		return true;
 	}
 
-	/** The trades are in: the one asked for, if it's there and in stock; else this villager is left for now. */
+	/**
+	 * The trades are in (or one came to nothing): the next offer with what's wanted, in stock and paid for by what you
+	 * carry. With none left, the villager waits: for you to stock up, when an offer is there you can't pay; else for its
+	 * restock.
+	 */
 	private void chooseOffer() {
 		offer = -1;
+		boolean unpaid = false;
 		for (int i = 0; i < offers.size(); i++) {
 			MerchantOffer o = offers.get(i);
-			if (bought(o.getResult())) learn(o);
-			if (offer < 0 && bought(o.getResult()) && !o.isOutOfStock()) offer = i;
+			if (!bought(o.getResult())) continue;
+			learn(o);
+			if (o.isOutOfStock()) continue;
+			// One that came to nothing while paid for is sold out on the server.
+			if (!canPay(o)) unpaid = true;
+			else if (offer < 0 && !tried.contains(i)) offer = i;
 		}
 		if (offer < 0) {
 			closeTrades();
-			soldOut.put(villager.getId(), clock + RESTOCK_TICKS);
-			go(Step.PICK);
+			if (unpaid) cantPay.put(villager.getId(), clock + RESTOCK_TICKS);
+			else soldOut.put(villager.getId(), clock + RESTOCK_TICKS);
+			go(Step.START);
 			return;
 		}
 		boughtBefore = -1;
@@ -637,23 +799,23 @@ public class AutoTrader extends Module {
 	}
 
 	/**
-	 * One buy a round: the trade chosen (its payment moved in) and the result shift-clicked, which buys for as long as
-	 * the payment lasts. Next round, if nothing came of it (sold out, or out of emeralds), this villager is done for now.
+	 * One trade a round: the offer chosen (its payment moved in) and the result shift-clicked, which trades for as long as
+	 * the payment lasts. Next round, if nothing came of it (sold out, or the payment gone), the next offer.
 	 */
 	private void buy() {
 		if (!(mc.player.containerMenu instanceof MerchantMenu menu)) {
-			go(Step.PICK);
+			go(Step.START);
 			return;
 		}
 		if (boughtBefore >= 0) {
-			// The last buy's answer takes a round trip.
+			// The last trade's answer takes a round trip.
 			if (ticks < 2 + Myriad.server().ping() / 50) return;
 			if (boughtCount() <= boughtBefore) {
-				closeTrades();
-				if (canPay(offers.get(offer))) soldOut.put(villager.getId(), clock + RESTOCK_TICKS);
-				go(Step.START);
+				tried.add(offer);
+				chooseOffer();
 				return;
 			}
+			waitingFor = null;
 		}
 		if (!room()) {
 			closeTrades();
@@ -661,8 +823,8 @@ public class AutoTrader extends Module {
 			return;
 		}
 		if (!canPay(offers.get(offer))) {
-			closeTrades();
-			go(Step.START);
+			tried.add(offer);
+			chooseOffer();
 			return;
 		}
 		if (!Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, 2) || !Myriad.inventory().prepareClick()) return;
