@@ -35,6 +35,7 @@ import dev.myriadclient.essentials.modules.automation.AutoMend;
 import dev.myriadclient.essentials.modules.automation.AutoPortal;
 import dev.myriadclient.essentials.modules.automation.AutoCraft;
 import dev.myriadclient.essentials.modules.automation.AutoRename;
+import dev.myriadclient.essentials.modules.automation.VillagerRoller;
 import dev.myriadclient.essentials.modules.automation.AutoSort;
 import dev.myriadclient.essentials.modules.automation.AutoTool;
 import dev.myriadclient.essentials.modules.automation.AutoWalk;
@@ -78,7 +79,9 @@ import dev.myriadclient.essentials.modules.world.PlacementTweaks;
 import dev.myriadclient.essentials.modules.world.Reach;
 import dev.myriadclient.essentials.modules.world.Scaffold;
 import dev.myriadclient.essentials.modules.world.WallInteract;
+import dev.myriadclient.essentials.util.NamedChoiceSetting;
 import dev.myriadclient.essentials.util.PearlOwners;
+import dev.myriadclient.essentials.util.VillagerTrades;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.List;
@@ -96,6 +99,8 @@ public final class Essentials implements MyriadAddon {
 	@Override
 	public void initialize(AddonContext ctx) {
 		PearlOwners.load(ctx.storage());
+		VillagerTrades.load(ctx.storage());
+		NamedChoiceSetting.register(ctx.settingWidgets());
 		// Modules the ready-made control panels below combine.
 		ElytraTweaks elytraTweaks = new ElytraTweaks();
 		RotationLock rotationLock = new RotationLock();
@@ -120,7 +125,7 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerModules(render, new EntityESP(), new Tracers(), new Nametags(), new StorageESP(), new BlockESP(), new BlockHighlight(), new FullBright(),
 			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips(), new Chat(), new ExtraTab());
 		ctx.registerModules(automation, autoEat, new AutoTool(), new AutoWalk(), new AntiAfk(), new AutoMend(), new AutoSort(), new AutoRename(),
-			new AutoCraft(), new JunkDropper(), new Printer(), new AutoPortal());
+			new AutoCraft(), new VillagerRoller(), new JunkDropper(), new Printer(), new AutoPortal());
 		// Baritone's settings, made from Baritone's own list, with its path and goal drawn: only when it's installed.
 		List<Baritone.SettingInfo> baritone = Baritone.settings();
 		if (!baritone.isEmpty()) ctx.registerModule(world, new BaritoneSettings(baritone));
