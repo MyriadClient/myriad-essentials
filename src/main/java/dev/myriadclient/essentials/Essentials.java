@@ -33,6 +33,8 @@ import dev.myriadclient.essentials.modules.automation.AntiAfk;
 import dev.myriadclient.essentials.modules.automation.AutoEat;
 import dev.myriadclient.essentials.modules.automation.AutoMend;
 import dev.myriadclient.essentials.modules.automation.AutoPortal;
+import dev.myriadclient.essentials.modules.automation.AutoCraft;
+import dev.myriadclient.essentials.modules.automation.AutoRename;
 import dev.myriadclient.essentials.modules.automation.AutoSort;
 import dev.myriadclient.essentials.modules.automation.AutoTool;
 import dev.myriadclient.essentials.modules.automation.AutoWalk;
@@ -117,7 +119,8 @@ public final class Essentials implements MyriadAddon {
 		ctx.registerModules(player, new InventoryTweaks(), new Replenish(), new MiddleClick(), new AutoReconnect());
 		ctx.registerModules(render, new EntityESP(), new Tracers(), new Nametags(), new StorageESP(), new BlockESP(), new BlockHighlight(), new FullBright(),
 			new NoRender(), new TimeOfDay(), new ViewModel(), new Zoom(), new FreeLook(), new Freecam(), new Tooltips(), new Chat(), new ExtraTab());
-		ctx.registerModules(automation, autoEat, new AutoTool(), new AutoWalk(), new AntiAfk(), new AutoMend(), new AutoSort(), new JunkDropper(), new Printer(), new AutoPortal());
+		ctx.registerModules(automation, autoEat, new AutoTool(), new AutoWalk(), new AntiAfk(), new AutoMend(), new AutoSort(), new AutoRename(),
+			new AutoCraft(), new JunkDropper(), new Printer(), new AutoPortal());
 		// Baritone's settings, made from Baritone's own list, with its path and goal drawn: only when it's installed.
 		List<Baritone.SettingInfo> baritone = Baritone.settings();
 		if (!baritone.isEmpty()) ctx.registerModule(world, new BaritoneSettings(baritone));
