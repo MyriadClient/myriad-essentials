@@ -1,20 +1,10 @@
 package dev.myriadclient.essentials.modules.movement.elytra;
 
 import dev.myriadclient.api.Myriad;
-import dev.myriadclient.api.elytra.Elytra;
 import dev.myriadclient.api.event.events.InputEvent;
-import dev.myriadclient.api.event.events.PacketEvent;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
-import net.minecraft.util.Mth;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import dev.myriadclient.api.event.events.KeyEvent;
 import dev.myriadclient.api.event.events.MouseButtonEvent;
-import dev.myriadclient.api.service.Rotations;
 import dev.myriadclient.api.setting.KeybindSetting;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 import dev.myriadclient.api.elytra.NoDurability;
 import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
@@ -23,7 +13,6 @@ import dev.myriadclient.api.hook.Hook;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Modules;
 import dev.myriadclient.api.module.Tags;
-import dev.myriadclient.api.setting.DoubleSetting;
 import dev.myriadclient.api.setting.BoolSetting;
 
 /**
@@ -33,12 +22,9 @@ import dev.myriadclient.api.setting.BoolSetting;
  * the glide (Grim, 2b2t) it swaps the elytra for a chestplate from your inventory while you glide and back for a moment
  * every few ticks, so the server never glides you long enough to wear it; elsewhere it breaks the glide briefly instead.
  * It also opens the elytra again if the glide drops in mid-air for no reason.</li>
- * <li><b>Air Brake</b>: gliding at a wall fast enough for the hit to hurt, within Brake Distance of it (3 blocks, so the
- * rest of the flight is left alone), the server sees you look back the way you're
- * moving (your view stays yours, your up and down angle too), so the glide, a rocket's push included, takes the speed
- * off whichever way you fly, until it's safe.</li>
- * <li><b>Glide Bind</b> starts the glide: at once in the air, or with one jump from the ground and the glide straight
- * after, without timing a double jump.</li>
+ * <li><b>Glide Bind</b> starts the glide the first moment the server allows one (off the ground and out of water): at
+ * once in the air, with one jump from the ground where there's room, or as you come out of water or drop out of a gap,
+ * without timing a double jump.</li>
  * </ul>
  * <p>
  * It works for whoever flies: {@link ElytraFly}, whose types ask it through {@link #behaviourFor}, and with When You
@@ -81,21 +67,15 @@ public class ElytraTweaks extends Module implements NoDurability.Owner {
 	private final BoolSetting noDurabilitySetting = sgGeneral.bool("No Durability").description("Keep the elytra from wearing out, whoever "
 		+ "flies (you, or Elytra Fly): swapped for a chestplate while you glide where the server simulates the glide, broken briefly elsewhere.")
 		.defaultValue(true).build();
-	private final BoolSetting airBrake = sgGeneral.bool("Air Brake").description("Gliding at a wall fast enough for the hit to hurt, the server "
-		+ "sees you look back the way you came (your view stays yours, the up and down angle too) until it's safe: the glide, or a rocket's push, "
-		+ "takes the speed off whichever way you fly. Not while Elytra Fly flies.").build();
-	private final DoubleSetting brakeDistance = sgGeneral.decimal("Brake Distance").description("How close the wall has to be before Air "
-		+ "Brake comes on, in blocks. Closer leaves your flight alone until the last moment; further takes more of a fast hit off.")
-		.defaultValue(3).range(1, 16).decimals(1).visible(airBrake::get).build();
-	private final KeybindSetting glideBind = sgGeneral.keybind("Glide Bind").description("Start gliding: at once in the air, or one jump from "
-		+ "the ground and the glide straight after.").build();
+	private final KeybindSetting glideBind = sgGeneral.keybind("Glide Bind").description("Start gliding the first moment the server allows "
+		+ "(off the ground, out of water): at once in the air, one jump from the ground where there's room, or as you come out of water.").build();
 
 	/** The swapping for when you fly yourself; Elytra Fly's types each run their own. */
 	private final NoDurability noDur = Myriad.elytra().noDurability(this);
 	private boolean running;
 
 	public ElytraTweaks() {
-		super(Tags.MOVEMENT, "Elytra Tweaks", "No Durability, Air Brake and a bind to start the glide.");
+		super(Tags.MOVEMENT, "Elytra Tweaks", "No Durability and a bind to start the glide.");
 		formerNames("Elytra Swap");
 	}
 
@@ -134,10 +114,6 @@ public class ElytraTweaks extends Module implements NoDurability.Owner {
 	@Override
 	protected void onDisable() {
 		stop();
-		braking = releasing = false;
-		brakeHold = 0;
-		if (piloting) Myriad.elytra().removePilot(brakePilot);
-		piloting = false;
 		jumps.clear();
 	}
 
@@ -156,7 +132,6 @@ public class ElytraTweaks extends Module implements NoDurability.Owner {
 	private void onTick(TickEvent.Pre e) {
 		if (inGame()) {
 			startGlide();
-			brake();
 		}
 		if (!inGame() || !swapsForYou()) {
 			stop();
@@ -186,6 +161,12 @@ public class ElytraTweaks extends Module implements NoDurability.Owner {
 	/** Ticks the glide is waited for after the bind, the elytra worn and you off the ground. */
 	private int glideWait;
 	private static final int GLIDE_WAIT_TICKS = 12;
+	/**
+	 * Ticks the bind stays armed for a glide that can't start yet: the server only starts one off the ground and out of
+	 * water, so in water, or on the ground with no room to jump (a gap you crawl through), it starts the tick you're out.
+	 */
+	private int armed;
+	private static final int ARMED_TICKS = 100;
 
 	@Subscribe
 	private void onKey(KeyEvent e) {
@@ -199,9 +180,28 @@ public class ElytraTweaks extends Module implements NoDurability.Owner {
 
 	private void glidePressed() {
 		if (!inGame() || mc.player.isFallFlying() || !jumps.isEmpty()) return;
-		if (mc.player.onGround()) jumps.addAll(java.util.List.of(true, false, true));
-		else jumps.addAll(java.util.List.of(false, true));
+		armed = ARMED_TICKS;
+		tryGlide();
+	}
+
+	/**
+	 * Starts the glide if it can now: in the air, the jump key let go then pressed; on the ground with room above, a jump
+	 * first. In water (the server won't start a glide there) or on the ground with no room to jump, it stays armed.
+	 */
+	private void tryGlide() {
+		var p = mc.player;
+		if (armed <= 0 || !jumps.isEmpty() || p.isFallFlying()) return;
+		if (p.isInLiquid()) return;
+		if (!p.onGround()) jumps.addAll(java.util.List.of(false, true));
+		else if (roomToJump()) jumps.addAll(java.util.List.of(true, false, true));
+		else return;
+		armed = 0;
 		glideWait = GLIDE_WAIT_TICKS;
+	}
+
+	/** Whether a jump would lift you: no block right above your head (a one-block gap has none). */
+	private boolean roomToJump() {
+		return mc.level.noCollision(mc.player, mc.player.getBoundingBox().move(0, 0.5, 0));
 	}
 
 	/** The jump key for this tick while a glide is being started. */
@@ -217,111 +217,17 @@ public class ElytraTweaks extends Module implements NoDurability.Owner {
 		e.jump = jumps.poll();
 	}
 
-	/** Gives up on a glide that didn't start in time (no elytra worn, landed, in water). */
+	/** An armed bind starts the glide once it can; one started that didn't take in time (no elytra worn, landed) is dropped. */
 	private void startGlide() {
-		if (jumps.isEmpty()) return;
-		if (mc.player.isFallFlying() || --glideWait < 0) jumps.clear();
-	}
-
-	// ---- Air Brake ----------------------------------------------------------------------------------------------
-
-	/**
-	 * Fastest a glide may hit a wall without hurting, in blocks a tick: the hit hurts by ten times the speed it loses,
-	 * less three.
-	 */
-	private static final double SAFE_SPEED = 0.28;
-	/** The yaw the server gets while braking: back along the motion across as it was when the brake began. */
-	private float brakeYaw;
-	/** Step, in blocks, the path ahead is checked at for a wall. */
-	private static final double LOOK_STEP = 0.25;
-	/** Ticks the brake holds after the danger is gone, so it doesn't flick on and off. */
-	private static final int BRAKE_HOLD_TICKS = 4;
-	private boolean braking, releasing, piloting;
-	private int brakeHold;
-	/** Steers the glide by the look sent while it brakes. */
-	private final Elytra.Pilot brakePilot = new Elytra.Pilot() {
-		@Override
-		public boolean steers() {
-			return true;
+		if (mc.player.isFallFlying()) {
+			armed = 0;
+			jumps.clear();
+			return;
 		}
-	};
-
-	/** While you glide yourself, looks up for the server before a wall you'd hit fast enough to be hurt. */
-	private void brake() {
-		var p = mc.player;
-		boolean danger = airBrake.get() && p.isFallFlying() && !ElytraFlight.flightModuleOn() && wallAhead();
-		if (danger) brakeHold = BRAKE_HOLD_TICKS;
-		else if (brakeHold > 0) brakeHold--;
-		// A rocket still pushing holds the brake till it burns out: let go sooner, it pushed you back at the wall along your
-		// own look, the brake came on again, and the look swung back and forth.
-		boolean rocket = p.tickCount < rocketUntil;
-		if (danger || braking && (brakeHold > 0 || rocket) && p.isFallFlying()) {
-			releasing = false;
-			if (!braking) {
-				// Back the way you're moving across, your up and down angle kept: the glide turns its speed towards the look
-				// across, so looking back takes the speed off (a rocket's push too), whichever way you fly. Fixed for the
-				// brake: worked out again each tick, it swung round with the motion (a rocket can turn it back), the look
-				// jumping half a turn in a tick, which Grim's simulation and the glide took differently.
-				Vec3 v = p.getDeltaMovement();
-				brakeYaw = (float) Math.toDegrees(Math.atan2(v.x, -v.z));
-				if (!piloting) Myriad.elytra().addPilot(brakePilot);
-				piloting = braking = true;
-			}
-			Myriad.rotations().request(this, brakeYaw, p.getXRot(), Rotations.PRIORITY_HIGH, Rotations.Options.INSTANT, null);
-		} else {
-			endBrake();
+		if (armed > 0) {
+			armed--;
+			tryGlide();
 		}
-	}
-
-	/**
-	 * Ends the brake. The glide keeps following the look sent to the server until that's back on your own: let go at
-	 * once, the glide took your look a tick before the server had it again (Grim, Simulation).
-	 */
-	private void endBrake() {
-		if (braking) {
-			braking = false;
-			brakeHold = 0;
-			releasing = true;
-		}
-		if (!releasing || !piloting) return;
-		float[] sent = Myriad.rotations().rotationForAction();
-		var p = mc.player;
-		if (p == null || Math.abs(Mth.wrapDegrees(sent[0] - p.getYRot())) < 0.5f && Math.abs(sent[1] - p.getXRot()) < 0.5f) {
-			Myriad.elytra().removePilot(brakePilot);
-			piloting = releasing = false;
-		}
-	}
-
-	/** Until when (ticks) a rocket you used while gliding still pushes. */
-	private int rocketUntil;
-
-	@Subscribe(packets = ServerboundUseItemPacket.class)
-	private void onRocket(PacketEvent.Send e) {
-		if (!(e.packet() instanceof ServerboundUseItemPacket use) || mc.player == null || !mc.player.isFallFlying()) return;
-		ItemStack stack = mc.player.getItemInHand(use.hand());
-		if (!stack.is(Items.FIREWORK_ROCKET)) return;
-		var fireworks = stack.get(DataComponents.FIREWORKS);
-		// A rocket's life: ten ticks a flight (one more than it says), and up to twelve at random.
-		rocketUntil = mc.player.tickCount + 10 * ((fireworks != null ? fireworks.flightDuration() : 1) + 1) + 12;
-	}
-
-	/**
-	 * Whether gliding on as you are would run you into a wall fast enough to hurt, within Brake Distance (or the next
-	 * tick, if that goes further): your box carried along your motion meets a block your motion across (not down) runs into.
-	 */
-	private boolean wallAhead() {
-		var p = mc.player;
-		Vec3 v = p.getDeltaMovement();
-		double speed = v.horizontalDistance();
-		if (speed <= SAFE_SPEED) return false;
-		AABB box = p.getBoundingBox();
-		double reach = Math.max(brakeDistance.get(), speed);
-		for (double d = LOOK_STEP; d < reach + LOOK_STEP / 2; d += LOOK_STEP) {
-			double t = Math.min(d, reach) / speed;
-			if (mc.level.noCollision(p, box.move(v.x * t, v.y * t, v.z * t))) continue;
-			// The ground under the glide isn't a wall: only a hit the motion across makes.
-			return !mc.level.noCollision(p, box.move(v.x * t, Math.max(0, v.y * t), v.z * t)) || mc.level.noCollision(p, box.move(0, v.y * t, 0));
-		}
-		return false;
+		if (!jumps.isEmpty() && --glideWait < 0) jumps.clear();
 	}
 }

@@ -10,8 +10,8 @@ import java.util.Locale;
 import static dev.myriadclient.essentials.gametest.ElytraScenes.launch;
 
 /**
- * Elytra Tweaks' Glide Bind (the glide from the ground with one jump, at once in the air) and Air Brake (rocketing at a
- * wall: the hit must not hurt with it, and does without it, so the flight is a real danger).
+ * Elytra Tweaks' Glide Bind (the glide from the ground with one jump, at once in the air) and No Durability over whole
+ * flights.
  */
 public final class ElytraTweaksTests extends EssentialsSuite {
 	private static final String TWEAKS = "myriad-essentials:elytra_tweaks";
@@ -31,7 +31,7 @@ public final class ElytraTweaksTests extends EssentialsSuite {
 		t.player().at(0.5, 0, 0.5, -90, 0);
 		t.waitTicks(10);
 		t.flagsFromHere();
-		t.module(TWEAKS).set("glide_bind", "g").set("air_brake", "false");
+		t.module(TWEAKS).set("glide_bind", "g");
 		t.step("key g click");
 		int ticks = ticksToGlide(t, 20);
 		t.module(TWEAKS).set("glide_bind", "none");
@@ -46,7 +46,7 @@ public final class ElytraTweaksTests extends EssentialsSuite {
 		launch(t, 9000.5, 120, 0.5);
 		t.waitTicks(10);
 		t.flagsFromHere();
-		t.module(TWEAKS).set("glide_bind", "g").set("air_brake", "false");
+		t.module(TWEAKS).set("glide_bind", "g");
 		t.step("key g click");
 		int ticks = ticksToGlide(t, 20);
 		t.waitTicks(20);
@@ -56,83 +56,6 @@ public final class ElytraTweaksTests extends EssentialsSuite {
 		t.check(ticks >= 0 && ticks <= 3 && still, detail);
 		t.note(detail);
 	}
-
-	/**
-	 * Rockets at a wall 45 blocks ahead, east ({@code north} false) or north: the health after the flight, and the gap to
-	 * the wall when the brake first turned the look sent (NaN if it never did).
-	 */
-	private record Hit(float health, double brakeGap, double brakeSpeed) {}
-
-	private static Hit rocketAtWall(TestContext t, boolean brake, double side, boolean north) {
-		var a = t.arena();
-		int x0 = 10000, z0 = (int) side;
-		a.forceload(x0 - 60, z0 - 60, x0 + 60, z0 + 60);
-		if (north) a.fill(x0 - 16, 20, z0 - 46, x0 + 16, 100, z0 - 45, "stone");
-		else a.fill(x0 + 45, 20, z0 - 16, x0 + 46, 100, z0 + 16, "stone");
-		t.player().give(38, "elytra").give(0, "firework_rocket", 16).select(0);
-		launch(t, x0 + 0.5, 60, z0 + 0.5);
-		float yaw = north ? 180 : -90;
-		t.player().look(yaw, 0);
-		t.waitTicks(10);
-		t.module(TWEAKS).set("air_brake", String.valueOf(brake)).set("no_durability", "false");
-		t.hold(Key.JUMP).forTicks(2);
-		t.waitTicks(3);
-		t.step("use");
-		t.waitTicks(15);
-		t.step("use");
-		// The wall's face along the flight, and how far from it the brake first came on.
-		double face = north ? a.z(z0 - 45) : a.x(x0 + 45);
-		double[] gap = {Double.NaN, Double.NaN};
-		for (int i = 0; i < 60; i++) {
-			if (Double.isNaN(gap[0])) {
-				double[] at = t.onGame(() -> {
-					var p = net.minecraft.client.Minecraft.getInstance().player;
-					// What the server was last sent (asking for this tick's look would pin it before the brake asks).
-					float sent = dev.myriadclient.api.Myriad.rotations().serverYaw();
-					if (Math.abs(net.minecraft.util.Mth.wrapDegrees(sent - p.getYRot())) < 90) return null;
-					var b = p.getBoundingBox();
-					return new double[] {north ? b.minZ - face : face - b.maxX, p.getDeltaMovement().horizontalDistance()};
-				});
-				if (at != null) gap = at;
-			}
-			t.waitTicks(1);
-		}
-		t.module(TWEAKS).set("air_brake", "false").set("no_durability", "true");
-		return new Hit(t.player().health(), gap[0], gap[1]);
-	}
-
-	@Test(name = "air_brake", tags = "elytra", timeoutTicks = 600)
-	public void airBrake(TestContext t) {
-		t.flagsFromHere();
-		Hit hit = rocketAtWall(t, true, 0.5, false);
-		String detail = String.format(Locale.ROOT, "health %.1f after rocketing at the wall with Air Brake, on %.1f blocks from it at %.2f b/t",
-			hit.health(), hit.brakeGap(), hit.brakeSpeed());
-		// Only close to the wall (Brake Distance 3, or the next tick at that speed): the flight before is left alone.
-		t.check(hit.health() >= 20 && hit.brakeGap() <= Math.max(3, hit.brakeSpeed()) + 0.3, detail);
-		t.note(detail);
-	}
-
-	@Test(name = "air_brake_north", tags = "elytra", timeoutTicks = 600)
-	public void airBrakeNorth(TestContext t) {
-		// The same, flying north: the look goes back the way you came, whichever way that is.
-		t.flagsFromHere();
-		Hit hit = rocketAtWall(t, true, 300.5, true);
-		String detail = String.format(Locale.ROOT, "health %.1f after rocketing north at the wall with Air Brake, on %.1f blocks from it at %.2f b/t",
-			hit.health(), hit.brakeGap(), hit.brakeSpeed());
-		t.check(hit.health() >= 20 && hit.brakeGap() <= Math.max(3, hit.brakeSpeed()) + 0.3, detail);
-		t.note(detail);
-	}
-
-	@Test(name = "no_air_brake", tags = "elytra", timeoutTicks = 600)
-	public void noAirBrake(TestContext t) {
-		// The same flight without it: the wall has to hurt, or the test above proves nothing.
-		float hp = rocketAtWall(t, false, 100.5, false).health();
-		String detail = String.format(Locale.ROOT, "health %.1f after rocketing at the wall without Air Brake", hp);
-		t.check(hp < 20, detail);
-		t.note(detail);
-	}
-
-	// ---- flying yourself with No Durability: the moments drops come in -------------------------------------------
 
 	/** What a run of flights came to: drops on screen, the catch's messages, health and wear. */
 	private static final class Watch {
@@ -155,7 +78,7 @@ public final class ElytraTweaksTests extends EssentialsSuite {
 		t.player().give(38, "elytra").give(1, "diamond_chestplate");
 		if (rockets) t.player().give(0, "firework_rocket", 64);
 		t.player().select(0);
-		t.module(TWEAKS).set("no_durability", String.valueOf(noDurability)).set("air_brake", "false").enable();
+		t.module(TWEAKS).set("no_durability", String.valueOf(noDurability)).enable();
 		Watch w = new Watch();
 		w.before = ElytraScenes.elytraDamage(t);
 		return w;
