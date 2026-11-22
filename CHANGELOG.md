@@ -3,6 +3,31 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.4.0
+
+Needs Myriad 2.3.0, for Minecraft 26.3. With it your inventory stays in step with the server and borrowed slots look
+untouched, however your modules move things.
+
+- **Auto Craft** (Automation): crafts the listed items, as many as your inventory makes, whenever it can, crafting what
+  they need on the way from what you have: list chests with only logs and it planks them first; golden carrots from
+  carrots and gold blocks go through ingots and nuggets, only as much of each as needed. Recipes that fit in two by two
+  are made in your inventory's own grid; others at a crafting table in reach, opened without its screen. A batch is the
+  recipe book's "as many as fit" and one shift-click on the result, so a whole inventory goes in a few batches at once
+  (four stacks of logs into planks in two ticks), kept under 2b2t's click limit and Paper's recipe spam limit. Only as
+  much is made as fits your inventory, so nothing falls on the ground. **Drop** throws what's made out where you look
+  (into hoppers, say). Only recipes your recipe book has unlocked.
+- **Auto Rename** (Automation): gives every one of the listed items in your inventory a name at an anvil in reach. The
+  anvil opens without its screen; each stack goes in, comes out renamed and goes back to its own slot, so your inventory
+  keeps its layout. Each stack costs a level, as by hand. A stack too expensive to rename is skipped and stays where it
+  was. Anvils wear as they would by hand. **Keep Slots** off puts each renamed stack in the first free slot instead:
+  two clicks a stack rather than three, half again as fast (renaming goes in bursts under 2b2t's click limit).
+- **Middle Click** uses pearls and other items from your inventory without them ever showing (swapped in, used and
+  swapped back at once); rockets while gliding are still kept in the hotbar, so the next one never waits.
+- **Elytra Tweaks: Air Brake is gone.** Glide Bind now stays armed for a few seconds and starts the glide the first
+  moment the server allows one (off the ground and out of water): as you surface, or drop out of a gap.
+- **Kill Aura** and **Auto Mend** keep going while a container is held open with its screen closed (Remote Ender
+  Chest's); they still wait while a container's screen is up.
+
 ## 2.3.1
 
 Needs Myriad 2.2.0, for Minecraft 26.3.
