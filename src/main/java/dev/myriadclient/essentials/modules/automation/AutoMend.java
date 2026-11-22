@@ -11,6 +11,7 @@ import dev.myriadclient.api.player.Interactions;
 import dev.myriadclient.api.service.PacketLimits;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.IntSetting;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
@@ -72,7 +73,8 @@ public class AutoMend extends Module {
 	/** Plans at the start of the tick: what to mend next, and the look for this tick's throws. */
 	@Subscribe(inGame = true)
 	private void onTick(TickEvent.Pre e) {
-		if (mc.player.containerMenu != mc.player.inventoryMenu) return;
+		// Not with a container's screen up; one held open with its screen closed (Remote Ender Chest's) doesn't stop it.
+		if (mc.player.containerMenu != mc.player.inventoryMenu && mc.gui.screen() instanceof AbstractContainerScreen<?>) return;
 		int damage = equippedDamage();
 		int landing = landing();
 		throwing = damage > landing;

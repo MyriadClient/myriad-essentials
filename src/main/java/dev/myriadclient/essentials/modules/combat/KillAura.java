@@ -22,6 +22,7 @@ import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.MathUtil;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -165,8 +166,13 @@ public class KillAura extends Module {
 		return lands(t, range, sent[0], sent[1]);
 	}
 
+	/**
+	 * Not with a container's screen up (you can't attack from one); a container held open with its screen closed (Remote
+	 * Ender Chest's) doesn't stop it.
+	 */
 	private boolean paused() {
-		return mc.player.isSpectator() || mc.player.isFallFlying() || mc.player.isUsingItem() || mc.player.containerMenu != mc.player.inventoryMenu;
+		return mc.player.isSpectator() || mc.player.isFallFlying() || mc.player.isUsingItem()
+			|| mc.player.containerMenu != mc.player.inventoryMenu && mc.gui.screen() instanceof AbstractContainerScreen<?>;
 	}
 
 	/**
