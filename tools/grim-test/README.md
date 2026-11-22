@@ -14,7 +14,7 @@ Needs JDK 21 for the server (path in `versions.env`) and Python 3.
 | GrimAC, current build | Whether 2b2t turns on Grim's experimental checks (`./start.sh --experimental` to try with them) |
 | 2b2t's world seed, hard survival, PvP, no spawn protection, Nether and End | Paper tweaks, the queue proxy, plugins |
 | About 2b2t's ping, with `./lag.py` | |
-| 2b2t answering every inventory click, with `answerclicks` (below) | |
+| 2b2t answering clicks on items with components and every click of a quick burst, with `answerclicks` (below) | |
 
 Where 2b2t is known to differ from current Grim, the server is set like 2b2t: Grim's MultiActionsC takes inventory
 clicks over held movement keys and jump (live captures on 2b2t, 2026-10-14, showed its Grim doesn't judge them). The
@@ -26,11 +26,12 @@ doesn't fail a test over those flags (FLAGS_2B2T) unless run as current Grim.
 Dev clients click on `localhost` as on 2b2t (`-Dmyriad.noInputRuleHosts`). For current Grim as shipped: `./start.sh
 --strict`, the client with `-Pstrict` (`./clients N --strict`), and `GRIM_STRICT=1 ./suite`.
 
-A vanilla server sends nothing back for an inventory click that came out as the client predicted; 2b2t answers every
-one, so the later clicks of a burst carry an old state id and the whole inventory comes back after each, a few clicks
-behind. The AnswerClicks plugin (`answerclicks/`, built by `start.sh` once the server has its libraries) does the same:
-`./cmd "answerclicks on"`, or `ANSWER_CLICKS=on ./suite`, which also turns it off for a plain run. `answerclicks pre`
-is harsher than any real server: it resends the inventory as it was before each click, which leaves the client
+A vanilla server sends nothing back for an inventory click that came out as the client predicted. 2b2t does the same
+for plain items, but answers a click on an item with components (a shulker box, a named item) with the slot it went to,
+and the later clicks of a quick burst carry an old state id, so the whole inventory comes back after each, a few clicks
+behind (measured 2026-11-21). The AnswerClicks plugin (`answerclicks/`, built by `start.sh` once the server has its
+libraries) goes further and answers every click, the worst case: `./cmd "answerclicks on"`, or `ANSWER_CLICKS=on
+./suite`, which also turns it off for a plain run. `answerclicks pre` is harsher than any real server: it resends the inventory as it was before each click, which leaves the client
 showing the click undone until something else updates the slot (a stress test; a module acting on that view clicks
 again).
 
