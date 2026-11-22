@@ -3,6 +3,28 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.6.0
+
+Needs Myriad 2.4.0, for Minecraft 26.3. A farming module, and Auto Trader can be left running.
+
+- **Auto Farmer** (Automation): plants the crop you hold on every empty farmland in reach: seeds, carrots, potatoes,
+  beetroot, melon and pumpkin seeds, torchflower seeds and pitcher pods (nether wart on soul sand). Farthest first, so a
+  look never passes over a crop just planted, at the server's place rate.
+- **Auto Trader can be left running.** It no longer stops once there's nothing to do: an empty input chest is looked
+  into again every 30 seconds (filled by hand or by hoppers), sold-out villagers every minute, a full output chest is
+  waited on, and villagers out of range (asleep in a bed elsewhere, say) are waited for. It says once what it's waiting
+  for. It still stops if a chest is gone or out of reach with no Baritone to walk you.
+- **Auto Trader pays any way a trade can be paid.** Each offer counts on its own, so a farmer takes your wheat or your
+  carrots, and with Trade set to Emerald it sells to every villager that buys something you have (wheat and carrots to
+  farmers, iron to an armorer). A book trade crafts emerald blocks into emeralds whenever it runs short.
+- **Auto Trader's chests stay private and show in the world.** Input Chest and Output Chest show dots in the settings
+  rather than coordinates, with **Show** to reveal them and **Set** to take the container you look at; they're left out
+  of shared configs, and commands print "set". While it runs, the input chest is outlined green with an "Input" label
+  and the output blue with "Output" (a new Render group sets the colours and look).
+- Auto Trader, Auto Craft and Auto Rename go by the server's reach, not Reach's: with Reach raised they walked too
+  little, or picked a crafting table or anvil too far away, and the open went unanswered ("Couldn't open the input
+  chest").
+
 ## 2.5.0
 
 Needs Myriad 2.3.0, for Minecraft 26.3. Two villager modules: one rolls a librarian for the book you want, one trades
