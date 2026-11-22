@@ -24,6 +24,7 @@
 			"dev.myriadclient.essentials.gametest.AutoCraftTests",
 			"dev.myriadclient.essentials.gametest.AutoRenameTests",
 			"dev.myriadclient.essentials.gametest.AutoTraderTests",
+			"dev.myriadclient.essentials.gametest.AutoFarmerTests",
 			"dev.myriadclient.essentials.gametest.VillagerRollerTests",
 			"dev.myriadclient.essentials.gametest.InventorySyncTests",
 			"dev.myriadclient.essentials.gametest.AutoSortTests",
