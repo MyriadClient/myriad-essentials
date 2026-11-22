@@ -243,7 +243,8 @@ public class AutoCraft extends Module {
 		BlockPos best = null;
 		double bestDist = Double.MAX_VALUE;
 		for (BlockPos p : BlockPos.betweenClosed(center.offset(-r, -r, -r), center.offset(r, r, r))) {
-			if (!mc.level.getBlockState(p).is(Blocks.CRAFTING_TABLE) || !Reach.canReach(p)) continue;
+			// Within the server's reach, as the open measures (Reach may stretch yours past it).
+			if (!mc.level.getBlockState(p).is(Blocks.CRAFTING_TABLE) || !Reach.canReach(p, Placement.Options.forServer().range())) continue;
 			double d = Vec3.atCenterOf(p).distanceToSqr(eyes);
 			if (d < bestDist) {
 				bestDist = d;
