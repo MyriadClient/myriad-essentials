@@ -168,9 +168,10 @@ public class MiddleClick extends Module {
 	}
 
 	/**
-	 * Uses {@code item} from the off hand or the hotbar, without changing the visible slot; or borrowed from the
-	 * inventory into any hotbar slot but the selected one (what was there swaps places with it, and both go back after).
-	 * While you move the click can wait a few ticks, and the use with it.
+	 * Uses {@code item} from the off hand or the hotbar, without changing the visible slot; or from the inventory without
+	 * it showing anywhere (swapped in, used and swapped back at once). Rockets while gliding are borrowed instead (kept
+	 * in the hotbar while you fly, so the next one needn't wait for a click). While you move the click can wait a few
+	 * ticks, and the use with it.
 	 */
 	private void use(Item item) {
 		if (mc.player.getOffhandItem().is(item)) {
@@ -184,6 +185,18 @@ public class MiddleClick extends Module {
 			int from = Myriad.inventory().findInInventory(s -> s.is(item));
 			if (from < 0) {
 				pending = null;
+				return;
+			}
+			if (!(item == Items.FIREWORK_ROCKET && gliding())) {
+				if (Myriad.inventory().useFromInventory(this, from, () -> {
+					Interactions.useItem(InteractionHand.MAIN_HAND);
+					swing();
+				})) {
+					pending = null;
+				} else {
+					if (pending == null) pendingTicks = PENDING_TICKS;
+					pending = item;
+				}
 				return;
 			}
 			slot = Myriad.inventory().borrow(this, from, s -> true);
