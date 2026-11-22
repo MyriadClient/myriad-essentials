@@ -3,6 +3,30 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.5.0
+
+Needs Myriad 2.3.0, for Minecraft 26.3. Two villager modules: one rolls a librarian for the book you want, one trades
+from a chest into another.
+
+- **Villager Roller** (Automation): rerolls a librarian until it sells the enchanted book you pick (searchable, by
+  name), at its highest level. Stand by the librarian and its lectern: each roll reads the trades without showing their
+  screen, breaks the lectern with your best tool, picks it up (walking over if it bounced away), puts it back once the
+  villager has lost its job, and waits for the new trades, about 3 to 5 seconds a roll. The villager is never hit.
+  **Lock Trade** buys one trade once the book shows up (selling your paper if you have some, else buying the book), so
+  the trades stay; a villager someone has already traded with is left alone, as its trades can't change.
+- **Auto Trader** (Automation): trades with every villager of a kind from an input chest into an output chest. Look at
+  each and press **Set Input** and **Set Output**, then pick the **Profession** and the **Trade** (and, for books, the
+  enchantment). What a trade costs is learned from the villagers and taken from the input: emeralds, emerald blocks
+  (crafted into emeralds), books for book trades, or, with Trade set to Emerald, whatever the villagers buy, carrots
+  say, to sell it for emeralds. It buys from each villager until it's sold out, puts what it got into the output
+  whenever your inventory fills, and stops once the input has nothing left to pay with. An input a hopper feeds is
+  waited on instead, and looked into again every 30 seconds. Sold-out villagers are looked at again every minute for
+  their restock. Baritone walks you between the chests and the villagers when they're out of reach.
+- Both remember each villager's trades once seen, kept per server, so a villager isn't opened again to find out what it
+  sells: Auto Trader skips the ones that don't have the trade. What's remembered holds while the villager keeps its
+  level and job (someone levelling it up while you're away is noticed). **Forget Known Trades** clears it, for a
+  villager re-hired while you were away.
+
 ## 2.4.0
 
 Needs Myriad 2.3.0, for Minecraft 26.3. With it your inventory stays in step with the server and borrowed slots look
