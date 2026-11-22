@@ -52,25 +52,30 @@ final class SortScenes {
 	}
 
 	/** How a {@link #sortPass} goes. */
-	record Sort(boolean middle, boolean held, boolean fullInventory, int clickAfter) {
+	record Sort(boolean middle, boolean held, boolean fullInventory, int clickAfter, int closeAfter) {
 		/** Auto Sort sorts the chest as it's opened. */
-		static final Sort AUTO = new Sort(false, false, false, -1);
+		static final Sort AUTO = new Sort(false, false, false, -1, -1);
 		/** Auto Sort off: Inventory Tweaks' middle-click over a chest slot sorts it. */
-		static final Sort MIDDLE = new Sort(true, false, false, -1);
+		static final Sort MIDDLE = new Sort(true, false, false, -1, -1);
 
 		/** Opened with the right button held a moment (and the middle button held a few ticks), as by hand. */
 		Sort openedByHand() {
-			return new Sort(middle, true, fullInventory, clickAfter);
+			return new Sort(middle, true, fullInventory, clickAfter, closeAfter);
 		}
 
 		/** Your inventory full of torches. */
 		Sort withFullInventory() {
-			return new Sort(middle, held, true, clickAfter);
+			return new Sort(middle, held, true, clickAfter, closeAfter);
 		}
 
 		/** You click a chest slot {@code ticks} after opening it. */
 		Sort clickingAfter(int ticks) {
-			return new Sort(middle, held, fullInventory, ticks);
+			return new Sort(middle, held, fullInventory, ticks, closeAfter);
+		}
+
+		/** You close the chest {@code ticks} after the sort starts. */
+		Sort closingAfter(int ticks) {
+			return new Sort(middle, held, fullInventory, clickAfter, ticks);
 		}
 	}
 
@@ -121,11 +126,6 @@ final class SortScenes {
 		} else {
 			t.step("use");
 		}
-		if (how.clickAfter() >= 0) {
-			t.waitTicks(how.clickAfter());
-			// The second slot of the chest's top row, where the screenshots put it.
-			t.step("cursor slot 1", "mouse 0 click");
-		}
 		if (how.middle()) {
 			t.waitTicks(20);
 			t.step("cursor slot 1");
@@ -137,9 +137,19 @@ final class SortScenes {
 				t.step("mouse 2 click");
 			}
 		}
+		if (how.clickAfter() >= 0) {
+			t.waitTicks(how.clickAfter());
+			// The second slot of the chest's top row, where the screenshots put it.
+			t.step("cursor slot 1", "mouse 0 click");
+		}
+		if (how.closeAfter() >= 0) {
+			t.waitTicks(how.closeAfter());
+			t.step("key escape");
+		}
 		// Sorted on the server: polled until it is (or 20 s).
 		Double took = null;
-		double limit = how.clickAfter() >= 0 ? 6 : 20;
+		boolean stopped = how.clickAfter() >= 0 || how.closeAfter() >= 0;
+		double limit = stopped ? 6 : 20;
 		while (seconds(start) < limit) {
 			if (doubleChestSorted(t)) {
 				took = seconds(start);
@@ -156,13 +166,17 @@ final class SortScenes {
 		List<Stack> chest = chestItems(t, 2, 0, 1);
 		chest.addAll(chestItems(t, 2, 0, 0));
 		for (Stack s : chest) if (s != null) now.merge(s.item(), s.count(), Integer::sum);
-		// Parked in your inventory and not put back would show here (the torches of a full inventory aren't the chest's).
-		for (Stack s : inventorySlots(t).values()) if (SORT_ITEMS.containsKey(s.item())) now.merge(s.item(), s.count(), Integer::sum);
+		// Parked in your inventory and not put back (or put down there on a stop) would show here: the chest's items belong
+		// in the chest (the torches of a full inventory aren't the chest's).
+		Map<String, Integer> yours = new TreeMap<>();
+		for (Stack s : inventorySlots(t).values()) if (SORT_ITEMS.containsKey(s.item())) yours.merge(s.item(), s.count(), Integer::sum);
 		boolean kept = now.equals(totals);
-		boolean sortedOk = took != null || how.clickAfter() >= 0;
-		String text = took != null ? String.format(Locale.ROOT, "sorted in %.1f s", took) : how.clickAfter() >= 0 ? "stopped by the click" : "not sorted in 20 s";
-		String detail = text + (kept ? ", nothing lost" : ", items changed: " + now + " vs " + totals) + ", cursor " + carried;
-		t.check(sortedOk && kept && carried.equals("none"), detail);
+		boolean sortedOk = took != null || stopped;
+		String text = took != null ? String.format(Locale.ROOT, "sorted in %.1f s", took) : how.clickAfter() >= 0 ? "stopped by the click"
+			: how.closeAfter() >= 0 ? "stopped by closing" : "not sorted in 20 s";
+		String detail = text + (kept ? ", nothing lost" : ", chest changed: " + now + " vs " + totals) + (yours.isEmpty() ? "" : ", in your inventory: " + yours)
+			+ ", cursor " + carried;
+		t.check(sortedOk && kept && yours.isEmpty() && carried.equals("none"), detail);
 		t.note(detail);
 	}
 

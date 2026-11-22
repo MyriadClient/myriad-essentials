@@ -28,6 +28,16 @@ public final class InventoryTweaksTests extends EssentialsSuite {
 	}
 
 	@Test(tags = "inventory")
+	public void middleSortClosed(TestContext t) {
+		SortScenes.sortPass(t, Sort.MIDDLE.closingAfter(4));
+	}
+
+	@Test(tags = "inventory")
+	public void middleSortClicked(TestContext t) {
+		SortScenes.sortPass(t, Sort.MIDDLE.clickingAfter(4));
+	}
+
+	@Test(tags = "inventory")
 	public void middleSortHeld(TestContext t) {
 		SortScenes.sortPass(t, Sort.MIDDLE.openedByHand());
 	}

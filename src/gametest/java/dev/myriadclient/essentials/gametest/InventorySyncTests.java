@@ -4,6 +4,7 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.testing.Test;
 import dev.myriadclient.testing.TestContext;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -53,5 +54,48 @@ public final class InventorySyncTests extends EssentialsSuite {
 			back ? "sword and rockets home" : "not as they were");
 		t.check(slot == 3 && shown.equals("1 diamond_sword") && real.equals("16 firework_rocket") && carried.equals("1 diamond_sword") && back, detail);
 		t.note(detail);
+	}
+
+	@Test(name = "creative_screen", tags = "inventory", timeoutTicks = 600)
+	public void creativeScreen(TestContext t) {
+		// The creative screen's own menu has the inventory's id but nothing like its slots: items the server gives you
+		// land in your inventory, and the creative grid stays as it was.
+		String name = t.player().name();
+		t.server().run("gamemode creative " + name);
+		t.server().run("clear " + name);
+		t.waitTicks(10);
+		t.onGame(() -> {
+			Minecraft mc = Minecraft.getInstance();
+			mc.gui.setScreen(new CreativeModeInventoryScreen(mc.player, mc.player.connection.enabledFeatures(), false));
+		});
+		t.waitTicks(20);
+		String before = t.onGame(() -> grid(Minecraft.getInstance()));
+		t.server().run("item replace entity " + name + " hotbar.0 with diamond 5");
+		t.server().run("item replace entity " + name + " inventory.0 with gold_ingot 7");
+		t.waitTicks(40);
+		String after = t.onGame(() -> grid(Minecraft.getInstance()));
+		String held = t.onGame(() -> {
+			var inv = Minecraft.getInstance().player.getInventory();
+			return inv.getItem(0).getCount() + " " + BuiltInRegistries.ITEM.getKey(inv.getItem(0).getItem()).getPath() + ", "
+				+ inv.getItem(9).getCount() + " " + BuiltInRegistries.ITEM.getKey(inv.getItem(9).getItem()).getPath();
+		});
+		t.onGame(() -> Minecraft.getInstance().gui.setScreen(null));
+		t.server().run("clear " + name);
+		t.server().run("gamemode survival " + name);
+		boolean grid = before.equals(after);
+		String detail = String.format(Locale.ROOT, "creative grid %s; inventory: %s", grid ? "unchanged" : "changed: " + after, held);
+		t.check(grid && held.equals("5 diamond, 7 gold_ingot"), detail);
+		t.note(detail);
+	}
+
+	/** What the creative screen's grid shows, slot by slot (its 45 picker slots). */
+	private static String grid(Minecraft mc) {
+		StringBuilder b = new StringBuilder();
+		var menu = mc.player.containerMenu;
+		for (int i = 0; i < 45 && i < menu.slots.size(); i++) {
+			ItemStack s = menu.slots.get(i).getItem();
+			b.append(s.isEmpty() ? "-" : BuiltInRegistries.ITEM.getKey(s.getItem()).getPath() + "x" + s.getCount()).append(' ');
+		}
+		return b.toString().trim();
 	}
 }

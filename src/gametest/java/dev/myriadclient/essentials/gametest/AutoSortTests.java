@@ -27,6 +27,11 @@ public final class AutoSortTests extends EssentialsSuite {
 	}
 
 	@Test(tags = "inventory")
+	public void closedEarly(TestContext t) {
+		SortScenes.sortPass(t, Sort.AUTO.closingAfter(12));
+	}
+
+	@Test(tags = "inventory")
 	public void openedByHand(TestContext t) {
 		SortScenes.sortPass(t, Sort.AUTO.openedByHand());
 	}
