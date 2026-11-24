@@ -3,6 +3,14 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.7.1
+
+Needs Myriad 2.5.1, for Minecraft 26.3.
+
+- **Rotate follows the server.** The Printer's and Auto Portal's Rotate is now Auto, On or Off: Auto (the default) turns
+  only where the server checks the look of each click (current Grim), so it's off on 2b2t and vanilla servers without
+  changing anything. A saved on or off comes back as Auto.
+
 ## 2.7.0
 
 Needs Myriad 2.5.0, for Minecraft 26.3.
