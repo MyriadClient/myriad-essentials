@@ -584,4 +584,59 @@ public final class PrinterTests extends EssentialsSuite {
 		t.check(!r.detail.contains(" 0 wrong") ? false : r.detail.contains("hotbar as it was") && done[0] > 0, detail);
 		t.note(detail);
 	}
+
+	/**
+	 * Blocks made from another with Use Tools: none of their own items carried, only the plain blocks and the tools. A
+	 * stripped log from a log and an axe, farmland and a path from dirt and a hoe or shovel, a potted poppy from a pot and
+	 * a poppy, a candle lit with flint and steel, a campfire put out with a shovel. Random ticks off meanwhile, so the
+	 * farmland doesn't dry back to dirt.
+	 */
+	@Test(tags = "printer", timeoutTicks = 2400)
+	public void tools(TestContext t) {
+		Pass p = new Pass();
+		p.row = List.of("stripped_oak_log[axis=y]", "farmland", "dirt_path", "potted_poppy", "candle[candles=1,lit=true]", "campfire[lit=false]");
+		p.omit = Set.of("stripped_oak_log", "farmland", "dirt_path", "potted_poppy");
+		p.extra = List.of("oak_log", "dirt", "dirt", "flower_pot", "poppy", "diamond_axe", "diamond_hoe", "diamond_shovel", "flint_and_steel");
+		p.stand = new int[] {1, 4};
+		p.stopTicks = 120;
+		p.set("use_tools", "true");
+		t.server().run("gamerule randomTickSpeed 0");
+		Result r;
+		try {
+			r = printerPass(t, p);
+		} finally {
+			t.server().run("gamerule randomTickSpeed 3");
+		}
+		t.check(r.ok && r.detail.startsWith("6/6"), r.detail);
+		t.note(r.detail);
+	}
+
+	/**
+	 * An observer and the log it watches, the observer nearer: placed first it would see the log go in and pulse, so it
+	 * waits for the log.
+	 */
+	@Test(name = "observer_last", tags = "printer", timeoutTicks = 2400)
+	public void observerLast(TestContext t) {
+		Pass p = new Pass();
+		p.row = List.of("observer[facing=east]", "oak_log[axis=y]");
+		// Out of reach till the stand, so the watch sees both go in.
+		p.startX = -20.5;
+		p.stand = new int[] {0};
+		p.stopTicks = 100;
+		int[] firstSeen = {-1, -1};
+		int[] tick = {0};
+		var a = t.arena();
+		BlockPos observer = new BlockPos(a.x(X), a.y(Y), a.z(Z)), log = observer.east();
+		p.watch = () -> {
+			var level = Minecraft.getInstance().level;
+			tick[0]++;
+			if (firstSeen[0] < 0 && !level.getBlockState(observer).isAir()) firstSeen[0] = tick[0];
+			if (firstSeen[1] < 0 && !level.getBlockState(log).isAir()) firstSeen[1] = tick[0];
+		};
+		Result r = printerPass(t, p);
+		boolean after = firstSeen[0] > firstSeen[1] && firstSeen[1] > 0;
+		String detail = r.detail + "; observer at tick " + firstSeen[0] + ", log at " + firstSeen[1];
+		t.check(r.ok && after, detail);
+		t.note(detail);
+	}
 }

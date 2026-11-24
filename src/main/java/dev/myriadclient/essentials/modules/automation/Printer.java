@@ -2,6 +2,7 @@ package dev.myriadclient.essentials.modules.automation;
 
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.build.Blueprint;
+import dev.myriadclient.api.build.BlockRules;
 import dev.myriadclient.api.build.Build;
 import dev.myriadclient.api.build.Target;
 import dev.myriadclient.api.event.Subscribe;
@@ -63,7 +64,10 @@ import java.util.function.Predicate;
  * comparators, note blocks, doors, trapdoors, gates and levers are then clicked into the schematic's setting; candles,
  * sea pickles, snow layers and double slabs get as many as it has. Signs get the schematic's text, front and back
  * ({@link #onSignEditor}); waterlogged blocks get their water and the schematic's water sources are poured, once what
- * holds them in is built ({@link Waterlogging}). A block in the inventory is brought
+ * holds them in is built ({@link Waterlogging}). With Use Tools, what has no item of its own (or isn't carried) is made
+ * from the plain block: a stripped log from a log and an axe, farmland or a path from dirt and a hoe or shovel, a potted
+ * plant from a pot and the plant; candles are lit, campfires put out, and end portal frames get their eyes. An observer
+ * waits for the block it watches, so it doesn't pulse while the rest goes in. A block in the inventory is brought
  * into a hotbar slot other than the one you hold and stays there till the Printer is off (one click a kind), every block
  * of a kind in reach going before the next kind, as fast as the server takes placements; your inventory looks
  * untouched meanwhile, and goes back as it was afterwards, the server asked for it again to be sure (core's builds). It runs as a job ({@code Steps.keepUp}), so the Jobs window and HUD show what it's doing and what
@@ -80,6 +84,9 @@ public class Printer extends Module {
 		+ "turns for blocks that face a way.").defaultValue(true).build();
 	private final BoolSetting clicks = sgGeneral.bool("Click Settings").description("After placing, click repeaters, comparators, note blocks, "
 		+ "doors, trapdoors, gates and levers into the schematic's setting.").defaultValue(true).build();
+	private final BoolSetting tools = sgGeneral.bool("Use Tools").description("Make what has no item of its own, or what you don't carry, "
+		+ "from the plain block and a tool: strip logs with an axe, till farmland with a hoe and make paths with a shovel, put plants in "
+		+ "flower pots, light candles, put campfires out, and put eyes in end portal frames.").defaultValue(true).build();
 	private final EnumSetting<Building.Order> order = sgGeneral.oneOf("Order", Building.Order.BOTTOM_UP).description("Bottom Up: lowest first, "
 		+ "a layer at a time, each block on the one under it. Nearest: what's closest first, whatever the height, so what's beside you is "
 		+ "built as you pass it.").build();
@@ -150,7 +157,7 @@ public class Printer extends Module {
 	private Building.Options options() {
 		Building.Options o = building.options();
 		// Faces you can see matter only where the look has to be on them.
-		return o.withKeepUp(true).withPlacing(o.placing().withRotate(rotate.get()).withVisibleFaces(rotate.get())).withClickSettings(clicks.get())
+		return o.withKeepUp(true).withPlacing(o.placing().withRotate(rotate.get()).withVisibleFaces(rotate.get())).withClickSettings(clicks.get()).withUseTools(tools.get())
 			.withOrder(order.get());
 	}
 
@@ -348,30 +355,34 @@ public class Printer extends Module {
 	 */
 	private Step<Void> restock() {
 		return Step.choose("Restock", () -> {
-			Target target = missing();
-			if (target == null) return Step.nothing();
-			String key = target.describe();
-			Predicate<ItemStack> what = s -> target.preference(s) >= 0;
+			Build.Step missing = missing();
+			if (missing == null) return Step.nothing();
+			Target target = missing.target();
+			// Waiting on a tool to finish what's there (an axe for a log to strip), not on the block itself.
+			Predicate<ItemStack> tool = target instanceof Target.Exact exact && tools.get()
+				? BlockRules.finishTool(mc.level.getBlockState(missing.pos()), exact.state()) : null;
+			String key = tool != null ? "tool for " + target.describe() : target.describe();
+			Predicate<ItemStack> what = tool != null ? tool : s -> target.preference(s) >= 0;
 			List<MaterialSource> sources = new ArrayList<>();
 			if (fromShulkers.get()) sources.add(MaterialSource.shulkerBoxes());
 			if (fromContainers.get()) for (BlockPos pos : containers(key)) sources.add(container(pos, key));
 			if (sources.isEmpty()) return Step.nothing();
-			int stack = new ItemStack(item(target)).getMaxStackSize();
+			int stack = tool != null ? 1 : new ItemStack(item(target)).getMaxStackSize();
 			return Steps.acquire(what, Myriad.inventory().count(what) + stack, sources).stuckFor(1).recover(why -> Step.supply("Not found", () -> 0))
 				.then(n -> Step.nothing());
 		});
 	}
 
-	/** The target most of the build's positions have no item for, or null. */
-	private @Nullable Target missing() {
+	/** A step of the kind most of the build's positions have no item for, or null. */
+	private Build.@Nullable Step missing() {
 		Build b = build();
 		if (b == null) return null;
-		Map<String, Target> byKind = new HashMap<>();
+		Map<String, Build.Step> byKind = new HashMap<>();
 		Map<String, Integer> counts = new HashMap<>();
 		for (Build.Step step : b.steps()) {
 			if (step.status() != Build.Status.NO_ITEM) continue;
 			String k = step.target().describe();
-			byKind.putIfAbsent(k, step.target());
+			byKind.putIfAbsent(k, step);
 			counts.merge(k, 1, Integer::sum);
 		}
 		return counts.entrySet().stream().max(Map.Entry.comparingByValue()).map(e -> byKind.get(e.getKey())).orElse(null);
