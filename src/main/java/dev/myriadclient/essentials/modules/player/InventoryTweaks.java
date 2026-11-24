@@ -25,8 +25,10 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundPlaceRecipePacket;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -34,10 +36,17 @@ import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.DispenserMenu;
 import net.minecraft.world.inventory.HopperMenu;
 import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
+import net.minecraft.world.item.crafting.display.ShapedCraftingRecipeDisplay;
+import net.minecraft.world.item.crafting.display.ShapelessCraftingRecipeDisplay;
+import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -45,6 +54,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,7 +116,10 @@ public class InventoryTweaks extends Module {
 	private final EnumSetting<Layouts.Order> sortOrder = sgMouse.oneOf("Sort Order", Layouts.Order.ITEM).description("Item: the game's own "
 		+ "order, close to the creative tabs. Name: A to Z. Count: what you have most of first.").visible(middleSort::get).build();
 	private final BoolSetting middleBalance = sgMouse.bool("Middle Balance").description("Middle-click over a crafting grid to share each item out evenly "
-		+ "among the slots holding it: a stack of 64 iron and eight single ingots become nine of 8.").defaultValue(true).build();
+		+ "among the slots holding it: a stack of 64 iron and eight single ingots become nine of 8. When the grid makes something from your recipe "
+		+ "book, the book evens it out instead with the grid's own items, without using up the server's click limit (what's left over "
+		+ "goes back to your inventory).")
+		.defaultValue(true).build();
 
 	/** How long the box may take to open once clicked. */
 	private static final int OPEN_TICKS = 40;
@@ -435,6 +448,7 @@ public class InventoryTweaks extends Module {
 		if (!canClick()) return true;
 		budgetShort = false;
 		List<Slot> grid = menu.slots.stream().filter(s -> s.container == slot.container).toList();
+		if (fillFromBook(screen, menu, grid)) return true;
 		List<ItemStack> kinds = new ArrayList<>();
 		for (Slot s : grid) {
 			if (s.hasItem() && kinds.stream().noneMatch(k -> ItemStack.isSameItemSameComponents(k, s.getItem()))) kinds.add(s.getItem().copyWithCount(1));
@@ -444,6 +458,123 @@ public class InventoryTweaks extends Module {
 			if (!menu.getCarried().isEmpty() || budgetShort) break;
 		}
 		if (budgetShort) warn("Balanced as far as the server's click limit allows now: middle-click again in a few seconds for the rest.");
+		return true;
+	}
+
+	/**
+	 * Recipe placements that may go at once, and how many more each tick after: Paper ignores a player's placements past
+	 * 20, counting one a tick off (as Auto Craft keeps to).
+	 */
+	private static final int BOOK_BURST = 14;
+	private static final double BOOK_REFILL = 0.5;
+	private double bookTokens = BOOK_BURST;
+	private int bookTick;
+
+	/**
+	 * Evens the grid out through the recipe book with as many sets as the grid's own items make: placements, which 2b2t
+	 * doesn't count as clicks. With more of them in your inventory, plain placements, each a set more than the smallest
+	 * stack (the server takes the grid back and puts that many in), up to what the grid makes, so nothing net comes out
+	 * of your inventory; the server refuses those while a slot holds more than the sets everything makes, so only below
+	 * that. With none in your inventory, the smallest stack is shift-clicked out of the grid and a shift placement (as many
+	 * as there are) fills it from scratch. The leftover that makes no whole set goes to your inventory. Only when what the
+	 * grid makes now is a recipe in your book whose ingredients are just what's in the grid (one item a slot), your
+	 * inventory holds no other kind an ingredient takes, and has room for the grid's items first. The book puts the recipe
+	 * where it always does (a shape at the top left, centred where it's under half the grid), wherever you laid it out.
+	 */
+	private boolean fillFromBook(ScreenAccess screen, AbstractContainerMenu menu, List<Slot> grid) {
+		bookTokens = Math.min(BOOK_BURST, bookTokens + BOOK_REFILL * Math.max(0, mc.player.tickCount - bookTick));
+		bookTick = mc.player.tickCount;
+		Slot resultSlot = menu.slots.stream().filter(s -> s instanceof ResultSlot).findFirst().orElse(null);
+		if (resultSlot == null || !resultSlot.hasItem()) return false;
+		ItemStack made = resultSlot.getItem();
+		List<ItemStack> held = grid.stream().map(Slot::getItem).filter(st -> !st.isEmpty()).toList();
+		var context = SlotDisplayContext.fromLevel(mc.level);
+		boolean small = menu instanceof InventoryMenu;
+		for (RecipeCollection c : mc.player.getRecipeBook().getCollections()) {
+			for (RecipeDisplayEntry r : c.getRecipes()) {
+				boolean fits = switch (r.display()) {
+					case ShapedCraftingRecipeDisplay d -> !small || d.width() <= 2 && d.height() <= 2;
+					case ShapelessCraftingRecipeDisplay d -> !small || d.ingredients().size() <= 4;
+					default -> false;
+				};
+				if (!fits) continue;
+				List<Ingredient> needs = r.craftingRequirements().orElse(List.of());
+				if (needs.size() != held.size()) continue;
+				List<ItemStack> results = r.resultItems(context);
+				if (results.isEmpty() || !ItemStack.isSameItem(results.getFirst(), made)) continue;
+				if (!held.stream().allMatch(st -> needs.stream().anyMatch(i -> i.test(st)))) continue;
+				// What the grid holds of each kind (one per slot a set), and what the rest of your inventory adds.
+				Map<Item, int[]> kinds = new HashMap<>();
+				int smallest = Integer.MAX_VALUE, largest = 0, maxStack = 64;
+				for (ItemStack st : held) {
+					int[] k = kinds.computeIfAbsent(st.getItem(), x -> new int[3]);
+					k[0] += st.getCount();
+					k[1]++;
+					smallest = Math.min(smallest, st.getCount());
+					largest = Math.max(largest, st.getCount());
+					maxStack = Math.min(maxStack, st.getMaxStackSize());
+				}
+				var inv = mc.player.getInventory();
+				boolean extra = false;
+				for (int i = 0; i < 36; i++) {
+					ItemStack st = inv.getItem(i);
+					if (st.isEmpty() || needs.stream().noneMatch(n -> n.test(st))) continue;
+					// Another kind an ingredient takes: the server could put that in instead.
+					int[] k = kinds.get(st.getItem());
+					if (k == null || !st.getComponentsPatch().isEmpty()) return false;
+					k[2] += st.getCount();
+					extra = true;
+				}
+				int sets = Integer.MAX_VALUE, most = maxStack;
+				for (int[] k : kinds.values()) {
+					sets = Math.min(sets, k[0] / k[1]);
+					most = Math.min(most, (k[0] + k[2]) / k[1]);
+				}
+				if (!roomFor(held) || !Myriad.inventory().prepareClick()) return false;
+				if (extra) {
+					// Plain placements, each a set more than the smallest stack, up to what the grid's own items make: the
+					// server refuses them while a slot holds more than the sets it all makes, so only below that.
+					int placements = sets - smallest;
+					if (placements <= 0 || largest >= most || placements > bookTokens) return false;
+					bookTokens -= placements;
+					for (int i = 0; i < placements; i++) mc.getConnection().send(new ServerboundPlaceRecipePacket(menu.containerId, r.id(), false));
+					return true;
+				}
+				if (bookTokens < 1 || !affords(1)) return false;
+				// A stack out first: the server refuses to fill a grid that already makes the recipe while a slot holds more
+				// than the sets there are. Without one the grid makes nothing, and the fill takes it all from scratch. The
+				// smallest, so little shows in your inventory until the server's answer.
+				Slot smallestSlot = grid.stream().filter(Slot::hasItem).min(java.util.Comparator.comparingInt(st -> st.getItem().getCount())).orElseThrow();
+				screen.essentials$click(smallestSlot, 0, ContainerInput.QUICK_MOVE);
+				if (smallestSlot.hasItem()) return true;
+				bookTokens--;
+				mc.getConnection().send(new ServerboundPlaceRecipePacket(menu.containerId, r.id(), true));
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Whether {@code stacks} would all fit in your inventory (the main part and the hotbar) as it is. */
+	private boolean roomFor(List<ItemStack> stacks) {
+		var inv = mc.player.getInventory();
+		List<ItemStack> slots = new ArrayList<>();
+		for (int i = 0; i < 36; i++) slots.add(inv.getItem(i).copy());
+		for (ItemStack st : stacks) {
+			int left = st.getCount();
+			for (int i = 0; i < slots.size() && left > 0; i++) {
+				ItemStack there = slots.get(i);
+				if (there.isEmpty()) {
+					slots.set(i, st.copyWithCount(left));
+					left = 0;
+				} else if (ItemStack.isSameItemSameComponents(there, st)) {
+					int add = Math.min(left, there.getMaxStackSize() - there.getCount());
+					there.grow(add);
+					left -= add;
+				}
+			}
+			if (left > 0) return false;
+		}
 		return true;
 	}
 

@@ -96,9 +96,10 @@ public final class CraftingTests extends EssentialsSuite {
 	public void balanceWithinClickBudget(TestContext t) {
 		// A stack of 64 and one to eight in the other slots: evening that out by hand takes about 85 clicks, more than 2b2t
 		// takes in 4 s. The balance stops at the budget (72 in 5 s) and says so; a middle-click later finishes it.
+		// Cobblestone: nine of it make nothing, so the recipe book can't fill the grid instead.
 		table(t);
-		t.player().give(9, "iron_ingot", 64);
-		for (int i = 1; i <= 8; i++) t.player().give(9 + i, "iron_ingot", i);
+		t.player().give(9, "cobblestone", 64);
+		for (int i = 1; i <= 8; i++) t.player().give(9 + i, "cobblestone", i);
 		t.module(SortScenes.INVENTORY_TWEAKS).set("middle_balance", "true").enable();
 		List<String> steps = new ArrayList<>(List.of("use", "wait 10"));
 		// Each stack into its own grid slot (shift-clicks would merge them): picked up and put down whole.
@@ -120,6 +121,93 @@ public final class CraftingTests extends EssentialsSuite {
 		});
 		String detail = used + " clicks in the window after the first balance" + (warned ? ", warned" : "") + "; grid after the second: " + counts;
 		t.check(used <= 72 && counts.equals("12,11,11,11,11,11,11,11,11"), detail);
+		t.note(detail);
+	}
+
+	@Test(tags = "crafting")
+	public void balanceFromTheBook(TestContext t) {
+		// One iron in eight grid slots and the other 64 in the ninth, none left in the inventory: the grid makes a block
+		// from the book, so a middle-click fills it through the book (the 64 shift-clicked out, then one placement): 8 in each
+		// slot, two clicks at most (that one and core's check of the slots the server changed).
+		t.server().run("recipe give " + t.player().name() + " *");
+		table(t);
+		t.player().give(9, "iron_ingot", 64).give(10, "iron_ingot", 8);
+		t.module(SortScenes.INVENTORY_TWEAKS).set("middle_balance", "true").enable();
+		List<String> steps = new ArrayList<>(List.of("use", "wait 10", "cursor slot 11", "mouse 0 click"));
+		for (int i = 1; i <= 8; i++) steps.addAll(List.of("cursor slot " + i, "mouse 1 click"));
+		steps.addAll(List.of("cursor slot 10", "mouse 0 click", "cursor slot 9", "mouse 0 click"));
+		SortScenes.script(t, steps.toArray(String[]::new));
+		t.waitTicks(110);
+		int before = t.onGame(() -> dev.myriadclient.api.Myriad.limits().used(dev.myriadclient.api.service.PacketLimits.Kind.INVENTORY));
+		SortScenes.script(t, "cursor slot 5", "mouse 2 click");
+		t.waitTicks(20);
+		int used = t.onGame(() -> dev.myriadclient.api.Myriad.limits().used(dev.myriadclient.api.service.PacketLimits.Kind.INVENTORY)) - before;
+		String counts = t.onGame(() -> {
+			var menu = Minecraft.getInstance().player.containerMenu;
+			List<String> c = new ArrayList<>();
+			for (int i = 1; i <= 9; i++) c.add(String.valueOf(menu.getSlot(i).getItem().getCount()));
+			int rest = 0;
+			for (int i = 10; i < menu.slots.size(); i++) if (menu.getSlot(i).getItem().is(net.minecraft.world.item.Items.IRON_INGOT)) rest += menu.getSlot(i).getItem().getCount();
+			return String.join(",", c) + ", " + rest + " left";
+		});
+		String detail = "grid " + counts + ", " + used + " clicks";
+		t.check(counts.equals("8,8,8,8,8,8,8,8,8, 0 left") && used <= 2, detail);
+		t.note(detail);
+	}
+
+	@Test(tags = "crafting")
+	public void balanceFromTheBookWithMore(TestContext t) {
+		// 20 iron in one grid slot and one in each of the others, five stacks more in the inventory: plain placements from
+		// the book even it out with the grid's own 28 (3 a slot, the 1 left over to the inventory), no clicks of its own.
+		t.server().run("recipe give " + t.player().name() + " *");
+		table(t);
+		t.player().give(9, "iron_ingot", 28);
+		t.module(SortScenes.INVENTORY_TWEAKS).set("middle_balance", "true").enable();
+		List<String> steps = new ArrayList<>(List.of("use", "wait 10", "cursor slot 10", "mouse 0 click"));
+		for (int i = 1; i <= 8; i++) steps.addAll(List.of("cursor slot " + i, "mouse 1 click"));
+		steps.addAll(List.of("cursor slot 9", "mouse 0 click"));
+		SortScenes.script(t, steps.toArray(String[]::new));
+		for (int i = 0; i < 5; i++) t.player().give(20 + i, "iron_ingot", 64);
+		t.waitTicks(110);
+		int before = t.onGame(() -> dev.myriadclient.api.Myriad.limits().used(dev.myriadclient.api.service.PacketLimits.Kind.INVENTORY));
+		SortScenes.script(t, "cursor slot 5", "mouse 2 click");
+		t.waitTicks(20);
+		int used = t.onGame(() -> dev.myriadclient.api.Myriad.limits().used(dev.myriadclient.api.service.PacketLimits.Kind.INVENTORY)) - before;
+		String counts = t.onGame(() -> {
+			var menu = Minecraft.getInstance().player.containerMenu;
+			List<String> c = new ArrayList<>();
+			for (int i = 1; i <= 9; i++) c.add(String.valueOf(menu.getSlot(i).getItem().getCount()));
+			int rest = 0;
+			for (int i = 10; i < menu.slots.size(); i++) if (menu.getSlot(i).getItem().is(net.minecraft.world.item.Items.IRON_INGOT)) rest += menu.getSlot(i).getItem().getCount();
+			return String.join(",", c) + ", " + rest + " in the inventory";
+		});
+		String detail = "grid " + counts + ", " + used + " clicks";
+		t.check(counts.equals("3,3,3,3,3,3,3,3,3, 321 in the inventory") && used <= 1, detail);
+		t.note(detail);
+	}
+
+	@Test(tags = "crafting")
+	public void balanceMovesToTheBooksPlace(TestContext t) {
+		// Glass panes laid out in the bottom two rows: the book evens them out in the top two, where it puts them (the
+		// user chose fewer clicks over keeping the layout). 25 glass: 20 in the first slot of the middle row, one in each
+		// of the other five; 4 in each of the top six after, the 1 left over in the inventory.
+		t.server().run("recipe give " + t.player().name() + " *");
+		table(t);
+		t.player().give(9, "glass", 25);
+		t.module(SortScenes.INVENTORY_TWEAKS).set("middle_balance", "true").enable();
+		List<String> steps = new ArrayList<>(List.of("use", "wait 10", "cursor slot 10", "mouse 0 click"));
+		for (int i = 5; i <= 9; i++) steps.addAll(List.of("cursor slot " + i, "mouse 1 click"));
+		steps.addAll(List.of("cursor slot 4", "mouse 0 click", "wait 5", "cursor slot 5", "mouse 2 click"));
+		SortScenes.script(t, steps.toArray(String[]::new));
+		t.waitTicks(20);
+		String counts = t.onGame(() -> {
+			var menu = Minecraft.getInstance().player.containerMenu;
+			List<String> c = new ArrayList<>();
+			for (int i = 1; i <= 9; i++) c.add(String.valueOf(menu.getSlot(i).getItem().getCount()));
+			return String.join(",", c);
+		});
+		String detail = "grid " + counts;
+		t.check(counts.equals("4,4,4,4,4,4,0,0,0"), detail);
 		t.note(detail);
 	}
 
