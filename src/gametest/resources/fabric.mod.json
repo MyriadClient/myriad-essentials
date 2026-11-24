@@ -11,6 +11,7 @@
 			"dev.myriadclient.essentials.gametest.GeneralTests",
 			"dev.myriadclient.essentials.gametest.KillAuraTests",
 			"dev.myriadclient.essentials.gametest.PacketMineTests",
+			"dev.myriadclient.essentials.gametest.NukerTests",
 			"dev.myriadclient.essentials.gametest.NoSlowTests",
 			"dev.myriadclient.essentials.gametest.ConnectionTests",
 			"dev.myriadclient.essentials.gametest.OffhandTests",

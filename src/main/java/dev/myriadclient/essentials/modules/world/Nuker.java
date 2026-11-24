@@ -20,19 +20,26 @@ import dev.myriadclient.api.setting.KeybindSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.SettingColor;
 import dev.myriadclient.api.setting.SettingGroup;
+import dev.myriadclient.api.util.Ticks;
 import dev.myriadclient.api.world.BlockInfo;
 import dev.myriadclient.api.world.Positions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.FallingBlock;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -44,8 +51,10 @@ import java.util.Set;
  * Floor keeps what you stand on (Keep), lets you dig down by sneaking (Sneak), or takes it all (Dig). Ahead Only keeps it
  * to the half in front of where you look, for clearing a way as you walk or fly. Filter picks what goes: anything, only
  * the blocks listed, or anything except them; with Pick Bind held, hitting a block adds its kind to the list (or takes
- * it off). Blocks a fluid would flow into the space of are left (Avoid Fluids), and so are chests, shulker boxes and the
- * like (Spare Storage).
+ * it off). Blocks a fluid would flow into the space of are left (Avoid Fluids; not waterlogged ones, whose water stays
+ * where it was), and so are chests, shulker boxes and the like (Spare Storage). Reach is measured to a block's real
+ * outline, so a bud or a button counts only once it can be hit; a block the server refuses rests a second before it's
+ * tried again.
  */
 public class Nuker extends Module {
 	public enum Floor {
@@ -58,11 +67,13 @@ public class Nuker extends Module {
 
 	/** At most this many queued at a time, nearest first: enough for the service to break instant blocks in batches. */
 	private static final int QUEUED = 32;
+	/** How long a block the server refused is left before trying it again, so a stubborn one isn't sent every tick. */
+	private static final int REFUSED_TICKS = 20;
 	/** Whatever's being mined: the block fills in as it breaks. */
 	private static final RenderLook LOOK = RenderLook.of(HighlightStyle.OUTLINE.withOutlineWidth(1).withFill(HighlightStyle.Fill.SOLID).withFillOpacity(0.5f), 1);
 
 	private final BreakingSettings breaking = new BreakingSettings(sgGeneral);
-	private final DoubleSetting range = sgGeneral.decimal("Range").description("How far from your eyes, to the block's nearest point (no further than "
+	private final DoubleSetting range = sgGeneral.decimal("Range").description("How far from your eyes, to the nearest point of the block's outline (no further than "
 		+ "the server lets you reach).").defaultValue(4.5).range(1, 6).decimals(1).build();
 	private final EnumSetting<Floor> floor = sgGeneral.oneOf("Floor", Floor.KEEP).description("Keep: nothing below your feet. Sneak: below your feet "
 		+ "too while you sneak, to dig down. Dig: everything.").build();
@@ -78,7 +89,7 @@ public class Nuker extends Module {
 	private final KeybindSetting pickBind = sgFilter.keybind("Pick Bind").description("Hold and hit a block to add its kind to Blocks, or take it off "
 		+ "(Filter goes to Only if it was Any).").build();
 	private final BoolSetting avoidFluids = sgFilter.bool("Avoid Fluids").description("Leave blocks with water or lava beside or above, which would "
-		+ "flow into the space.").defaultValue(true).build();
+		+ "flow into the space (a waterlogged block already has its water, so it goes).").defaultValue(true).build();
 	private final BoolSetting spareStorage = sgFilter.bool("Spare Storage").description("Leave chests, barrels, shulker boxes and other containers.")
 		.defaultValue(true).build();
 
@@ -88,6 +99,10 @@ public class Nuker extends Module {
 
 	/** What this has queued and the service hasn't finished. */
 	private final Set<BlockPos> queued = new HashSet<>();
+	/** Blocks the server refused, and the tick they may be tried again. */
+	private final Map<BlockPos, Long> refused = new HashMap<>();
+	/** Set while this cancels its own breaks, whose results aren't refusals. */
+	private boolean cancelling;
 
 	public Nuker() {
 		super(Tags.WORLD, "Nuker", "Breaks the blocks around you.");
@@ -96,6 +111,7 @@ public class Nuker extends Module {
 	@Override
 	protected void onDisable() {
 		queued.clear();
+		refused.clear();
 	}
 
 	@Override
@@ -106,13 +122,17 @@ public class Nuker extends Module {
 	/** A filter change drops what's waiting under the old one (blocks already being mined finish). */
 	private void cancelAll() {
 		if (!isEnabled() || !Myriad.isReady()) return;
+		cancelling = true;
 		for (BlockPos p : queued) if (Myriad.breaking().progress(p) == 0) Myriad.breaking().cancel(p);
+		cancelling = false;
 		queued.removeIf(p -> !Myriad.breaking().isPending(p));
 	}
 
 	@Subscribe(inGame = true)
 	private void onTick(TickEvent.Post e) {
 		queued.removeIf(p -> !Myriad.breaking().isPending(p));
+		long now = Ticks.current();
+		refused.values().removeIf(until -> until <= now);
 		if (mc.player.isCreative() || mc.player.isSpectator() || filter.get() == Filter.ONLY && blocks.get().isEmpty()) {
 			cancelAll();
 			return;
@@ -121,19 +141,43 @@ public class Nuker extends Module {
 		Vec3 eyes = Reach.eyes();
 		double reach = options.range();
 		// Nearest first (the sphere's order); under sand or gravel that's itself to go, only once that's gone.
-		List<BlockPos> wanted = Positions.sphere(eyes, reach + 0.87, p -> wanted(p, reach) && !(falls(p.above()) && wanted(p.above(), reach)));
+		List<BlockPos> wanted = Positions.sphere(eyes, reach + 0.87, p -> !refused.containsKey(p) && wanted(p, reach) && !(falls(p.above()) && wanted(p.above(), reach)));
 		if (wanted.size() > QUEUED) wanted = new ArrayList<>(wanted.subList(0, QUEUED));
 
 		// What's no longer wanted (out of range, behind you, filtered) and hasn't started is dropped.
 		Set<BlockPos> keep = new HashSet<>(wanted);
+		cancelling = true;
 		for (BlockPos p : queued) if (!keep.contains(p) && Myriad.breaking().progress(p) == 0) Myriad.breaking().cancel(p);
+		cancelling = false;
 		queued.removeIf(p -> !Myriad.breaking().isPending(p));
 
 		int priority = wanted.size();
 		for (BlockPos p : wanted) {
 			Breaking.Attempt a = Myriad.breaking().breakBlock(this, p, priority--, options);
-			if (a.accepted()) queued.add(a.pos());
+			if (a.accepted() && queued.add(a.pos())) watch(a, mc.level.getBlockState(p).getBlock());
 		}
+	}
+
+	/** A break that failed with the block still there and in reach was refused: it rests a while (see REFUSED_TICKS). */
+	private void watch(Breaking.Attempt a, Block block) {
+		a.result().thenAccept(broken -> {
+			if (broken || cancelling || !isEnabled() || mc.level == null) return;
+			if (mc.level.getBlockState(a.pos()).is(block) && inOutlineReach(a.pos(), options().range())) {
+				refused.put(a.pos(), Ticks.current() + REFUSED_TICKS);
+			}
+		});
+	}
+
+	/**
+	 * Whether the block at {@code p}'s own outline is within {@code reach} of the eyes: a bud or a button is much smaller
+	 * than its block space, and out of reach by its outline only faces pointing away are left, which Grim refuses.
+	 */
+	private boolean inOutlineReach(BlockPos p, double reach) {
+		VoxelShape shape = mc.level.getBlockState(p).getShape(mc.level, p);
+		if (shape.isEmpty()) shape = Shapes.block();
+		Vec3 eyes = Reach.eyes();
+		for (AABB part : shape.toAabbs()) if (part.move(p).distanceToSqr(eyes) <= reach * reach) return true;
+		return false;
 	}
 
 	/** Sand, gravel and the like, which fall once what's under them goes. */
@@ -143,8 +187,9 @@ public class Nuker extends Module {
 
 	private boolean wanted(BlockPos p, double reach) {
 		BlockState state = mc.level.getBlockState(p);
-		if (state.isAir() || state.getFluidState().isSource() && state.getCollisionShape(mc.level, p).isEmpty()) return false;
-		if (!Reach.canReach(p, reach) || !BlockInfo.canBreak(p)) return false;
+		// Water or lava itself isn't mined; a waterlogged block is (BlockInfo.canBreak counts it out).
+		if (state.isAir() || state.getBlock() instanceof LiquidBlock || BlockInfo.isUnbreakable(state)) return false;
+		if (!inOutlineReach(p, reach)) return false;
 		if (!belowAllowed() && p.getY() < mc.player.getBlockY()) return false;
 		if (aheadOnly.get() && !ahead(p)) return false;
 		switch (filter.get()) {
@@ -175,11 +220,16 @@ public class Nuker extends Module {
 		return (p.getX() + 0.5 - mc.player.getX()) * look.x + (p.getZ() + 0.5 - mc.player.getZ()) * look.z > 0;
 	}
 
-	/** Water or lava above it or beside it, which would flow in once it's gone (or in it, waterlogged). */
+	/**
+	 * Water or lava above it or beside it, which would flow in once it's gone. A waterlogged block already has its water,
+	 * which stays where it was: only a different fluid beside it (lava by a waterlogged block) counts.
+	 */
 	private boolean nextToFluid(BlockPos p) {
-		if (!mc.level.getFluidState(p).isEmpty()) return true;
+		FluidState own = mc.level.getFluidState(p);
 		for (Direction d : Direction.values()) {
-			if (d != Direction.DOWN && !mc.level.getFluidState(p.relative(d)).isEmpty()) return true;
+			if (d == Direction.DOWN) continue;
+			FluidState beside = mc.level.getFluidState(p.relative(d));
+			if (!beside.isEmpty() && (own.isEmpty() || !beside.getType().isSame(own.getType()))) return true;
 		}
 		return false;
 	}
