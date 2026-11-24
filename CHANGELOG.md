@@ -3,6 +3,17 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.6.1
+
+Needs Myriad 2.4.1, for Minecraft 26.3, whose breaking fixes it's meant to go with.
+
+- **Nuker takes small blocks once they can be hit.** Amethyst buds and the like are measured by their own outline, not
+  their block space, so they're no longer tried (and refused by Grim) from out of reach.
+- **Nuker breaks waterlogged blocks.** Buds in a flooded geode were skipped altogether, Avoid Fluids on or off. Their
+  water stays where it was, so Avoid Fluids now only leaves a block with a different fluid beside it (lava by a
+  waterlogged block), as well as dry blocks a fluid would flow into.
+- **Nuker rests a block the server refused** for a second before trying it again, rather than every tick.
+
 ## 2.6.0
 
 Needs Myriad 2.4.0, for Minecraft 26.3. A farming module, and Auto Trader can be left running.
