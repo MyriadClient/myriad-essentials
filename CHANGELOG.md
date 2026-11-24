@@ -3,6 +3,18 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.7.2
+
+Needs Myriad 2.5.2, for Minecraft 26.3, which stops counting recipe book placements as clicks (2b2t doesn't).
+
+- **Middle Balance through the recipe book.** When the crafting grid makes a recipe from your book, a middle-click
+  evens it out with book placements, which 2b2t doesn't count as clicks: none at all when you carry more of the item,
+  two when you don't (where drags took 11 to 30). It uses only what's in the grid, the leftover going to your
+  inventory, and the recipe goes where the book puts it. Anything else is balanced with drags as before.
+- **Auto Craft and Auto Trader** count only the click on the result, so about twice as many crafts fit in the click
+  budget.
+- **Nuker's Pick Bind works with Packet Mine on.** Packet Mine took the hit first.
+
 ## 2.7.1
 
 Needs Myriad 2.5.1, for Minecraft 26.3.
