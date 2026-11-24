@@ -676,14 +676,15 @@ public class AutoTrader extends Module {
 		if (ticks == 1) {
 			RecipeDisplayEntry recipe = emeraldRecipe();
 			int fits = emptySlots() * 64 / 9;
-			if (recipe == null || fits == 0 || !Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, 2) || !Myriad.inventory().prepareClick()) {
+			// A whole stack of blocks needs nine slots free; fewer, a block at a time. Each a placement (not counted as a
+			// click on 2b2t) and a click.
+			boolean all = recipe != null && count(Items.EMERALD_BLOCK) <= fits;
+			int times = all ? 1 : Math.min(fits, 12);
+			if (recipe == null || fits == 0 || !Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, Math.max(1, times)) || !Myriad.inventory().prepareClick()) {
 				if (recipe == null) warn("The recipe for emeralds from a block isn't in your recipe book");
 				else if (fits == 0) go(Step.TO_OUTPUT);
 				return;
 			}
-			// A whole stack of blocks needs nine slots free; fewer, a block at a time.
-			boolean all = count(Items.EMERALD_BLOCK) <= fits;
-			int times = all ? 1 : Math.min(fits, 12);
 			for (int i = 0; i < times; i++) {
 				mc.getConnection().send(new ServerboundPlaceRecipePacket(InventoryMenu.CONTAINER_ID, recipe.id(), all));
 				mc.gameMode.handleContainerInput(InventoryMenu.CONTAINER_ID, InventoryMenu.RESULT_SLOT, 0, ContainerInput.QUICK_MOVE, mc.player);

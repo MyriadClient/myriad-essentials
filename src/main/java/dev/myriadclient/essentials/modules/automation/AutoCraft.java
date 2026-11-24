@@ -47,9 +47,9 @@ import java.util.concurrent.CompletableFuture;
  * Each step is the recipe book placing the ingredients (as many as fit, or one set at a time for a few) and a shift-click
  * on the result, which crafts the whole grid; with Drop, the last step's result is thrown out instead (a whole-stack throw
  * on a result crafts and throws again for as long as the grid makes it, as Ctrl+Q does). A whole plan goes in one tick:
- * the server takes the steps in order, so what one makes is there for the next. Each step's placement and click count
- * against core's click budget (2b2t disconnects at about 80 in 4 seconds) and its placement against Paper's recipe spam
- * limit (20, a tick each to come back), so a very long plan finishes over a few rounds. Only as much is planned as fits
+ * the server takes the steps in order, so what one makes is there for the next. Each step's click counts against core's
+ * click budget (2b2t disconnects at about 80 in 4 seconds; the placement doesn't count there) and its placement against
+ * Paper's recipe spam limit (20, a tick each to come back), so a very long plan finishes over a few rounds. Only as much is planned as fits
  * your inventory after every step (with Drop, the wanted item needs no room), so nothing ends up on the ground. Only recipes your recipe book has (unlocked ones). An item
  * that came out no further (your inventory full, say) is left alone for a while.
  */
@@ -198,7 +198,7 @@ public class AutoCraft extends Module {
 	 * budget goes (the rest next round, planned again). Then waits for the server's answers before planning again.
 	 */
 	private void run(CraftPlanner.Plan plan, int containerId, Containers.@Nullable View view) {
-		if (!Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, 2) || !Myriad.inventory().prepareClick()) return;
+		if (!Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, 1) || !Myriad.inventory().prepareClick()) return;
 		ItemStack made = result(plan.last().recipe());
 		Item item = made != null ? made.getItem() : null;
 		int before = item != null ? measure(item) : 0;
@@ -212,8 +212,8 @@ public class AutoCraft extends Module {
 			int times = single ? step.crafts() : (step.crafts() + BATCH - 1) / BATCH;
 			boolean throwIt = drop.get() && step == plan.last();
 			for (int i = 0; i < times; i++) {
-				// The placement and the click both count as clicks (2b2t's proxy counts both).
-				if (recipeTokens < 1 || !Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, 2)) {
+				// Only the click counts as one (2b2t counts no recipe placements); the placement has its own tokens.
+				if (recipeTokens < 1 || !Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, 1)) {
 					whole = false;
 					break send;
 				}
