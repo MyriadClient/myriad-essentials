@@ -156,4 +156,104 @@ public final class NoDurabilityTests extends EssentialsSuite {
 	public void longGlide(TestContext t) {
 		longFlight(t, false);
 	}
+
+	/**
+	 * Gliding straight into a wall with Elytra Tweaks (No Durability): pinned against it, no speed along the ground, sinking
+	 * slowly till the floor. Seen on 2b2t: every start set back, the setback taken as a lost start and the glide started
+	 * again at once, which was set back again (186 setbacks), then gliding on along the floor and into water.
+	 */
+	@Test(name = "into_a_wall", tags = "elytra", timeoutTicks = 1200)
+	public void intoAWall(TestContext t) {
+		// Close: you're on it as the swapping starts, slow, and sink down it.
+		t.arena().forceload(-10, -10, 60, 10);
+		t.arena().fill(1, 0, -6, 60, 60, 6, "air");
+		t.arena().fill(6, 0, -3, 6, 60, 3, "stone");
+		// Enchanted, as yours would be: 2b2t answers a click on such an item with the whole inventory.
+		t.player().give(38, "elytra[enchantments={unbreaking:3,mending:1}]").give(1, "diamond_chestplate[enchantments={protection:4}]");
+		launch(t, 0.5, 45, 0.5);
+		t.waitTicks(10);
+		t.flagsFromHere();
+		t.module(SWAP).enable();
+		t.module(ARMOR).enable();
+		t.player().look(-90, 12);
+		t.hold(Key.JUMP).forTicks(2);
+		t.waitTicks(400);
+		t.module(ARMOR).disable();
+		t.module(SWAP).disable();
+		boolean gliding = t.onGame(() -> net.minecraft.client.Minecraft.getInstance().player.isFallFlying());
+		float hp = t.player().health();
+		String detail = String.format(Locale.ROOT, "against the wall: y=%.1f, health %.0f, %s", t.player().serverPosition().y, hp, gliding ? "still gliding" : "not gliding");
+		t.arena().fill(6, 0, -3, 6, 60, 3, "air");
+		t.check(!gliding, detail);
+		t.noFlags();
+		t.note(detail);
+	}
+
+	/** Gliding down into water with Elytra Tweaks: the glide ends in the water, as a player's does, with nothing set back. */
+	@Test(name = "into_water", tags = "elytra", timeoutTicks = 1200)
+	public void intoWater(TestContext t) {
+		// A basin on the floor, so the water stays in it.
+		t.arena().fill(2, 0, -7, 31, 4, 7, "stone");
+		t.arena().fill(3, 1, -6, 30, 4, 6, "water");
+		// Enchanted, as yours would be: 2b2t answers a click on such an item with the whole inventory.
+		t.player().give(38, "elytra[enchantments={unbreaking:3,mending:1}]").give(1, "diamond_chestplate[enchantments={protection:4}]");
+		launch(t, 0.5, 25, 0.5);
+		t.waitTicks(10);
+		t.flagsFromHere();
+		t.module(SWAP).enable();
+		t.module(ARMOR).enable();
+		t.player().look(-90, 30);
+		t.hold(Key.JUMP).forTicks(2);
+		t.waitTicks(220);
+		t.module(ARMOR).disable();
+		t.module(SWAP).disable();
+		boolean gliding = t.onGame(() -> net.minecraft.client.Minecraft.getInstance().player.isFallFlying());
+		String detail = String.format(Locale.ROOT, "in the water: y=%.1f, %s", t.player().serverPosition().y, gliding ? "still gliding" : "not gliding");
+		t.player().at(0.5, 0, 0.5, -90, 0);
+		t.arena().fill(2, 0, -7, 31, 4, 7, "air");
+		t.check(!gliding, detail);
+		t.noFlags();
+		t.note(detail);
+	}
+
+	/**
+	 * Setbacks again and again while swapping (here the server's own teleports, in place): No Durability stands down and
+	 * you glide on the elytra, rather than making each start again into the next setback (186 in a row on 2b2t).
+	 */
+	@Test(name = "stands_down_after_setbacks", tags = "elytra", timeoutTicks = 1200)
+	public void standsDownAfterSetbacks(TestContext t) {
+		t.arena().forceload(-10, -10, 120, 10);
+		// In the open: into_a_wall's wall would stop the swapping before it starts.
+		t.arena().fill(6, 0, -3, 6, 60, 3, "air");
+		t.player().give(38, "elytra").give(1, "diamond_chestplate");
+		launch(t, 0.5, 60, 0.5);
+		t.waitTicks(10);
+		// Opened as a player does, then Elytra Tweaks on (as in elytra()).
+		t.module(SWAP).disable();
+		t.player().look(-90, 10);
+		t.hold(Key.JUMP).forTicks(2);
+		t.waitTicks(2);
+		t.module(ARMOR).enable();
+		t.module(SWAP).enable();
+		// Swapping by then (it starts after half a second of gliding with room below).
+		t.waitTicks(80);
+		for (int i = 0; i < 3; i++) {
+			t.server().run("execute as " + t.player().name() + " at @s run tp @s ~ ~ ~");
+			t.waitTicks(8);
+		}
+		t.waitTicks(20);
+		// Swapping, the chestplate is worn all but a tick in eight; stood down, the elytra stays on.
+		int elytraWorn = 0;
+		for (int i = 0; i < 20; i++) {
+			if (t.player().item(38).equals("minecraft:elytra")) elytraWorn++;
+			t.waitTicks(1);
+		}
+		boolean said = elytraWorn == 20;
+		boolean gliding = t.onGame(() -> net.minecraft.client.Minecraft.getInstance().player.isFallFlying());
+		t.module(ARMOR).disable();
+		t.module(SWAP).disable();
+		String detail = (said ? "stood down" : "kept swapping") + ", " + (gliding ? "gliding on" : "not gliding");
+		t.check(said && gliding, detail);
+		t.note(detail);
+	}
 }
