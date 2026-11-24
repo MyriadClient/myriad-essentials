@@ -32,8 +32,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -162,22 +160,10 @@ public class Nuker extends Module {
 	private void watch(Breaking.Attempt a, Block block) {
 		a.result().thenAccept(broken -> {
 			if (broken || cancelling || !isEnabled() || mc.level == null) return;
-			if (mc.level.getBlockState(a.pos()).is(block) && inOutlineReach(a.pos(), options().range())) {
+			if (mc.level.getBlockState(a.pos()).is(block) && Reach.canReachOutline(a.pos(), options().range())) {
 				refused.put(a.pos(), Ticks.current() + REFUSED_TICKS);
 			}
 		});
-	}
-
-	/**
-	 * Whether the block at {@code p}'s own outline is within {@code reach} of the eyes: a bud or a button is much smaller
-	 * than its block space, and out of reach by its outline only faces pointing away are left, which Grim refuses.
-	 */
-	private boolean inOutlineReach(BlockPos p, double reach) {
-		VoxelShape shape = mc.level.getBlockState(p).getShape(mc.level, p);
-		if (shape.isEmpty()) shape = Shapes.block();
-		Vec3 eyes = Reach.eyes();
-		for (AABB part : shape.toAabbs()) if (part.move(p).distanceToSqr(eyes) <= reach * reach) return true;
-		return false;
 	}
 
 	/** Sand, gravel and the like, which fall once what's under them goes. */
@@ -189,7 +175,7 @@ public class Nuker extends Module {
 		BlockState state = mc.level.getBlockState(p);
 		// Water or lava itself isn't mined; a waterlogged block is (BlockInfo.canBreak counts it out).
 		if (state.isAir() || state.getBlock() instanceof LiquidBlock || BlockInfo.isUnbreakable(state)) return false;
-		if (!inOutlineReach(p, reach)) return false;
+		if (!Reach.canReachOutline(p, reach)) return false;
 		if (!belowAllowed() && p.getY() < mc.player.getBlockY()) return false;
 		if (aheadOnly.get() && !ahead(p)) return false;
 		switch (filter.get()) {
