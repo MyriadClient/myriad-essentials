@@ -35,6 +35,7 @@ import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
 import dev.myriadclient.api.util.TickCached;
 import dev.myriadclient.essentials.litematica.LitematicaBlueprint;
+import dev.myriadclient.essentials.util.RotateMode;
 import dev.myriadclient.essentials.util.BuildPlanRenderer;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.fabricmc.loader.api.FabricLoader;
@@ -79,9 +80,10 @@ import java.util.function.Predicate;
  */
 public class Printer extends Module {
 	private final BuildingSettings building = new BuildingSettings(sgGeneral);
-	private final BoolSetting rotate = sgGeneral.bool("Rotate").description("Look at each block's face to place it, and only click faces you "
-		+ "can see, as servers that check where you look want (current Grim). Off (2b2t), any face in reach is clicked, and the look only "
-		+ "turns for blocks that face a way.").defaultValue(true).build();
+	private final EnumSetting<RotateMode> rotate = sgGeneral.oneOf("Rotate", RotateMode.AUTO).description("Look at each block's face to place "
+		+ "it, and only click faces you can see, as servers that check where you look want (current Grim). Off, any face in reach is "
+		+ "clicked without turning (the look still turns for blocks that face a way): much faster. Auto: on only where the server checks "
+		+ "(off on 2b2t).").build();
 	private final BoolSetting clicks = sgGeneral.bool("Click Settings").description("After placing, click repeaters, comparators, note blocks, "
 		+ "doors, trapdoors, gates and levers into the schematic's setting.").defaultValue(true).build();
 	private final BoolSetting tools = sgGeneral.bool("Use Tools").description("Make what has no item of its own, or what you don't carry, "
@@ -157,7 +159,7 @@ public class Printer extends Module {
 	private Building.Options options() {
 		Building.Options o = building.options();
 		// Faces you can see matter only where the look has to be on them.
-		return o.withKeepUp(true).withPlacing(o.placing().withRotate(rotate.get()).withVisibleFaces(rotate.get())).withClickSettings(clicks.get()).withUseTools(tools.get())
+		return o.withKeepUp(true).withPlacing(o.placing().withRotate(rotate.get().turns()).withVisibleFaces(rotate.get().turns())).withClickSettings(clicks.get()).withUseTools(tools.get())
 			.withOrder(order.get());
 	}
 
@@ -499,7 +501,7 @@ public class Printer extends Module {
 		Vec3 eyes = mc.player.getEyePosition();
 		Direction face = Direction.getApproximateNearest(eyes.x - (pos.getX() + 0.5), 0, eyes.z - (pos.getZ() + 0.5));
 		BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), face, pos, false);
-		var o = running.placing().withRotate(rotate.get()).withVisibleFaces(false).withSneak(false);
+		var o = running.placing().withRotate(rotate.get().turns()).withVisibleFaces(false).withSneak(false);
 		if (Myriad.placement().use(this, hit, -1, o).sent()) signAsked.put(pos.asLong(), now + SIGN_RETRY_TICKS);
 	}
 

@@ -26,7 +26,7 @@ public final class AutoPortalTests extends EssentialsSuite {
 		for (int i = 0; i < FULL_HOTBAR.size(); i++) t.player().give(i, FULL_HOTBAR.get(i));
 		t.player().give(19, "obsidian", 16).give(20, "flint_and_steel");
 		t.player().at(X + 0.5, Y, Z + 0.5, -90, 30);
-		t.module("myriad-essentials:auto_portal").set("trigger", "enable").set("rotate", "false").set("corners", String.valueOf(!air))
+		t.module("myriad-essentials:auto_portal").set("trigger", "enable").set("rotate", "off").set("corners", String.valueOf(!air))
 			.set("air_place", String.valueOf(air)).set("light", "true");
 		t.waitTicks(5);
 		t.server().likeTwoBTwoT();

@@ -20,6 +20,7 @@ import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.EnumSetting;
 import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
+import dev.myriadclient.essentials.util.RotateMode;
 import dev.myriadclient.essentials.util.BuildPlanRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -48,9 +49,10 @@ public class AutoPortal extends Module {
 		+ "again, for a tap bind.").build();
 	private final BoolSetting corners = sgGeneral.bool("Corners").description("Place the frame's four corners too. Without air placement "
 		+ "the sides have nothing else to be placed against.").defaultValue(true).build();
-	private final BoolSetting rotate = sgGeneral.bool("Rotate").description("Look at each block's face to place it, and only click faces you "
-		+ "can see, as servers that check where you look want (current Grim). Off (2b2t), any face in reach is clicked without turning: "
-		+ "much faster.").defaultValue(true).build();
+	private final EnumSetting<RotateMode> rotate = sgGeneral.oneOf("Rotate", RotateMode.AUTO).description("Look at each block's face to place "
+		+ "it, and only click faces you can see, as servers that check where you look want (current Grim). Off, any face in reach is "
+		+ "clicked without turning (the look still turns for blocks that face a way): much faster. Auto: on only where the server checks "
+		+ "(off on 2b2t).").build();
 	private final PlacementSettings placing = new PlacementSettings(sgGeneral);
 	private final BoolSetting light = sgGeneral.bool("Light").description("Light the portal with flint and steel (or a fire charge) once the "
 		+ "frame is up.").defaultValue(true).build();
@@ -188,7 +190,7 @@ public class AutoPortal extends Module {
 		// As many a tick as the packet budget allows (it holds the rest back): a frame is 10 to 14 blocks.
 		Building.Options o = Building.Options.forServer().withBreakWrong(true).withPlacesPerTick(PER_TICK)
 			.withBreaking(Breaking.Options.forServer().withRange(placing.reach()))
-			.withPlacing(placing.options().withRotate(rotate.get()).withVisibleFaces(rotate.get()));
+			.withPlacing(placing.options().withRotate(rotate.get().turns()).withVisibleFaces(rotate.get().turns()));
 		build = Myriad.building().start(this, Blueprint.of(frame), o);
 		build.finished().thenAccept(done -> {
 			if (!isEnabled()) return;
@@ -246,7 +248,7 @@ public class AutoPortal extends Module {
 		}
 		// Fire on the top of the frame's bottom row, inside: turned onto it first where looks are checked.
 		BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(lightOn).add(0, 0.5, 0), Direction.UP, lightOn, false);
-		if (Myriad.placement().use(this, hit, slot, Placement.Options.forServer().withRotate(rotate.get()).withRange(placing.reach())).sent()) {
+		if (Myriad.placement().use(this, hit, slot, Placement.Options.forServer().withRotate(rotate.get().turns()).withRange(placing.reach())).sent()) {
 			lightTries++;
 			lightWait = LIGHT_WAIT;
 		}

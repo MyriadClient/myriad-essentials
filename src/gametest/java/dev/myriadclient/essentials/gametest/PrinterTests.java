@@ -131,7 +131,7 @@ public final class PrinterTests extends EssentialsSuite {
 		t.waitTicks(2);
 		t.check(t.chat().stream().anyMatch(l -> l.contains("Placed the schematic")), "Litematica placed the schematic");
 		var printer = t.module("myriad-essentials:printer");
-		printer.set("rotate", String.valueOf(p.rotate)).set("air_place", String.valueOf(p.air)).set("click_settings", "true")
+		printer.set("rotate", p.rotate ? "on" : "off").set("air_place", String.valueOf(p.air)).set("click_settings", "true")
 			.set("break_wrong_blocks", "false").set("order", "bottom_up").set("skip", "clear").set("walk_to_blocks", "false").set("restock", "false");
 		p.settings.forEach(printer::set);
 		t.waitTicks(5);
