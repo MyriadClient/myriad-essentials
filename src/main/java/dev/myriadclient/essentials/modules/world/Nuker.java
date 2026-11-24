@@ -1,6 +1,7 @@
 package dev.myriadclient.essentials.modules.world;
 
 import dev.myriadclient.api.Myriad;
+import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.BlockBreakEvent;
 import dev.myriadclient.api.event.events.RenderEvent;
@@ -226,8 +227,11 @@ public class Nuker extends Module {
 		return breaking.options().withRotate(rotate.get()).withSwing(false).withRange(Math.min(range.get(), Reach.blockRange())).withWaitForServer(true);
 	}
 
-	/** With Pick Bind held, a hit adds the block's kind to Blocks or takes it off, and mines nothing. */
-	@Subscribe
+	/**
+	 * With Pick Bind held, a hit adds the block's kind to Blocks or takes it off, and mines nothing. Ahead of Packet Mine,
+	 * which takes every hit for itself.
+	 */
+	@Subscribe(priority = Priority.HIGH)
 	private void onHit(BlockBreakEvent.Start e) {
 		if (!inGame() || !pickBind.get().isPressed()) return;
 		e.cancel();
