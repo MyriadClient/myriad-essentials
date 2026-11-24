@@ -3,6 +3,18 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.7.0
+
+Needs Myriad 2.5.0, for Minecraft 26.3.
+
+- **Printer: Use Tools** (on). What has no item of its own, or what you don't carry, is made from the plain block and a
+  tool: stripped logs and wood with an axe, farmland with a hoe and dirt paths with a shovel, potted plants from a pot
+  and the plant. Candles are lit, campfires put out, and end portal frames get their eyes. Restock fetches the tool when
+  that's what's missing.
+- **Printer: observers go in last**, once the block they watch is placed, so they don't pulse while you build redstone.
+- Gliding with Elytra Tweaks no longer gets stuck in runs of setbacks against a wall, or glides on after landing (core's
+  fix; tests for it here).
+
 ## 2.6.1
 
 Needs Myriad 2.4.1, for Minecraft 26.3, whose breaking fixes it's meant to go with.
