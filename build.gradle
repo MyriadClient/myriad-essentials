@@ -71,6 +71,10 @@ loom {
 			// -Pstrict (with ./start.sh --strict) for current Grim's rules.
 			property("myriad.noInputRuleHosts", project.hasProperty("strict") ? "" : "localhost,127.0.0.1")
 		}
+		// -PlongTests: the tests that take many minutes (skipped otherwise).
+		configureEach {
+			if (project.hasProperty("longTests")) property("myriad.longTests", "true")
+		}
 	}
 }
 

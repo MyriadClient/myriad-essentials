@@ -203,4 +203,260 @@ public final class AutoCraftTests extends EssentialsSuite {
 		t.check(blocks == 9 && ingots == 0 && shut, detail);
 		t.note(detail);
 	}
+
+	/** How many {@code item} the container at arena {@code x y z} holds, by the server. */
+	private static int stored(TestContext t, int x, int y, int z, String item) {
+		var a = t.arena();
+		String out = t.server().run("execute if items block " + a.x(x) + " " + a.y(y) + " " + a.z(z) + " container.* minecraft:" + item);
+		int at = out.lastIndexOf("count: ");
+		return at < 0 ? 0 : Integer.parseInt(out.substring(at + 7).trim());
+	}
+
+	@Test(name = "containers", tags = "inventory", timeoutTicks = 1200)
+	public void containers(TestContext t) {
+		// Ender chests from two inputs, obsidian in a chest and eyes in a barrel, into an output chest: 24 of them (192
+		// obsidian, 24 eyes), the inputs emptied, nothing kept or dropped.
+		t.server().run("recipe give " + t.player().name() + " *");
+		t.server().run("kill @e[type=item]");
+		var a = t.arena();
+		t.arena().set(2, 0, 0, "crafting_table");
+		t.arena().set(2, 0, 2, "chest");
+		t.arena().set(2, 0, -2, "barrel");
+		t.arena().set(-1, 0, 2, "chest");
+		for (int slot = 0; slot < 3; slot++)
+			t.server().run("item replace block " + a.x(2) + " " + a.y(0) + " " + a.z(2) + " container." + slot + " with obsidian 64");
+		t.server().run("item replace block " + a.x(2) + " " + a.y(0) + " " + a.z(-2) + " container.0 with ender_eye 24");
+		t.player().at(0.5, 0, 0.5, -90, 20);
+		String inputs = a.x(2) + " " + a.y(0) + " " + a.z(2) + "; " + a.x(2) + " " + a.y(0) + " " + a.z(-2);
+		String output = a.x(-1) + " " + a.y(0) + " " + a.z(2);
+		t.module(CRAFT).set("items", "clear").set("items", "add minecraft:ender_chest").set("inputs", inputs).set("outputs", output);
+		t.waitTicks(10);
+		t.flagsFromHere();
+		long start = now(t);
+		t.module(CRAFT).enable();
+		int made = 0, shown = 0;
+		for (int i = 0; i < 100 && made < 24; i++) {
+			for (int k = 0; k < 5; k++) {
+				t.waitTicks(1);
+				// Nothing shown: the inputs', outputs' and table's screens stay hidden.
+				if (t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.screen()
+					instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>)) shown++;
+			}
+			made = stored(t, -1, 0, 2, "ender_chest");
+		}
+		long took = now(t) - start;
+		t.waitTicks(20);
+		t.module(CRAFT).disable();
+		t.module(CRAFT).set("inputs", "").set("outputs", "");
+		int obsidian = stored(t, 2, 0, 2, "obsidian"), eyes = stored(t, 2, 0, -2, "ender_eye");
+		int kept = count(t, "ender_chest") + count(t, "obsidian") + count(t, "ender_eye");
+		boolean dropped = t.server().passes("at " + t.player().name() + " if entity @e[type=item,distance=..10]");
+		String detail = String.format(Locale.ROOT, "%d ender chests in the output in %d ticks; inputs left %d obsidian, %d eyes; %d kept%s, table %s, a screen shown %d ticks",
+			made, took, obsidian, eyes, kept, dropped ? ", items on the ground" : "", closed(t) ? "closed" : "still open", shown);
+		t.check(made == 24 && obsidian == 0 && eyes == 0 && kept == 0 && !dropped && closed(t) && shown == 0, detail);
+		t.note(detail);
+	}
+
+	/** The containers test's setup: 192 obsidian in a chest and 24 eyes in a barrel as inputs, an empty chest as the output, Auto Craft set to make ender chests. */
+	private static void enderChestLine(TestContext t) {
+		t.server().run("recipe give " + t.player().name() + " *");
+		t.server().run("kill @e[type=item]");
+		var a = t.arena();
+		a.set(2, 0, 0, "crafting_table");
+		a.set(2, 0, 2, "chest");
+		a.set(2, 0, -2, "barrel");
+		a.set(-1, 0, 2, "chest");
+		for (int slot = 0; slot < 3; slot++)
+			t.server().run("item replace block " + a.x(2) + " " + a.y(0) + " " + a.z(2) + " container." + slot + " with obsidian 64");
+		t.server().run("item replace block " + a.x(2) + " " + a.y(0) + " " + a.z(-2) + " container.0 with ender_eye 24");
+		t.player().at(0.5, 0, 0.5, -90, 20);
+		String inputs = a.x(2) + " " + a.y(0) + " " + a.z(2) + "; " + a.x(2) + " " + a.y(0) + " " + a.z(-2);
+		t.module(CRAFT).set("items", "clear").set("items", "add minecraft:ender_chest").set("inputs", inputs)
+			.set("outputs", a.x(-1) + " " + a.y(0) + " " + a.z(2));
+		t.waitTicks(10);
+	}
+
+	@Test(name = "containers_under_chat", tags = "inventory", timeoutTicks = 1200)
+	public void containersUnderChat(TestContext t) {
+		// Chat open the whole time (as the UI or a wheel would be): it stays up, never replaced or closed, and the ender
+		// chests are made all the same (Auto Craft runs as a job, whose containers open with no screen).
+		enderChestLine(t);
+		t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("", false)));
+		t.waitTicks(2);
+		var chat = t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.screen());
+		t.flagsFromHere();
+		t.module(CRAFT).enable();
+		int made = 0, lost = 0;
+		for (int i = 0; i < 120 && made < 24; i++) {
+			for (int k = 0; k < 5; k++) {
+				t.waitTicks(1);
+				if (t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.screen()) != chat) lost++;
+			}
+			made = stored(t, -1, 0, 2, "ender_chest");
+		}
+		t.module(CRAFT).disable();
+		t.module(CRAFT).set("inputs", "").set("outputs", "");
+		t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.setScreen(null));
+		String detail = String.format(Locale.ROOT, "%d ender chests made; chat replaced or closed for %d ticks", made, lost);
+		t.check(made == 24 && lost == 0, detail);
+		t.note(detail);
+	}
+
+	@Test(name = "containers_inventory_open", tags = "inventory", timeoutTicks = 1600)
+	public void containersInventoryOpen(TestContext t) {
+		// Your inventory opened partway: it stays up, what Auto Craft had open is closed on the server (so your clicks
+		// count), nothing more is made while it's up, and once it's closed the rest is.
+		enderChestLine(t);
+		t.flagsFromHere();
+		t.module(CRAFT).enable();
+		t.waitUntil("some made", () -> stored(t, -1, 0, 2, "ender_chest") > 0 || count(t, "ender_chest") > 0, 400);
+		t.onGame(() -> {
+			var mc = net.minecraft.client.Minecraft.getInstance();
+			mc.gui.setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(mc.player));
+		});
+		t.waitTicks(10);
+		int before = stored(t, -1, 0, 2, "ender_chest") + count(t, "ender_chest");
+		int stayed = 0, yours = 0;
+		for (int i = 0; i < 40; i++) {
+			t.waitTicks(1);
+			if (t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.screen()
+				instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen)) stayed++;
+			if (t.onGame(() -> net.minecraft.client.Minecraft.getInstance().player.containerMenu
+				== net.minecraft.client.Minecraft.getInstance().player.inventoryMenu)) yours++;
+		}
+		int during = stored(t, -1, 0, 2, "ender_chest") + count(t, "ender_chest") - before;
+		t.onGame(() -> net.minecraft.client.Minecraft.getInstance().player.closeContainer());
+		boolean rest = t.waitUntil("the rest made", () -> stored(t, -1, 0, 2, "ender_chest") >= 24, 800);
+		t.module(CRAFT).disable();
+		t.module(CRAFT).set("inputs", "").set("outputs", "");
+		String detail = String.format(Locale.ROOT, "inventory stayed up %d/40 ticks, yours on the server %d/40, %d made while it was up, %d in the output after",
+			stayed, yours, during, stored(t, -1, 0, 2, "ender_chest"));
+		t.check(stayed == 40 && yours == 40 && during == 0 && rest, detail);
+		t.note(detail);
+	}
+
+	@Test(name = "containers_rounds", tags = "inventory", timeoutTicks = 2400)
+	public void containersRounds(TestContext t) {
+		// Only six slots free (the rest dirt): 96 ender chests (768 obsidian, 96 eyes) take a few rounds of fetching,
+		// crafting and putting away; the dirt stays.
+		t.server().run("recipe give " + t.player().name() + " *");
+		t.server().run("kill @e[type=item]");
+		var a = t.arena();
+		t.arena().set(2, 0, 0, "crafting_table");
+		t.arena().set(2, 0, 2, "chest");
+		t.arena().set(2, 0, -2, "barrel");
+		t.arena().set(-1, 0, 2, "chest");
+		for (int slot = 0; slot < 12; slot++)
+			t.server().run("item replace block " + a.x(2) + " " + a.y(0) + " " + a.z(2) + " container." + slot + " with obsidian 64");
+		t.server().run("item replace block " + a.x(2) + " " + a.y(0) + " " + a.z(-2) + " container.0 with ender_eye 64");
+		t.server().run("item replace block " + a.x(2) + " " + a.y(0) + " " + a.z(-2) + " container.1 with ender_eye 32");
+		for (int i = 0; i < 30; i++) t.player().give(i, "dirt", 64);
+		t.player().at(0.5, 0, 0.5, -90, 20);
+		String inputs = a.x(2) + " " + a.y(0) + " " + a.z(2) + "; " + a.x(2) + " " + a.y(0) + " " + a.z(-2);
+		String output = a.x(-1) + " " + a.y(0) + " " + a.z(2);
+		t.module(CRAFT).set("items", "clear").set("items", "add minecraft:ender_chest").set("inputs", inputs).set("outputs", output);
+		t.waitTicks(10);
+		t.flagsFromHere();
+		long start = now(t);
+		t.module(CRAFT).enable();
+		int made = 0;
+		for (int i = 0; i < 300 && made < 96; i++) {
+			t.waitTicks(5);
+			made = stored(t, -1, 0, 2, "ender_chest");
+		}
+		long took = now(t) - start;
+		t.waitTicks(20);
+		t.module(CRAFT).disable();
+		t.module(CRAFT).set("inputs", "").set("outputs", "");
+		int obsidian = stored(t, 2, 0, 2, "obsidian"), eyes = stored(t, 2, 0, -2, "ender_eye"), dirt = count(t, "dirt");
+		int kept = count(t, "ender_chest") + count(t, "obsidian") + count(t, "ender_eye");
+		boolean dropped = t.server().passes("at " + t.player().name() + " if entity @e[type=item,distance=..10]");
+		String detail = String.format(Locale.ROOT, "%d ender chests in the output in %d ticks; inputs left %d obsidian, %d eyes; %d kept, %d dirt%s", made, took,
+			obsidian, eyes, kept, dirt, dropped ? ", items on the ground" : "");
+		t.check(made == 96 && obsidian == 0 && eyes == 0 && kept == 0 && dirt == 30 * 64 && !dropped, detail);
+		t.note(detail);
+	}
+
+	@Test(name = "containers_swapped", tags = "inventory", timeoutTicks = 2400)
+	public void containersSwapped(TestContext t) {
+		// The eyes in a shulker box that's swapped out once it's empty, as a shulker unloader does: gone for a moment, then
+		// a new box with 12 more. Both boxes' worth crafted (24 ender chests), soon after the new one is there, but nothing
+		// taken from the new box for its first 10 ticks: an unloader's comparator has to see it full, or it never swaps again.
+		t.server().run("recipe give " + t.player().name() + " *");
+		t.server().run("kill @e[type=item]");
+		var a = t.arena();
+		String box = a.x(2) + " " + a.y(0) + " " + a.z(-2);
+		t.arena().set(2, 0, 0, "crafting_table");
+		t.arena().set(2, 0, 2, "chest");
+		t.arena().set(2, 0, -2, "shulker_box");
+		t.arena().set(-1, 0, 2, "chest");
+		for (int slot = 0; slot < 3; slot++)
+			t.server().run("item replace block " + a.x(2) + " " + a.y(0) + " " + a.z(2) + " container." + slot + " with obsidian 64");
+		t.server().run("item replace block " + box + " container.0 with ender_eye 12");
+		t.player().at(0.5, 0, 0.5, -90, 20);
+		t.module(CRAFT).set("items", "clear").set("items", "add minecraft:ender_chest")
+			// The box first, so it's the first thing opened when the new one comes.
+			.set("inputs", box + "; " + a.x(2) + " " + a.y(0) + " " + a.z(2)).set("outputs", a.x(-1) + " " + a.y(0) + " " + a.z(2));
+		t.waitTicks(10);
+		t.flagsFromHere();
+		t.module(CRAFT).enable();
+		boolean first = t.waitUntil("the first box's 12 put away", () -> stored(t, -1, 0, 2, "ender_chest") >= 12, 400);
+		t.server().run("setblock " + box + " air");
+		t.waitTicks(30);
+		// Full as it arrives, as an unloader's next box is.
+		t.server().run("setblock " + box + " shulker_box{Items:[{Slot:0b,id:\"minecraft:ender_eye\",count:12}]}");
+		long placed = now(t);
+		long firstTake = -1;
+		for (int i = 0; i < 60 && firstTake < 0; i++) {
+			if (stored(t, 2, 0, -2, "ender_eye") < 12) firstTake = now(t) - placed;
+			else t.waitTicks(1);
+		}
+		boolean second = t.waitUntil("the second box's 12 put away", () -> stored(t, -1, 0, 2, "ender_chest") >= 24, 600);
+		long took = now(t) - placed;
+		t.module(CRAFT).disable();
+		t.module(CRAFT).set("inputs", "").set("outputs", "");
+		int made = stored(t, -1, 0, 2, "ender_chest"), obsidian = stored(t, 2, 0, 2, "obsidian");
+		boolean dropped = t.server().passes("at " + t.player().name() + " if entity @e[type=item,distance=..10]");
+		String detail = String.format(Locale.ROOT, "%d ender chests, the second box's %d ticks after it was there (first taken from at %d); %d obsidian left%s",
+			made, took, firstTake, obsidian, dropped ? ", items on the ground" : "");
+		t.check(first && second && made == 24 && obsidian == 0 && took <= 160 && firstTake >= 10 && !dropped, detail);
+		t.note(detail);
+	}
+
+	/** Setting {@code key}'s value, read on the game thread. */
+	private static String setting(TestContext t, String key) {
+		return t.onGame(() -> t.module(CRAFT).get().settings.get(key).map(s -> String.valueOf(s.get())).orElse("?"));
+	}
+
+	/** Sends {@code line} as chat, which runs it as a Myriad command. */
+	private static void command(TestContext t, String line) {
+		t.onGame(() -> net.minecraft.client.Minecraft.getInstance().player.connection.sendChat(line));
+		t.waitTicks(2);
+	}
+
+	@Test(name = "containers_command", tags = "inventory", timeoutTicks = 400)
+	public void containersCommand(TestContext t) {
+		// .containers by the chest you look at: input toggles it on and off, output add moves it over, clear empties.
+		var a = t.arena();
+		t.arena().set(0, 0, 2, "chest");
+		t.player().at(0.5, 0, 0.5, 0, 30);
+		t.module(CRAFT).set("inputs", "").set("outputs", "");
+		t.waitTicks(10);
+		String chest = a.x(0) + " " + a.y(0) + " " + a.z(2);
+		command(t, ".containers AutoCraft input");
+		boolean added = setting(t, "inputs").equals(chest);
+		command(t, ".containers autocraft input");
+		boolean toggledOff = setting(t, "inputs").isEmpty();
+		command(t, ".containers AutoCraft input add");
+		command(t, ".containers AutoCraft output add");
+		boolean moved = setting(t, "inputs").isEmpty() && setting(t, "outputs").equals(chest);
+		command(t, ".containers AutoCraft output remove");
+		boolean removed = setting(t, "outputs").isEmpty();
+		command(t, ".containers AutoCraft output");
+		command(t, ".containers AutoCraft output clear");
+		boolean cleared = setting(t, "outputs").isEmpty();
+		String detail = String.format(Locale.ROOT, "added %b, toggled off %b, moved to outputs %b, removed %b, cleared %b", added, toggledOff, moved, removed, cleared);
+		t.check(added && toggledOff && moved && removed && cleared, detail);
+		t.note(detail);
+	}
 }

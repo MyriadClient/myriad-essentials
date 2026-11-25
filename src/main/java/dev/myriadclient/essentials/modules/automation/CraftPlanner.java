@@ -109,6 +109,21 @@ final class CraftPlanner {
 		return craft(r, crafts, left, steps, making, 0) ? steps : null;
 	}
 
+	/**
+	 * What crafting {@code r} {@code crafts} times from {@code have} takes out of it, item by item (only what's used, each
+	 * at least one), or null if it can't be: what to fetch from storage for that many.
+	 */
+	@Nullable Map<Item, Integer> uses(RecipeDisplayEntry r, int crafts, Map<Item, Integer> have) {
+		Map<Item, Integer> left = new HashMap<>(have);
+		if (!craft(r, crafts, left, new ArrayList<>(), new HashSet<>(), 0)) return null;
+		Map<Item, Integer> used = new HashMap<>();
+		for (var e : have.entrySet()) {
+			int n = e.getValue() - left.getOrDefault(e.getKey(), 0);
+			if (n > 0) used.put(e.getKey(), n);
+		}
+		return used;
+	}
+
 	/** Crafts {@code r} {@code crafts} times out of {@code left} (taking from it), its ingredients' steps first. */
 	private boolean craft(RecipeDisplayEntry r, int crafts, Map<Item, Integer> left, List<Step> steps, Set<Item> making, int depth) {
 		ItemStack made = result.apply(r);
