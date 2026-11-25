@@ -18,10 +18,12 @@ import net.minecraft.world.phys.BlockHitResult;
 import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.api.integration.Baritone;
 import dev.myriadclient.api.job.Job;
+import dev.myriadclient.api.job.JobContext;
 import dev.myriadclient.api.job.MaterialSource;
 import dev.myriadclient.api.job.Step;
 import dev.myriadclient.api.job.Steps;
 import dev.myriadclient.api.job.Why;
+import dev.myriadclient.api.job.Progress;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.render.RenderSettings;
@@ -98,7 +100,7 @@ public class Printer extends Module {
 		+ "part that isn't built yet with Baritone (not mining or placing on the way). Needs Baritone.").build();
 
 	private final SettingGroup sgRestock = settings.group("Restock");
-	private final BoolSetting restock = sgRestock.bool("Restock").description("When a block runs out, fetch a stack of it and carry on.").build();
+	private final BoolSetting restock = sgRestock.bool("Restock").description("When a block runs out, fill your inventory with it and carry on.").build();
 	private final BoolSetting fromShulkers = sgRestock.bool("From Shulker Boxes").description("From the shulker boxes in your inventory.")
 		.defaultValue(true).visible(restock::get).build();
 	private final BoolSetting fromContainers = sgRestock.bool("From Containers").description("From chests, barrels and shulker boxes "
@@ -116,13 +118,25 @@ public class Printer extends Module {
 	/** How near a container the walk goes, to open it. */
 	private static final int WALK_NEAR = 3;
 	/** Ticks nothing in reach is left before walking on. */
-	private static final int IDLE_TICKS = 10;
+	private static final int IDLE_TICKS = 4;
+	/** How far past the nearest unbuilt block a walk goes, following the unbuilt blocks on, building on the way. */
+	private static final double WALK_AHEAD = 10;
+	/** How far apart unbuilt blocks may be to be followed from one to the next. */
+	private static final double FOLLOW_GAP = 2.5;
+	/** Ticks between looks for a goal further on while walking. */
+	private static final int RETARGET_TICKS = 10;
+	/** How near the goal (blocks) the walk stops sprinting, to come to a stop from a walk. */
+	private static final double WALK_IN = 3;
+	/** How much further on (blocks) a goal must be than the one walked to, to go on to it instead. */
+	private static final double RETARGET_GAIN = 2;
 	/** How long a container that had none of a block isn't opened for it again, in ticks. */
 	private static final int EMPTY_FOR_TICKS = 1200;
 
 	private @Nullable Job<Void> job;
 	private Building.Options running;
 	private boolean runningWalk, runningRestock;
+	/** While a restock runs (and puts back the boxes it opened): not walked on from. */
+	private boolean restocking;
 	/** Walking to the next unbuilt part (Walk To Blocks), beside the printing job; and how long nothing in reach was left. */
 	private @Nullable Job<Void> walking;
 	private int idleTicks;
@@ -221,7 +235,7 @@ public class Printer extends Module {
 		Build b = job != null && runningWalk ? build() : null;
 		boolean idle = b != null && !watering && b.steps().stream().allMatch(st -> st.status() == Build.Status.DONE || fixedByMoving(st.status()));
 		idleTicks = idle ? idleTicks + 1 : 0;
-		if (idleTicks < IDLE_TICKS || walking != null && !walking.result().isDone()) return;
+		if (idleTicks < IDLE_TICKS || restocking || walking != null && !walking.result().isDone()) return;
 		idleTicks = 0;
 		walking = Myriad.jobs().start(this, walkOn().named("Walking on"));
 	}
@@ -235,6 +249,7 @@ public class Printer extends Module {
 		walking = null;
 		if (w != null) w.cancel();
 		idleTicks = 0;
+		restocking = false;
 		water.release();
 		watering = false;
 		triedSpots.clear();
@@ -259,8 +274,10 @@ public class Printer extends Module {
 	}
 
 	/**
-	 * Walks to beside the nearest block of the schematic that isn't built yet and can't be from here; nothing if
-	 * there's none.
+	 * Walks on from the nearest block of the schematic that isn't built yet and can't be from here, following the
+	 * unbuilt blocks past it up to {@link #WALK_AHEAD} blocks (away from you), to beside the last; and on the way, the
+	 * goal moves on ahead along them before it's reached ({@link WalkAlong}), so the walk goes right along what's left
+	 * unbuilt without stopping, what comes in reach built as you pass. Nothing if there's none.
 	 */
 	private Step<Void> walkOn() {
 		return Step.choose("Walk on", () -> {
@@ -276,13 +293,16 @@ public class Printer extends Module {
 				LongOpenHashSet tried = triedSpots.computeIfAbsent(next.asLong(), k -> new LongOpenHashSet());
 				// Where you stand now didn't do for it.
 				tried.add(mc.player.blockPosition().asLong());
-				BlockPos spot = standingSpot(next, tried);
+				BlockPos ahead = ahead(next);
+				BlockPos spot = ahead.equals(next) ? null : standingSpot(ahead, tried);
+				if (spot == null) spot = standingSpot(next, tried);
 				if (spot == null) {
 					passedOver.add(next.asLong());
 					continue;
 				}
 				tried.add(spot.asLong());
-				return walkingOnly(Steps.walkTo(spot));
+				BlockPos first = spot;
+				return walkingOnly(Step.of("Walk along", () -> new WalkAlong(first)));
 			}
 			return Step.nothing();
 		});
@@ -312,6 +332,111 @@ public class Printer extends Module {
 			if (best[0] != null) return best[0];
 		}
 		return null;
+	}
+
+	/**
+	 * Walks to a goal with Baritone, looking every {@link #RETARGET_TICKS} for one further on along the unbuilt blocks
+	 * (see {@link #walkOn}) and going on to that instead, so it only stops where nothing's left ahead. Done there; failed
+	 * {@code BLOCKED} when Baritone finds no way.
+	 */
+	private final class WalkAlong implements Step.Run<Void> {
+		/** Baritone works a path out before it walks: not walking yet isn't giving up, for a while. */
+		private static final int GRACE_TICKS = 40;
+		private BlockPos goal;
+		private boolean asked, walking;
+		private int askedAt;
+		/** No sprinting for the last few blocks to the last goal: stopping from a sprint while placing slips (Grim's Simulation). */
+		private Baritone.@Nullable Overrides walkIn;
+
+		WalkAlong(BlockPos goal) {
+			this.goal = goal;
+		}
+
+		@Override
+		public Progress<Void> tick(JobContext ctx) {
+			if (!inGame()) return Progress.running();
+			if (!asked || ctx.ticks() % RETARGET_TICKS == 0 && retarget()) {
+				asked = true;
+				walking = false;
+				askedAt = ctx.ticks();
+				if (!Baritone.pathTo(goal.getX(), goal.getY(), goal.getZ())) return Progress.failed(Why.of(Why.NO_PATHING, "Baritone didn't take the goal"));
+				return Progress.running();
+			}
+			if (mc.player.blockPosition().equals(goal)) return end(Progress.done());
+			if (walkIn == null && mc.player.position().distanceToSqr(Vec3.atBottomCenterOf(goal)) < WALK_IN * WALK_IN) {
+				walkIn = Baritone.override();
+				walkIn.set("allowSprint", false);
+			}
+			boolean pathing = Baritone.isPathing();
+			walking |= pathing;
+			if (!pathing && (walking || ctx.ticks() - askedAt > GRACE_TICKS)) return end(Progress.failed(Why.of(Why.BLOCKED, "Baritone found no way there")));
+			return Progress.running();
+		}
+
+		private Progress<Void> end(Progress<Void> how) {
+			if (walkIn != null) walkIn.close();
+			walkIn = null;
+			return how;
+		}
+
+		/** Whether there's a goal further on than the one walked to: it's the goal now. */
+		private boolean retarget() {
+			BlockPos next = nearestUnbuilt();
+			if (next == null) return false;
+			BlockPos ahead = ahead(next);
+			LongOpenHashSet here = new LongOpenHashSet();
+			here.add(mc.player.blockPosition().asLong());
+			BlockPos spot = standingSpot(ahead, here);
+			if (spot == null || spot.equals(goal)) return false;
+			Vec3 me = mc.player.position();
+			double now = Math.sqrt(me.distanceToSqr(Vec3.atBottomCenterOf(goal))), then = Math.sqrt(me.distanceToSqr(Vec3.atBottomCenterOf(spot)));
+			if (then < now + RETARGET_GAIN) return false;
+			goal = spot;
+			end(Progress.running());
+			return true;
+		}
+
+		@Override
+		public void pause(JobContext ctx) {
+			Baritone.pause(ctx.job());
+		}
+
+		@Override
+		public void resume(JobContext ctx) {
+			Baritone.resume(ctx.job());
+		}
+
+		@Override
+		public void cancel(JobContext ctx) {
+			end(Progress.running());
+			Baritone.resume(ctx.job());
+			if (asked && Baritone.isPathing()) Baritone.stop();
+		}
+	}
+
+	/**
+	 * The unbuilt block {@code from} leads on to: from one unbuilt block to the next within {@link #FOLLOW_GAP}, each
+	 * further from you than the last, till {@link #WALK_AHEAD} past {@code from} or there's none further.
+	 */
+	private BlockPos ahead(BlockPos from) {
+		Blueprint blueprint = blueprint();
+		Vec3 me = mc.player.position();
+		BlockPos at = from;
+		for (int hops = 0; hops < 2 * WALK_AHEAD; hops++) {
+			double here = me.distanceToSqr(Vec3.atCenterOf(at));
+			BlockPos[] best = {null};
+			double[] bestDistance = {here + 0.25};
+			blueprint.near(Vec3.atCenterOf(at), FOLLOW_GAP, (pos, target) -> {
+				double d = me.distanceToSqr(Vec3.atCenterOf(pos));
+				if (d <= bestDistance[0] || passedOver.contains(pos.asLong()) || !mc.level.isLoaded(pos)) return;
+				if (target.matches(mc.level, pos, mc.level.getBlockState(pos))) return;
+				best[0] = pos.immutable();
+				bestDistance[0] = d;
+			});
+			if (best[0] == null || best[0].distSqr(from) > WALK_AHEAD * WALK_AHEAD) break;
+			at = best[0];
+		}
+		return at;
 	}
 
 	/**
@@ -351,11 +476,20 @@ public class Printer extends Module {
 	// ---- restocking ---------------------------------------------------------------------------------------------
 
 	/**
-	 * Fetches a stack of the block most positions are waiting for: from the shulker boxes you carry, then the containers
-	 * around you, nearest first, passing over those that had none lately. Never stuck or failed itself: what it couldn't
-	 * find leaves the job waiting on the block, and it tries again a little later.
+	 * Fills your inventory with the block most positions are waiting for (one slot left free, for the next block to come
+	 * into): from the shulker boxes you carry, then the containers around you, nearest first, passing over those that
+	 * had none lately. Never stuck or failed itself: what it couldn't find leaves the job waiting on the block, and it
+	 * tries again a little later. It isn't walked on from meanwhile, so a box put down is picked back up where it is.
 	 */
 	private Step<Void> restock() {
+		return Step.run("Restocking", () -> {
+			restocking = true;
+			// Not walked on from meanwhile, so a box put down is picked back up where it was.
+			if (walking != null) walking.cancel();
+		}).then(fetch()).finallyDo(() -> restocking = false);
+	}
+
+	private Step<Void> fetch() {
 		return Step.choose("Restock", () -> {
 			Build.Step missing = missing();
 			if (missing == null) return Step.nothing();
@@ -369,10 +503,25 @@ public class Printer extends Module {
 			if (fromShulkers.get()) sources.add(MaterialSource.shulkerBoxes());
 			if (fromContainers.get()) for (BlockPos pos : containers(key)) sources.add(container(pos, key));
 			if (sources.isEmpty()) return Step.nothing();
-			int stack = tool != null ? 1 : new ItemStack(item(target)).getMaxStackSize();
-			return Steps.acquire(what, Myriad.inventory().count(what) + stack, sources).stuckFor(1).recover(why -> Step.supply("Not found", () -> 0))
+			int more = tool != null ? 1 : room(new ItemStack(item(target)));
+			if (more <= 0) return Step.nothing();
+			return Steps.acquire(what, Myriad.inventory().count(what) + more, sources).stuckFor(1).recover(why -> Step.supply("Not found", () -> 0))
 				.then(n -> Step.nothing());
 		});
+	}
+
+	/**
+	 * How many of {@code like} your inventory has room for, leaving one slot free: the room on its stacks, and a stack's
+	 * worth in each empty slot but one. At least a stack while any slot is free.
+	 */
+	private int room(ItemStack like) {
+		int max = like.getMaxStackSize(), room = 0, empty = 0;
+		for (int i = 0; i < 36; i++) {
+			ItemStack s = mc.player.getInventory().getItem(i);
+			if (s.isEmpty()) empty++;
+			else if (ItemStack.isSameItemSameComponents(s, like)) room += Math.max(0, max - s.getCount());
+		}
+		return room + Math.max(empty - 1, Math.min(empty, 1)) * max;
 	}
 
 	/** A step of the kind most of the build's positions have no item for, or null. */

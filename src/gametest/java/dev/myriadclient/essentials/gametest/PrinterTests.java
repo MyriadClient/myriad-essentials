@@ -296,6 +296,47 @@ public final class PrinterTests extends EssentialsSuite {
 		t.note(detail);
 	}
 
+	@Test(name = "restock_shulker_box", tags = "printer")
+	public void restockShulkerBox(TestContext t) {
+		// No glass on you but a shulker box of it (four stacks), a few slots free: the inventory filled with glass (a slot
+		// kept free at first, used by a restock after), more than a stack taken, and the box picked back up, nothing on
+		// the ground.
+		Pass p = new Pass().set("restock", "true").set("from_shulker_boxes", "true").set("from_containers", "false");
+		p.stand = new int[] {6, 9, 20};
+		// Long enough at each spot for a restock and the box going back: moved on mid-way, the box is out of reach.
+		p.stopTicks = 200;
+		p.omit = Set.of("glass");
+		Map<Integer, String> hotbar = new TreeMap<>(HOTBAR);
+		for (int slot = 3; slot < 8; slot++) hotbar.put(slot, "dirt");
+		p.hotbar = hotbar;
+		p.setup = c -> {
+			// The row's blocks are in 9-20: 21-32 full, 33 and 34 empty, the box in 35 (the hotbar's 8 empty too).
+			for (int slot = 21; slot <= 32; slot++) c.player().give(slot, "dirt", 64);
+			c.player().give(35, "shulker_box[container=[{slot:0,item:{id:glass,count:64}},{slot:1,item:{id:glass,count:64}},"
+				+ "{slot:2,item:{id:glass,count:64}},{slot:3,item:{id:glass,count:64}}]]");
+		};
+		Result r = printerPass(t, p);
+		int glass = 0, boxes = 0, empty = 0, built = 0, row = 0;
+		List<String> inventory = t.player().inventory();
+		for (int i = 0; i < 36; i++) {
+			String s = inventory.get(i);
+			if (s.isEmpty()) empty++;
+			if (s.startsWith("glass x")) glass += Integer.parseInt(s.substring(7));
+			if (s.startsWith("shulker_box x")) boxes++;
+		}
+		for (int i = 0; i < ROW.size(); i++) {
+			if (!ROW.get(i).equals("glass")) continue;
+			row++;
+			if (t.arena().is(X + i, Y, Z, "glass")) built++;
+		}
+		int taken = glass + built;
+		boolean onGround = t.server().passes("at " + t.player().name() + " if entity @e[type=item,distance=..16]");
+		String detail = String.format(java.util.Locale.ROOT, "%s; glass placed %d/%d, %d taken from the box, %d slots left empty, box %s%s",
+			r.detail, built, row, taken, empty, boxes == 1 ? "back" : "missing", onGround ? ", items on the ground" : "");
+		t.check(built == row && taken > 64 && empty <= 1 && boxes == 1 && !onGround, detail);
+		t.note(detail);
+	}
+
 	@Test(tags = "printer", timeoutTicks = 2400)
 	public void walk(TestContext t) {
 		// Standing 20 blocks short of the row: Walk To Blocks walks over (Baritone) and builds it.
@@ -303,7 +344,18 @@ public final class PrinterTests extends EssentialsSuite {
 		Pass p = new Pass().set("walk_to_blocks", "true");
 		p.startX = -24.5;
 		p.ticks = 1000;
+		// How long the row takes, from the Printer's start to its last block (on the client).
+		var arena = t.arena();
+		int[] startedAt = {-1}, doneAt = {-1};
+		p.watch = () -> {
+			var mc = Minecraft.getInstance();
+			if (startedAt[0] < 0) startedAt[0] = mc.player.tickCount;
+			if (doneAt[0] >= 0) return;
+			for (int i = 0; i < ROW.size(); i++) if (mc.level.getBlockState(new BlockPos(arena.x(X + i), arena.y(Y), arena.z(Z))).isAir()) return;
+			doneAt[0] = mc.player.tickCount;
+		};
 		judge(t, p);
+		t.note(doneAt[0] < 0 ? "row never finished" : "row built in " + (doneAt[0] - startedAt[0]) + " ticks");
 	}
 
 	// 2b2t's settings: Rotate off, Air Place on, with the placement checks 2b2t's Grim doesn't enforce only flagging.
