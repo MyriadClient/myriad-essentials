@@ -32,7 +32,7 @@ public final class AutoTraderTests extends EssentialsSuite {
 			+ "type:\"minecraft:plains\"},Offers:" + offers + "}");
 		String in = t.arena().x(2) + " " + t.arena().y(0) + " " + t.arena().z(-1);
 		String out = t.arena().x(-2) + " " + t.arena().y(0) + " " + t.arena().z(-1);
-		t.module(TRADER).set("input_chest", in).set("output_chest", out).set("profession", "minecraft:cleric").set("trade", "minecraft:experience_bottle");
+		t.module(TRADER).set("inputs", in).set("outputs", out).set("profession", "minecraft:cleric").set("trade", "minecraft:experience_bottle");
 		t.waitTicks(20);
 		t.flagsFromHere();
 		t.module(TRADER).enable();
@@ -58,7 +58,7 @@ public final class AutoTraderTests extends EssentialsSuite {
 			+ "\",level:4,type:\"minecraft:plains\"},Offers:{Recipes:[" + recipes + "]}}");
 		String in = t.arena().x(2) + " " + t.arena().y(0) + " " + t.arena().z(-1);
 		String out = t.arena().x(-2) + " " + t.arena().y(0) + " " + t.arena().z(-1);
-		t.module(TRADER).set("input_chest", in).set("output_chest", out).set("profession", "minecraft:" + profession);
+		t.module(TRADER).set("inputs", in).set("outputs", out).set("profession", "minecraft:" + profession);
 	}
 
 	@Test(name = "sells_for_emeralds", tags = "automation", timeoutTicks = 1200)
@@ -76,6 +76,34 @@ public final class AutoTraderTests extends EssentialsSuite {
 		t.server().run("kill @e[type=villager]");
 		String detail = String.format(Locale.ROOT, "%s; %d emeralds out, %d carrots left in the input", done ? "waiting for more" : "still going", emeralds, carrots);
 		t.check(done && emeralds == 5 && carrots == 0, detail);
+		t.note(detail);
+	}
+
+	@Test(name = "two_of_each", tags = "automation", timeoutTicks = 1600)
+	public void twoOfEach(TestContext t) {
+		// The carrots split over two inputs (40 and 60), the first output full of dirt: all 100 sold, 5 emeralds into the
+		// second output.
+		scene(t, "farmer", "{buy:{id:\"minecraft:carrot\",count:20},sell:{id:\"minecraft:emerald\",count:1},maxUses:9999,xp:1}",
+			"{Slot:0b,id:\"minecraft:carrot\",count:40}");
+		t.arena().set(2, 0, -3, "chest{Items:[{Slot:0b,id:\"minecraft:carrot\",count:60}]}");
+		StringBuilder dirt = new StringBuilder();
+		for (int i = 0; i < 27; i++) dirt.append(i == 0 ? "" : ",").append("{Slot:").append(i).append("b,id:\"minecraft:dirt\",count:64}");
+		t.arena().set(-2, 0, -3, "chest{Items:[" + dirt + "]}");
+		var a = t.arena();
+		t.module(TRADER).set("trade", "minecraft:emerald")
+			.set("inputs", a.x(2) + " " + a.y(0) + " " + a.z(-1) + "; " + a.x(2) + " " + a.y(0) + " " + a.z(-3))
+			.set("outputs", a.x(-2) + " " + a.y(0) + " " + a.z(-3) + "; " + a.x(-2) + " " + a.y(0) + " " + a.z(-1));
+		t.waitTicks(20);
+		t.flagsFromHere();
+		t.module(TRADER).enable();
+		boolean done = t.waitUntil("Auto Trader to wait for more", () -> t.onGame(() -> ((AutoTrader) t.module(TRADER).get()).waiting()), 1400);
+		t.module(TRADER).disable();
+		int emeralds = countIn(t, -2, 0, -1, "emerald"), first = countIn(t, -2, 0, -3, "emerald");
+		int carrots = countIn(t, 2, 0, -1, "carrot") + countIn(t, 2, 0, -3, "carrot");
+		t.server().run("kill @e[type=villager]");
+		String detail = String.format(Locale.ROOT, "%s; %d emeralds in the second output (%d in the full one), %d carrots left in the inputs",
+			done ? "waiting for more" : "still going", emeralds, first, carrots);
+		t.check(done && emeralds == 5 && first == 0 && carrots == 0, detail);
 		t.note(detail);
 	}
 
@@ -209,7 +237,7 @@ public final class AutoTraderTests extends EssentialsSuite {
 			+ "type:\"minecraft:plains\"},Offers:" + offers + "}");
 		String in = t.arena().x(2) + " " + t.arena().y(0) + " " + t.arena().z(-1);
 		String out = t.arena().x(-2) + " " + t.arena().y(0) + " " + t.arena().z(-1);
-		t.module(TRADER).set("input_chest", in).set("output_chest", out).set("profession", "minecraft:cleric").set("trade", "minecraft:experience_bottle");
+		t.module(TRADER).set("inputs", in).set("outputs", out).set("profession", "minecraft:cleric").set("trade", "minecraft:experience_bottle");
 		t.waitTicks(20);
 		t.flagsFromHere();
 		t.module(TRADER).enable();

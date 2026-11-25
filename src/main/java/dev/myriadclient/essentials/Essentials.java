@@ -82,6 +82,8 @@ import dev.myriadclient.essentials.modules.world.PlacementTweaks;
 import dev.myriadclient.essentials.modules.world.Reach;
 import dev.myriadclient.essentials.modules.world.Scaffold;
 import dev.myriadclient.essentials.modules.world.WallInteract;
+import dev.myriadclient.essentials.util.ContainersCommand;
+import dev.myriadclient.essentials.util.HiddenPosListSetting;
 import dev.myriadclient.essentials.util.HiddenPosSetting;
 import dev.myriadclient.essentials.util.NamedChoiceSetting;
 import dev.myriadclient.essentials.util.PearlOwners;
@@ -106,6 +108,7 @@ public final class Essentials implements MyriadAddon {
 		VillagerTrades.load(ctx.storage());
 		NamedChoiceSetting.register(ctx.settingWidgets());
 		HiddenPosSetting.register(ctx.settingWidgets());
+		HiddenPosListSetting.register(ctx.settingWidgets());
 		BackgroundEffects.register();
 		// Modules the ready-made control panels below combine.
 		ElytraTweaks elytraTweaks = new ElytraTweaks();
@@ -148,6 +151,9 @@ public final class Essentials implements MyriadAddon {
 			.module(rotationLock)
 			.module(autoEat)
 			.build());
+
+		// Inputs and outputs (Auto Craft, Auto Trader) from chat, macros and wheels.
+		ctx.registerCommand(new ContainersCommand());
 
 		// Acceptance runs for the builders, Auto Sort and Auto Mend, in a dev client's singleplayer world.
 		if (FabricLoader.getInstance().isDevelopmentEnvironment()) {

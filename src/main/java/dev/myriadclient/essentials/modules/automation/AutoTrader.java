@@ -5,15 +5,13 @@ import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.api.event.events.ScreenOpenEvent;
 import dev.myriadclient.api.event.events.TickEvent;
-import dev.myriadclient.api.event.events.Render2DEvent;
-import dev.myriadclient.api.event.events.RenderEvent;
-import dev.myriadclient.api.render.RenderSettings;
-import dev.myriadclient.api.render.WorldLabel;
-import dev.myriadclient.api.setting.BoolSetting;
-import dev.myriadclient.api.setting.ColorSetting;
-import dev.myriadclient.api.setting.SettingColor;
+import dev.myriadclient.api.job.Job;
+import dev.myriadclient.api.job.JobContext;
+import dev.myriadclient.api.job.Progress;
+import dev.myriadclient.api.job.Why;
+import dev.myriadclient.api.setting.SavedSettings;
 import dev.myriadclient.api.setting.SettingGroup;
-import dev.myriadclient.essentials.util.HiddenPosSetting;
+import dev.myriadclient.essentials.util.ContainerLinks;
 import dev.myriadclient.api.integration.Baritone;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
@@ -28,12 +26,10 @@ import dev.myriadclient.api.setting.IntSetting;
 import dev.myriadclient.api.setting.RegistrySetting;
 import dev.myriadclient.essentials.util.NamedChoiceSetting;
 import dev.myriadclient.essentials.util.VillagerTrades;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.MerchantScreen;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.resources.Identifier;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -55,9 +51,7 @@ import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.item.trading.MerchantOffers;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -72,11 +66,11 @@ import java.util.Set;
 
 /**
  * Makes one trade with every villager of a kind, over and over: what it costs (emeralds, emerald blocks crafted into
- * emeralds, books, or what a villager buys, carrots say, when the trade is Emerald) is taken from the input chest, spent
- * at each villager with the trade until it's sold out or the payment runs out, and what's got goes into the output chest
- * whenever the inventory fills up, until the input has nothing left to pay with (one that hoppers feed is waited on and
- * looked into again every 30 s instead, until you stop it). What a trade costs is learned from the
- * villagers' offers. A villager sold out is looked at again now and then for its restock. Baritone walks you between the
+ * emeralds, books, or what a villager buys, carrots say, when the trade is Emerald) is taken from the input chests, spent
+ * at each villager with the trade until it's sold out or the payment runs out, and what's got goes into the output
+ * chests (each in turn, see {@link ContainerLinks}) whenever the inventory fills up, until the inputs have nothing left
+ * to pay with (ones that hoppers feed are waited on and looked into again every 30 s instead, until you stop it). What
+ * a trade costs is learned from the villagers' offers. A villager sold out is looked at again now and then for its restock. Baritone walks you between the
  * chests and the villagers when they're out of reach (without it, everything has to be in reach).
  * <p>
  * The trades are read and made with their screen hidden; each choice of trade and each buy (a shift-click on the result,
@@ -85,10 +79,10 @@ import java.util.Set;
 public class AutoTrader extends Module {
 	private static final String ANY = "Any";
 
-	private final HiddenPosSetting input = sgGeneral.add(HiddenPosSetting.of("Input Chest", "Where the payment comes from (emeralds, emerald "
-		+ "blocks, books, carrots: whatever the trade costs): look at it and press Set.", () -> pick(true)));
-	private final HiddenPosSetting output = sgGeneral.add(HiddenPosSetting.of("Output Chest", "Where what's got goes: look at it and press Set.",
-		() -> pick(false)));
+	private final SettingGroup sgRender = settings.group("Render");
+	private final ContainerLinks links = new ContainerLinks(this, sgGeneral, sgRender, "input chest", "output chest",
+		"Where the payment comes from (emeralds, emerald blocks, books, carrots: whatever the trade costs), taken from each in turn.",
+		"Where what's got goes, each filled in turn.");
 	@SuppressWarnings("unused")
 	private final ActionSetting forgetTrades = sgGeneral.action("Forget Known Trades", () -> info("Forgot " + VillagerTrades.forgetAll()
 		+ " villagers' trades on this server")).description("Trades are remembered per villager once seen (until its level or job changes): this "
@@ -103,12 +97,6 @@ public class AutoTrader extends Module {
 	private final IntSetting range = sgGeneral.integer("Range").defaultValue(24).range(4, 64)
 		.description("How far from you villagers are looked for, in blocks.").build();
 
-	private final SettingGroup sgRender = settings.group("Render");
-	private final BoolSetting showChests = sgRender.bool("Show Chests").description("Outline the input and output chests, labelled, while it runs.")
-		.defaultValue(true).build();
-	private final ColorSetting inputColor = sgRender.color("Input Color").defaultValue(SettingColor.role(SettingColor.Mode.GREEN)).visible(showChests::get).build();
-	private final ColorSetting outputColor = sgRender.color("Output Color").defaultValue(SettingColor.role(SettingColor.Mode.BLUE)).visible(showChests::get).build();
-	private final RenderSettings look = RenderSettings.builder(sgRender).visible(showChests::get).throughWalls(true).build();
 
 	private enum Step { START, TO_INPUT, STOCK, CONVERT, PICK, TO_VILLAGER, LOOK, TRADES, TRADE, TO_OUTPUT, DEPOSIT, WAIT }
 
@@ -137,6 +125,8 @@ public class AutoTrader extends Module {
 	private final Map<Integer, Integer> soldOut = new HashMap<>();
 	private int clock;
 	private boolean inputEmpty, learned;
+	/** The input or output chest being gone to (by its place in the list), and what this pass over the inputs took. */
+	private int chest, tookThisPass;
 	/** What's waited for (said once), or null while trading. */
 	private @Nullable String waitingFor;
 	private Containers.@Nullable View view;
@@ -158,11 +148,98 @@ public class AutoTrader extends Module {
 	private boolean stocked;
 
 	public AutoTrader() {
-		super(Tags.AUTOMATION, "Auto Trader", "Trades with villagers from one chest into another: buys with emeralds, or sells them carrots, paper and the like.");
+		super(Tags.AUTOMATION, "Auto Trader", "Trades with villagers from chests into chests: buys with emeralds, or sells them carrots, paper and the like.");
+	}
+
+	/** Version 2: one input and one output chest became lists (Inputs, Outputs), and Show Chests Show Containers. */
+	@Override
+	public int settingsVersion() {
+		return 2;
+	}
+
+	@Override
+	protected void migrateSettings(int fromVersion, SavedSettings saved) {
+		if (fromVersion < 2) {
+			// A single position reads as a list of one.
+			saved.rename("General", "Input Chest", "Inputs");
+			saved.rename("General", "Output Chest", "Outputs");
+			saved.rename("Render", "Show Chests", "Show Containers");
+		}
+	}
+
+	/**
+	 * The job it runs as ("Trading": the Jobs window shows it, and can pause or cancel it), and the owner of the chests it
+	 * opens: core opens a job's containers quietly, no screen shown and none of yours replaced (the UI, a wheel, chat).
+	 * Null between worlds; started again in the next.
+	 */
+	private @Nullable Job<Void> job;
+	private @Nullable Object jobOwner;
+
+	/** Starts the job; one cancelled from the Jobs window turns the module off, one ended by leaving the world starts again in the next. */
+	private void startJob() {
+		if (mc.player == null) return;
+		Job<Void> mine = job = Myriad.jobs().start(this, dev.myriadclient.api.job.Step.of("Trading", TradeRun::new)
+			.named(() -> waitingFor != null ? waitingFor : "Trading"));
+		mine.result().whenComplete((v, t) -> {
+			if (job != mine) return;
+			job = null;
+			stopWork();
+			jobOwner = null;
+			if (isEnabled() && (t == null || !Why.of(t).code().equals(Why.LEFT_WORLD))) disable();
+		});
+	}
+
+	/** Its work, one tick at a time, as the job's step; paused, it lets go of what it has open and starts over after. */
+	private final class TradeRun implements dev.myriadclient.api.job.Step.Run<Void> {
+		@Override
+		public void start(JobContext ctx) {
+			jobOwner = ctx.job();
+		}
+
+		@Override
+		public Progress<Void> tick(JobContext ctx) {
+			tradeTick();
+			return Progress.running();
+		}
+
+		@Override
+		public void pause(JobContext ctx) {
+			stopWork();
+		}
+
+		@Override
+		public void resume(JobContext ctx) {
+			go(Step.START);
+		}
+
+		@Override
+		public void cancel(JobContext ctx) {
+			stopWork();
+		}
+
+		@Override
+		public @Nullable String status() {
+			return waitingFor;
+		}
+	}
+
+	/** In a world with it on but no job (the last one ended with the world): a new one. */
+	@Subscribe(inGame = true)
+	private void onTick(TickEvent.Pre e) {
+		if (job == null) startJob();
+	}
+
+	/**
+	 * Whether a screen of yours is up that a chest of this one's would replace: your inventory, or a container you opened
+	 * (this one's are never shown). Chests wait till it's closed.
+	 */
+	private boolean yours() {
+		return mc.gui.screen() instanceof AbstractContainerScreen<?>;
 	}
 
 	@Override
 	protected void onEnable() {
+		startJob();
 		go(Step.START);
 		soldOut.clear();
 		inputEmpty = false;
@@ -200,6 +277,15 @@ public class AutoTrader extends Module {
 
 	@Override
 	protected void onDisable() {
+		Job<Void> j = job;
+		job = null;
+		if (j != null) j.cancel();
+		stopWork();
+		jobOwner = null;
+	}
+
+	/** Lets go of the walk, the chest and the trades (paused, cancelled, off). */
+	private void stopWork() {
 		if (walking) Baritone.stop();
 		walking = false;
 		closeView();
@@ -213,6 +299,24 @@ public class AutoTrader extends Module {
 			Baritone.stop();
 			walking = false;
 		}
+	}
+
+	/** A pass over the input chests, from the first. */
+	private void toInputs() {
+		chest = 0;
+		tookThisPass = 0;
+		go(Step.TO_INPUT);
+	}
+
+	/** A pass over the output chests, from the first. */
+	private void toOutputs() {
+		chest = 0;
+		go(Step.TO_OUTPUT);
+	}
+
+	/** The chest being gone to in {@code list}, or null if the list has run out (one was taken off meanwhile). */
+	private @Nullable BlockPos at(List<BlockPos> list) {
+		return chest < list.size() ? list.get(chest) : null;
 	}
 
 	// ---- Settings -----------------------------------------------------------------------------------------------
@@ -232,17 +336,6 @@ public class AutoTrader extends Module {
 		if (mc.level != null) mc.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).listElementIds()
 			.forEach(k -> ids.add(k.identifier().toString()));
 		return ids;
-	}
-
-	/** Makes the container you look at the input (or output) chest. */
-	private void pick(boolean isInput) {
-		if (mc.player == null || !(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
-			|| !(mc.level.getBlockEntity(hit.getBlockPos()) instanceof Container)) {
-			warn("Look at a chest (or any container) first");
-			return;
-		}
-		(isInput ? input : output).set(hit.getBlockPos());
-		info((isInput ? "Input" : "Output") + " chest set");
 	}
 
 	// ---- Inventory ----------------------------------------------------------------------------------------------
@@ -334,13 +427,13 @@ public class AutoTrader extends Module {
 
 	// ---- Ticks --------------------------------------------------------------------------------------------------
 
-	@Subscribe(inGame = true)
-	private void onTick(TickEvent.Pre e) {
+	/** A tick of work (the job's). */
+	private void tradeTick() {
 		ticks++;
 		clock++;
 		switch (step) {
 			case START -> start();
-			case TO_INPUT -> toChest(input.pos(), "input chest", Step.STOCK);
+			case TO_INPUT -> toChest(at(links.inputs()), "input chest", Step.STOCK);
 			case STOCK -> stock();
 			case CONVERT -> convert();
 			case PICK -> pickVillager();
@@ -364,7 +457,7 @@ public class AutoTrader extends Module {
 				else if (ticks > TRADES_TICKS) skipVillager();
 			}
 			case TRADE -> buy();
-			case TO_OUTPUT -> toChest(output.pos(), "output chest", Step.DEPOSIT);
+			case TO_OUTPUT -> toChest(at(links.outputs()), "output chest", Step.DEPOSIT);
 			case DEPOSIT -> deposit();
 			case WAIT -> {
 				// A villager's wait over, or time for another look into the input chest (and the output's room).
@@ -383,8 +476,8 @@ public class AutoTrader extends Module {
 	 * the input chest to fill, villagers to restock), so it can be left running.
 	 */
 	private void start() {
-		if (input.pos() == null || output.pos() == null) {
-			warn("Set the input and output chests first");
+		if (links.inputs().isEmpty() || links.outputs().isEmpty()) {
+			warn("Add an input and an output chest first");
 			toggle();
 			return;
 		}
@@ -399,7 +492,7 @@ public class AutoTrader extends Module {
 		boolean visit = false;
 		for (Villager v : sellers) visit |= worthVisiting(v);
 		if (!room() || boughtCount() > 0 && !visit) {
-			go(Step.TO_OUTPUT);
+			toOutputs();
 			return;
 		}
 		// Too few emeralds for a trade, and blocks: made into emeralds before anyone's visited.
@@ -413,12 +506,12 @@ public class AutoTrader extends Module {
 			return;
 		}
 		if (!inputEmpty) {
-			go(Step.TO_INPUT);
+			toInputs();
 			return;
 		}
 		// Nothing more to take and nobody to pay: waits for restocks and for the input chest to fill.
 		idle(soldOut.values().stream().anyMatch(t -> t > clock) ? "Villagers are sold out: waiting for them to restock"
-			: "Nothing left in the input chest to pay with: waiting for more");
+			: "Nothing left in the input chests to pay with: waiting for more");
 	}
 
 	private List<Villager> villagersInRange() {
@@ -512,9 +605,19 @@ public class AutoTrader extends Module {
 	private void stock() {
 		if (view == null) {
 			if (ticks != 1) return;
-			Myriad.containers().open(this, input.pos(), OPEN_TICKS, Placement.Options.forServer()).whenComplete((v, t) -> {
+			// Not while your inventory or a chest of yours is up: it would take its place. Asked again next tick.
+			if (yours()) {
+				ticks = 0;
+				return;
+			}
+			BlockPos at = at(links.inputs());
+			if (at == null) {
+				endStock();
+				return;
+			}
+			Myriad.containers().open(jobOwner, at, OPEN_TICKS, Placement.Options.forServer()).whenComplete((v, t) -> {
 				if (t != null || v == null) {
-					openFailed("input chest", input.pos());
+					openFailed(true, at);
 					return;
 				}
 				view = v;
@@ -551,60 +654,36 @@ public class AutoTrader extends Module {
 				chain.whenComplete((n, t2) -> {
 					if (n != null) took[0] += n;
 					closeView();
-					// Nothing more came: the input has nothing left to give. Something new: who couldn't be paid may be now.
-					stocked = true;
-					if (took[0] == 0) inputEmpty = true;
-					else {
-						waitingFor = null;
-						cantPay.clear();
+					tookThisPass += took[0];
+					// The next input while there's room for more.
+					if (chest + 1 < links.inputs().size() && emptySlots() > reserve) {
+						chest++;
+						go(Step.TO_INPUT);
+						return;
 					}
-					go(Step.START);
+					endStock();
 				});
 			});
 		}
 	}
 
+	/**
+	 * The pass over the inputs is over. Nothing came: they have nothing left to give. Something new: who couldn't be
+	 * paid may be now.
+	 */
+	private void endStock() {
+		stocked = true;
+		if (tookThisPass == 0) inputEmpty = true;
+		else {
+			waitingFor = null;
+			cantPay.clear();
+		}
+		go(Step.START);
+	}
+
 	/** Whether {@code stack} in the input is taken as {@code item} (emerald blocks as emeralds). */
 	private static boolean takes(Item item, ItemStack stack) {
 		return stack.is(item) || item == Items.EMERALD && stack.is(Items.EMERALD_BLOCK);
-	}
-
-	/** The chest at {@code pos}: both halves of a double one. */
-	private List<BlockPos> halves(BlockPos pos) {
-		List<BlockPos> halves = new ArrayList<>(List.of(pos));
-		BlockState state = mc.level.getBlockState(pos);
-		if (state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE)
-			halves.add(pos.relative(ChestBlock.getConnectedDirection(state)));
-		return halves;
-	}
-
-	@Subscribe
-	private void onRender(RenderEvent e) {
-		if (!showChests.get() || mc.level == null) return;
-		BlockPos in = input.pos(), out = output.pos();
-		if (in != null) for (BlockPos p : halves(in)) e.block(p, look, inputColor.argb());
-		if (out != null) for (BlockPos p : halves(out)) e.block(p, look, outputColor.argb());
-	}
-
-	/** "Input" and "Output" over the chests (the middle of a double one). */
-	@Subscribe
-	private void onLabels(Render2DEvent e) {
-		if (!showChests.get() || mc.level == null) return;
-		label(e, input.pos(), "Input", inputColor.argb());
-		label(e, output.pos(), "Output", outputColor.argb());
-	}
-
-	private void label(Render2DEvent e, @Nullable BlockPos pos, String text, int color) {
-		if (pos == null) return;
-		List<BlockPos> halves = halves(pos);
-		double x = 0, z = 0;
-		for (BlockPos p : halves) {
-			x += p.getX() + 0.5;
-			z += p.getZ() + 0.5;
-		}
-		Vec3 top = new Vec3(x / halves.size(), pos.getY() + 1.3, z / halves.size());
-		WorldLabel.draw(e.canvas(), top, WorldLabel.distanceScale(top), List.of(new WorldLabel.Segment(text, 0xFFFFFFFF)), WorldLabel.Background.ROUNDED,
-			0xAA000000, color, true);
 	}
 
 	/** How many trades' payment ({@code perTrade}: each item's most for one) fits in {@code slots} free slots. */
@@ -623,9 +702,18 @@ public class AutoTrader extends Module {
 	private void deposit() {
 		if (view == null) {
 			if (ticks != 1) return;
-			Myriad.containers().open(this, output.pos(), OPEN_TICKS, Placement.Options.forServer()).whenComplete((v, t) -> {
+			if (yours()) {
+				ticks = 0;
+				return;
+			}
+			BlockPos at = at(links.outputs());
+			if (at == null) {
+				endDeposit();
+				return;
+			}
+			Myriad.containers().open(jobOwner, at, OPEN_TICKS, Placement.Options.forServer()).whenComplete((v, t) -> {
 				if (t != null || v == null) {
-					openFailed("output chest", output.pos());
+					openFailed(false, at);
 					return;
 				}
 				view = v;
@@ -633,20 +721,44 @@ public class AutoTrader extends Module {
 				v.put(this::bought, Containers.Transfer.all()).whenComplete((n, t2) -> {
 					closeView();
 					if (n != null && n > 0) waitingFor = null;
-					// Whatever's left didn't fit: waited on till there's room (a hopper may empty it).
-					if (boughtCount() > 0) idle("The output chest is full: waiting for room");
-					else if (!room()) idle("Your inventory is full: waiting");
-					else go(Step.START);
+					// What didn't fit goes to the next output.
+					if (boughtCount() > 0 && chest + 1 < links.outputs().size()) {
+						chest++;
+						go(Step.TO_OUTPUT);
+						return;
+					}
+					endDeposit();
 				});
 			});
 		}
 	}
 
-	/** A chest that didn't open: stops if it's gone, else it's tried again: twice more soon, then after a wait. */
-	private void openFailed(String name, @Nullable BlockPos pos) {
-		if (pos == null || mc.level == null || !(mc.level.getBlockEntity(pos) instanceof Container)) {
-			warn("The " + name + " is gone");
-			toggle();
+	/** The pass over the outputs is over: whatever's left didn't fit, and is waited on till there's room (a hopper may empty them). */
+	private void endDeposit() {
+		if (boughtCount() > 0) idle(links.outputs().size() == 1 ? "The output chest is full: waiting for room" : "The output chests are full: waiting for room");
+		else if (!room()) idle("Your inventory is full: waiting");
+		else go(Step.START);
+	}
+
+	/**
+	 * A chest that didn't open: if it isn't there, the next one (or a wait, if that was the only one); else it's tried
+	 * again, twice more soon, then after a wait.
+	 */
+	private void openFailed(boolean input, BlockPos pos) {
+		String name = input ? "input chest" : "output chest";
+		if (mc.level == null || !(mc.level.getBlockEntity(pos) instanceof Container)) {
+			// Not there right now (broken, or a shulker box between swaps): the next one, or a wait if it was the only one.
+			List<BlockPos> list = input ? links.inputs() : links.outputs();
+			openTries = 0;
+			if (list.size() <= 1) {
+				idle("The " + name + " isn't there: waiting for it");
+				return;
+			}
+			if (chest + 1 < list.size()) {
+				chest++;
+				go(input ? Step.TO_INPUT : Step.TO_OUTPUT);
+			} else if (input) endStock();
+			else endDeposit();
 			return;
 		}
 		if (++openTries < OPEN_TRIES) {
@@ -682,7 +794,7 @@ public class AutoTrader extends Module {
 			int times = all ? 1 : Math.min(fits, 12);
 			if (recipe == null || fits == 0 || !Myriad.limits().canSend(PacketLimits.Kind.INVENTORY, Math.max(1, times)) || !Myriad.inventory().prepareClick()) {
 				if (recipe == null) warn("The recipe for emeralds from a block isn't in your recipe book");
-				else if (fits == 0) go(Step.TO_OUTPUT);
+				else if (fits == 0) toOutputs();
 				return;
 			}
 			for (int i = 0; i < times; i++) {
@@ -848,7 +960,10 @@ public class AutoTrader extends Module {
 		if (mc.player != null && mc.player.containerMenu instanceof MerchantMenu) mc.player.closeContainer();
 	}
 
-	/** The trading screen stays hidden while trades are read and made. */
+	/**
+	 * The trading screen stays hidden while trades are read and made (they're only opened with no screen of yours up).
+	 * The chests' show none by themselves: they're the job's.
+	 */
 	@Subscribe
 	private void onScreen(ScreenOpenEvent e) {
 		if (e.screen() instanceof MerchantScreen && (step == Step.LOOK || step == Step.TRADES || step == Step.TRADE)) e.setScreen(null);
