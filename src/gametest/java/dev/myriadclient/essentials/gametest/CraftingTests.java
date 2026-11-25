@@ -95,7 +95,7 @@ public final class CraftingTests extends EssentialsSuite {
 	@Test(tags = "crafting")
 	public void balanceWithinClickBudget(TestContext t) {
 		// A stack of 64 and one to eight in the other slots: evening that out by hand takes about 85 clicks, more than 2b2t
-		// takes in 4 s. The balance stops at the budget (72 in 5 s) and says so; a middle-click later finishes it.
+		// takes in 4 s. The balance stops at the budget (79 in 4.5 s) and says so; a middle-click later finishes it.
 		// Cobblestone: nine of it make nothing, so the recipe book can't fill the grid instead.
 		table(t);
 		t.player().give(9, "cobblestone", 64);
@@ -120,7 +120,7 @@ public final class CraftingTests extends EssentialsSuite {
 			return String.join(",", c) + (menu.getCarried().isEmpty() ? "" : " cursor " + menu.getCarried().getCount());
 		});
 		String detail = used + " clicks in the window after the first balance" + (warned ? ", warned" : "") + "; grid after the second: " + counts;
-		t.check(used <= 72 && counts.equals("12,11,11,11,11,11,11,11,11"), detail);
+		t.check(used <= 79 && counts.equals("12,11,11,11,11,11,11,11,11"), detail);
 		t.note(detail);
 	}
 

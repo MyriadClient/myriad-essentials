@@ -52,6 +52,11 @@ public final class OpenBoxTests extends EssentialsSuite {
 	 * itself has completed, so the test makes the same calls and reads the outcome from them instead.
 	 */
 	private static Opening openItem(TestContext t, int index, int keepTicks) {
+		return openItem(t, index, keepTicks, false);
+	}
+
+	/** {@link #openItem(TestContext, int, int)}, with air placement as {@code airPlace} says (2b2t's servers take it). */
+	private static Opening openItem(TestContext t, int index, int keepTicks, boolean airPlace) {
 		Opening o = new Opening();
 		Object owner = new Object() {
 			@Override
@@ -61,7 +66,7 @@ public final class OpenBoxTests extends EssentialsSuite {
 		};
 		t.onGame(() -> {
 			long started = System.currentTimeMillis();
-			Myriad.containers().openItem(owner, index, 100, Placement.Options.forServer().withAirPlace(false)).whenComplete((session, e) -> {
+			Myriad.containers().openItem(owner, index, 100, Placement.Options.forServer().withAirPlace(airPlace)).whenComplete((session, e) -> {
 				if (e != null) {
 					o.failed = reason(e);
 					return;
@@ -131,6 +136,30 @@ public final class OpenBoxTests extends EssentialsSuite {
 	private static void report(TestContext t, Result r) {
 		t.check(r.ok, r.detail);
 		t.note(r.detail);
+	}
+
+	@Test(name = "on_a_pillar", tags = "boxes", timeoutTicks = 600)
+	public void onAPillar(TestContext t) {
+		// Standing on a block a block above the floor, air all round it (a platform of boxes with gaps, say), air placement
+		// on: wherever the box goes, what it drops lands a block below your feet. It's put down all the same, opened, and
+		// once broken stepped down to, picked up, and stepped back up from. The spot over the head is taken (another box of
+		// a round: some put several down), so it goes beside.
+		give(t, BOX_ITEMS);
+		t.arena().set(0, 0, 0, "stone");
+		t.arena().set(0, 4, 0, "stone");
+		t.player().at(0.5, 1, 0.5, -90, 20);
+		t.player().select(1);
+		t.waitTicks(10);
+		Opening o = openItem(t, 3, 20, true);
+		t.waitTicks(200);
+		boolean back = holds(t, "container.*", "red_shulker_box");
+		double y = t.onGame(() -> net.minecraft.client.Minecraft.getInstance().player.getY());
+		boolean onTop = Math.abs(y - (t.arena().y(0) + 1)) < 0.1;
+		String detail = String.format(java.util.Locale.ROOT, "%s, box %s, the tester %s",
+			o.where != null ? "opened" : "didn't open (" + (o.failed != null ? o.failed : "no answer") + ")", back ? "back" : "not back",
+			onTop ? "back on the pillar" : "at y " + String.format(java.util.Locale.ROOT, "%.2f", y - t.arena().y(0)));
+		t.check(o.where != null && "".equals(o.back) && back && onTop, detail);
+		t.note(detail);
 	}
 
 	@Test(tags = "boxes")

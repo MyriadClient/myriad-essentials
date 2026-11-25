@@ -1,14 +1,20 @@
 package dev.myriadclient.essentials.gametest;
 
 import dev.myriadclient.api.Myriad;
+import dev.myriadclient.api.event.Subscribe;
+import dev.myriadclient.api.event.events.RenderEvent;
+import dev.myriadclient.api.event.events.TickEvent;
 import dev.myriadclient.testing.Test;
 import dev.myriadclient.testing.TestContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -53,6 +59,81 @@ public final class InventorySyncTests extends EssentialsSuite {
 		String detail = String.format(Locale.ROOT, "borrowed into %d; slot 3 showed %s (held %s); clicked: %s on the cursor; afterwards %s", slot, shown, real, carried,
 			back ? "sword and rockets home" : "not as they were");
 		t.check(slot == 3 && shown.equals("1 diamond_sword") && real.equals("16 firework_rocket") && carried.equals("1 diamond_sword") && back, detail);
+		t.note(detail);
+	}
+
+	@Test(name = "shulker_shuffle", tags = "inventory", timeoutTicks = 1200)
+	public void shulkerShuffle(TestContext t) {
+		// Filled shulker boxes moved round your inventory by hand, quickly: picked up and put down, swapped onto each other, two clicks in a tick now and then. No box is ever shown
+		// twice, and afterwards the client shows what the server has, with nothing on the cursor. Run it with
+		// --answer-clicks slots too (2b2t's answers).
+		String[] colors = {"red", "blue", "green", "yellow", "purple", "white"};
+		for (int i = 0; i < colors.length; i++)
+			t.player().give(9 + i, colors[i] + "_shulker_box[container=[{slot:0,item:{id:stone,count:64}},{slot:1,item:{id:dirt,count:" + (10 + i) + "}}]]", 1);
+		t.waitTicks(10);
+		List<String> steps = new ArrayList<>(List.of("key e", "wait 10"));
+		for (int round = 0; round < 4; round++) {
+			// Each to the empty row below (menu slots 18-23) and back, the last two swapped onto each other on the way.
+			// Put down with the mouse moving a pixel while held, as a hand does: the screen sends a one-slot drag (start,
+			// slot, end), which 2b2t answers start and slot too.
+			for (int i = 0; i < 6; i++) steps.addAll(List.of("cursor slot " + (9 + i), "mouse 0 click", round % 2 == 0 ? "wait 0" : "wait 1",
+				"cursor slot " + (18 + i), "mouse 0 press", "drag slot " + (18 + i), "mouse 0 release", "wait 1"));
+			steps.addAll(List.of("cursor slot 22", "mouse 0 click", "wait 1", "cursor slot 23", "mouse 0 click", "wait 1", "cursor slot 22", "mouse 0 click", "wait 1"));
+			for (int i = 0; i < 6; i++) steps.addAll(List.of("cursor slot " + (18 + i), "mouse 0 click", "wait 1", "cursor slot " + (9 + i), "mouse 0 click",
+				round % 2 == 0 ? "wait 0" : "wait 1"));
+		}
+		steps.addAll(List.of("wait 40"));
+		// Every frame and tick end, the boxes the screen shows (the cursor too): more than six is one shown twice (a box put
+		// down and still on the cursor, as 2b2t's answers to a drag's start did). Printer on, idle, as you'd have it: its
+		// build runs all the while, which kept core from checking the menu.
+		int[] most = {0};
+		Object watch = new Object() {
+			@Subscribe
+			private void onFrame(RenderEvent e) {
+				count();
+			}
+
+			@Subscribe
+			private void onTick(TickEvent.Post e) {
+				count();
+			}
+
+			private void count() {
+				var player = Minecraft.getInstance().player;
+				if (player == null) return;
+				var menu = player.containerMenu;
+				int n = menu.getCarried().is(ItemTags.SHULKER_BOXES) ? 1 : 0;
+				for (var slot : menu.slots) if (slot.getItem().is(ItemTags.SHULKER_BOXES)) n++;
+				most[0] = Math.max(most[0], n);
+			}
+		};
+		var printer = t.module("myriad-essentials:printer");
+		printer.enable();
+		t.onGame(() -> Myriad.events().subscribe(watch));
+		try {
+			SortScenes.script(t, steps.toArray(String[]::new));
+		} finally {
+			t.onGame(() -> Myriad.events().unsubscribe(watch));
+			printer.disable();
+		}
+		String carried = SortScenes.carried(t);
+		List<String> client = t.onGame(() -> {
+			List<String> out = new ArrayList<>();
+			var inv = Minecraft.getInstance().player.getInventory();
+			for (int i = 0; i < 36; i++) {
+				ItemStack st = inv.getItem(i);
+				out.add(st.isEmpty() ? (st.getItem() == Items.AIR ? "" : "EMPTY " + BuiltInRegistries.ITEM.getKey(st.getItem()).getPath())
+					: BuiltInRegistries.ITEM.getKey(st.getItem()).getPath() + " x" + st.getCount());
+			}
+			return out;
+		});
+		SortScenes.script(t, "key escape", "wait 5");
+		List<String> server = t.player().inventory().subList(0, 36);
+		List<String> differ = new ArrayList<>();
+		for (int i = 0; i < 36; i++) if (!client.get(i).equals(server.get(i))) differ.add(i + ": client " + client.get(i) + " / server " + server.get(i));
+		String detail = String.format(Locale.ROOT, "cursor %s; at most %d boxes shown; %s", carried, most[0],
+			differ.isEmpty() ? "client and server agree" : String.join(", ", differ));
+		t.check(carried.equals("none") && most[0] == colors.length && differ.isEmpty(), detail);
 		t.note(detail);
 	}
 
