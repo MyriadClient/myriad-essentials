@@ -7,6 +7,7 @@ import dev.myriadclient.api.integration.Baritone;
 import dev.myriadclient.api.module.ModuleGroup;
 import dev.myriadclient.api.ui.Icons;
 import dev.myriadclient.api.ui.PanelType;
+import dev.myriadclient.essentials.effects.BackgroundEffects;
 import dev.myriadclient.essentials.dev.InvTest;
 import dev.myriadclient.essentials.dev.PortalTest;
 import dev.myriadclient.essentials.dev.PrintScene;
@@ -105,6 +106,7 @@ public final class Essentials implements MyriadAddon {
 		VillagerTrades.load(ctx.storage());
 		NamedChoiceSetting.register(ctx.settingWidgets());
 		HiddenPosSetting.register(ctx.settingWidgets());
+		BackgroundEffects.register();
 		// Modules the ready-made control panels below combine.
 		ElytraTweaks elytraTweaks = new ElytraTweaks();
 		RotationLock rotationLock = new RotationLock();
