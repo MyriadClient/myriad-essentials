@@ -2,8 +2,12 @@ package dev.myriadclient.essentials.modules.automation;
 
 import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.event.Subscribe;
-import dev.myriadclient.api.event.events.ScreenOpenEvent;
 import dev.myriadclient.api.event.events.TickEvent;
+import dev.myriadclient.api.job.Job;
+import dev.myriadclient.api.job.JobContext;
+import dev.myriadclient.api.job.Progress;
+import dev.myriadclient.api.job.Step;
+import dev.myriadclient.api.job.Why;
 import dev.myriadclient.api.module.Module;
 import dev.myriadclient.api.module.Tags;
 import dev.myriadclient.api.player.Reach;
@@ -13,7 +17,7 @@ import dev.myriadclient.api.service.Placement;
 import dev.myriadclient.api.setting.BoolSetting;
 import dev.myriadclient.api.setting.RegistryListSetting;
 import dev.myriadclient.api.setting.StringSetting;
-import net.minecraft.client.gui.screens.inventory.AnvilScreen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ServerboundRenameItemPacket;
 import net.minecraft.tags.BlockTags;
@@ -52,8 +56,6 @@ public class AutoRename extends Module {
 
 	/** The anvil open for renaming: its screen hidden; null when none is. */
 	private Containers.@Nullable View anvil;
-	/** An anvil being opened: its screen is hidden as it comes. */
-	private @Nullable BlockPos opening;
 	/** Completes once the anvil's work ends (true if nothing's left to rename). */
 	private @Nullable CompletableFuture<Boolean> finished;
 	private int wait;
@@ -68,13 +70,78 @@ public class AutoRename extends Module {
 		skipped.clear();
 		wait = 0;
 		warnedLevels = false;
+		startJob();
+	}
+
+	/**
+	 * The job it runs as ("Renaming": the Jobs window shows it, and can pause or cancel it), and the owner of the anvil it
+	 * opens: core opens a job's containers quietly, no screen shown (the anvil's name box would send names of its own) and
+	 * none of yours replaced. Null between worlds; started again in the next.
+	 */
+	private @Nullable Job<Void> job;
+	private @Nullable Object jobOwner;
+
+	/** Starts the job; one cancelled from the Jobs window turns the module off, one ended by leaving the world starts again in the next. */
+	private void startJob() {
+		if (mc.player == null) return;
+		Job<Void> mine = job = Myriad.jobs().start(this, Step.of("Renaming", RenameRun::new));
+		mine.result().whenComplete((v, t) -> {
+			if (job != mine) return;
+			job = null;
+			stopWork();
+			jobOwner = null;
+			if (isEnabled() && (t == null || !Why.of(t).code().equals(Why.LEFT_WORLD))) disable();
+		});
+	}
+
+	/** Its work, one tick at a time, as the job's step. */
+	private final class RenameRun implements Step.Run<Void> {
+		@Override
+		public void start(JobContext ctx) {
+			jobOwner = ctx.job();
+		}
+
+		@Override
+		public Progress<Void> tick(JobContext ctx) {
+			renameTick();
+			return Progress.running();
+		}
+
+		@Override
+		public void pause(JobContext ctx) {
+			stopWork();
+		}
+
+		@Override
+		public void cancel(JobContext ctx) {
+			stopWork();
+		}
+	}
+
+	/** In a world with it on but no job (the last one ended with the world): a new one. */
+	@Subscribe(inGame = true)
+	private void onTick(TickEvent.Pre e) {
+		if (job == null) startJob();
 	}
 
 	@Override
 	protected void onDisable() {
+		Job<Void> j = job;
+		job = null;
+		if (j != null) j.cancel();
+		stopWork();
+		jobOwner = null;
+	}
+
+	/** Lets go of the anvil (paused, cancelled, off). */
+	private void stopWork() {
 		endAnvil(false);
-		opening = null;
 		busy = false;
+	}
+
+	/** Whether your inventory or a container you opened is up: the anvil would take its place, so it waits (and closes for you). */
+	private boolean yours() {
+		return mc.gui.screen() instanceof AbstractContainerScreen<?>;
 	}
 
 	/** The name to give, trimmed; empty for none. */
@@ -133,15 +200,20 @@ public class AutoRename extends Module {
 		return best;
 	}
 
-	@Subscribe(inGame = true)
-	private void onTick(TickEvent.Pre e) {
+	/** A tick of work (the job's). */
+	private void renameTick() {
+		if (yours()) {
+			// Closed for the server only (your screen stays up), so your clicks work; on again once you close it.
+			if (anvil != null) endAnvil(false);
+			return;
+		}
 		if (anvil != null) {
 			renameStep();
 			return;
 		}
 		if (busy || wait > 0 && wait-- > 0) return;
-		// Your own inventory, with nothing else open: renamed at the anvil, if there's one.
-		if (mc.gui.screen() != null || mc.player.containerMenu != mc.player.inventoryMenu || Myriad.containers().current().isPresent()) return;
+		// Your own inventory, with nothing else open: renamed at the anvil, if there's one. Under the UI, a wheel or chat too.
+		if (mc.player.containerMenu != mc.player.inventoryMenu || Myriad.containers().current().isPresent()) return;
 		if (!mc.player.containerMenu.getCarried().isEmpty() || inventoryIndexToRename() < 0 || !affordable()) return;
 		if (!Myriad.inventory().safeToClick()) return;
 		BlockPos at = anvilInReach();
@@ -158,10 +230,8 @@ public class AutoRename extends Module {
 
 	/** Opens the anvil at {@code pos} without its screen and renames everything to rename; completes once it's closed. */
 	private CompletableFuture<Boolean> openAnvil(BlockPos pos) {
-		opening = pos;
 		CompletableFuture<Boolean> done = new CompletableFuture<>();
-		Myriad.containers().open(this, pos, OPEN_TICKS, Placement.Options.forServer()).whenComplete((view, t) -> {
-			opening = null;
+		Myriad.containers().open(jobOwner, pos, OPEN_TICKS, Placement.Options.forServer()).whenComplete((view, t) -> {
 			if (t != null || !isEnabled() || !(view.handler() instanceof AnvilMenu menu)) {
 				if (view != null) view.close();
 				done.complete(false);
@@ -236,13 +306,5 @@ public class AutoRename extends Module {
 		CompletableFuture<Boolean> done = finished;
 		finished = null;
 		if (done != null) done.complete(ok);
-	}
-
-	/** The anvil's screen stays hidden: its name box would send names of its own. */
-	@Subscribe
-	private void onScreen(ScreenOpenEvent e) {
-		if (e.screen() instanceof AnvilScreen s && (opening != null || anvil != null) && mc.player != null && s.getMenu() == mc.player.containerMenu) {
-			e.setScreen(null);
-		}
 	}
 }

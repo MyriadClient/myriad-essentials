@@ -56,6 +56,35 @@ public final class AutoRenameTests extends EssentialsSuite {
 		t.note(detail);
 	}
 
+	@Test(name = "under_chat", tags = "inventory", timeoutTicks = 800)
+	public void underChat(TestContext t) {
+		// Chat open the whole time (as the UI or a wheel would be): it stays up, and the stacks are renamed all the same
+		// (the anvil, a job's, opens with no screen).
+		t.arena().set(2, 0, 0, "anvil");
+		t.player().at(0.5, 0, 0.5, -90, 20);
+		t.player().give(9, "diamond", 64).give(20, "diamond", 5);
+		setUp(t);
+		t.waitTicks(5);
+		t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("", false)));
+		t.waitTicks(2);
+		var chat = t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.screen());
+		t.flagsFromHere();
+		String me = "entity " + t.player().name();
+		t.module(RENAME).enable();
+		boolean done = false;
+		int lost = 0;
+		for (int i = 0; i < 200 && !done; i++) {
+			t.waitTicks(1);
+			if (t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.screen()) != chat) lost++;
+			if (i % 5 == 4) done = !has(t, me, "container.* diamond[!custom_name]");
+		}
+		t.module(RENAME).disable();
+		t.onGame(() -> net.minecraft.client.Minecraft.getInstance().gui.setScreen(null));
+		String detail = String.format(Locale.ROOT, "%s; chat replaced or closed for %d ticks", done ? "renamed" : "not renamed", lost);
+		t.check(done && lost == 0, detail);
+		t.note(detail);
+	}
+
 	@Test(name = "without_keeping_slots", tags = "inventory", timeoutTicks = 800)
 	public void withoutKeepingSlots(TestContext t) {
 		// Keep Slots off: two clicks a stack, each renamed stack wherever there's room (stacking with the others); all renamed.
