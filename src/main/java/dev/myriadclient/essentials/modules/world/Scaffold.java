@@ -4,6 +4,8 @@ import dev.myriadclient.api.Myriad;
 import dev.myriadclient.api.build.Blueprint;
 import dev.myriadclient.api.build.Build;
 import dev.myriadclient.api.build.Target;
+import dev.myriadclient.api.job.Job;
+import dev.myriadclient.api.job.Steps;
 import dev.myriadclient.api.event.Priority;
 import dev.myriadclient.api.event.Subscribe;
 import dev.myriadclient.api.event.events.InputEvent;
@@ -85,7 +87,8 @@ public class Scaffold extends Module {
 
 	private static final Direction[] PLANE = {Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
 
-	private @Nullable Build build;
+	/** The build, kept up as a job ("Scaffolding": the Jobs window shows it, and can pause it). */
+	private @Nullable Job<Void> job;
 	private Building.@Nullable Options running;
 	/** The layer it builds in: the one under your feet when you last stood on something, raised as you jump. */
 	private int level = Integer.MIN_VALUE;
@@ -112,23 +115,23 @@ public class Scaffold extends Module {
 
 	@Override
 	protected void onDisable() {
-		Build b = build;
-		build = null;
+		Job<Void> j = job;
+		job = null;
 		running = null;
-		if (b != null) b.stop();
+		if (j != null) j.cancel();
 	}
 
 	private void start() {
 		running = options();
-		build = Myriad.building().start(this, Blueprint.dynamic(this::plan), running);
+		job = Myriad.jobs().start(this, Steps.keepUp(Blueprint.dynamic(this::plan), running).named("Scaffolding"));
 	}
 
 	/** Before the building service plans this tick: the layer follows you, and a changed setting starts the build over. */
 	@Subscribe(priority = Priority.HIGHEST)
 	private void onTick(TickEvent.Pre e) {
 		if (!inGame()) return;
-		if (build == null || !build.isRunning() || !options().equals(running)) {
-			if (build != null) build.stop();
+		if (job == null || !job.state().isActive() || !options().equals(running)) {
+			if (job != null) job.cancel();
 			start();
 		}
 		updateLevel();
@@ -332,6 +335,21 @@ public class Scaffold extends Module {
 
 	@Subscribe(inGame = true)
 	private void onRender(RenderEvent e) {
-		if (showPlan.get()) BuildPlanRenderer.draw(e, build, look);
+		if (showPlan.get()) BuildPlanRenderer.draw(e, build(), look);
+	}
+
+	/** The build a step of the job runs (for its outline), or null. */
+	private @Nullable Build build() {
+		Job<Void> mine = job;
+		if (mine == null) return null;
+		for (Build b : Myriad.building().running()) {
+			if (b.owner() instanceof Job<?> j && root(j) == mine) return b;
+		}
+		return null;
+	}
+
+	private static Job<?> root(Job<?> j) {
+		while (j.parent() != null) j = j.parent();
+		return j;
 	}
 }

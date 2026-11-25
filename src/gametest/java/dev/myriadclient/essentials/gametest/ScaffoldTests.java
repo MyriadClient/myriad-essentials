@@ -1,11 +1,17 @@
 package dev.myriadclient.essentials.gametest;
 
+import dev.myriadclient.api.Myriad;
+import dev.myriadclient.api.event.Subscribe;
+import dev.myriadclient.api.event.events.PacketEvent;
 import dev.myriadclient.testing.Key;
 import dev.myriadclient.testing.Test;
 import dev.myriadclient.testing.TestContext;
+import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
+import net.minecraft.network.protocol.game.ServerboundPickItemFromBlockPacket;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Scaffold: a block under you at a run, on a diagonal, with Air Place and while towering, the 2b2t way (clicks without a
@@ -120,6 +126,44 @@ public final class ScaffoldTests extends EssentialsSuite {
 		String detail = String.format(Locale.ROOT, "%d/%d of the 3-wide strip, %d outside it, y=%.2f", strip, rows * 3, outside, to.y);
 		t.module("myriad-essentials:scaffold").set("width", "1");
 		t.check(strip == rows * 3 && outside == 0 && to.y >= -0.1, detail);
+		t.note(detail);
+	}
+
+	/** Counts inventory clicks and picks going out. */
+	public static final class Sends {
+		final AtomicInteger clicks = new AtomicInteger(), picks = new AtomicInteger();
+
+		@Subscribe(packets = {ServerboundContainerClickPacket.class, ServerboundPickItemFromBlockPacket.class})
+		private void onSend(PacketEvent.Send e) {
+			if (e.packet() instanceof ServerboundPickItemFromBlockPacket) picks.incrementAndGet();
+			else clicks.incrementAndGet();
+		}
+	}
+
+	@Test(name = "restocks_by_pick_2b2t", tags = {"world", "2b2t"}, allowFlags = "RotationPlace")
+	public void restocksByPick2b2t(TestContext t) {
+		// The dirt only in the inventory, and a dirt block in reach beside you: it comes to the hotbar by pick, not a click.
+		if (dev.myriadclient.impl.network.JoinedVersion.get().translated()) {
+			t.skip("needs a native join (-Pvia=native): a translated connection has no pick");
+			return;
+		}
+		t.player().at(0.5, 0, -10.5, 0, 0);
+		t.arena().fill(-20, -1, -8, 40, -1, 20, "air");
+		t.arena().set(2, 0, -10, "dirt");
+		t.player().give(9, "dirt", 64).select(0);
+		t.module("myriad-essentials:scaffold").set("rotate", "false").set("air_place", "false").set("blocks", "clear").set("width", "1");
+		t.server().likeTwoBTwoT();
+		Sends sends = new Sends();
+		t.onGame(() -> Myriad.events().subscribe(sends));
+		t.module("myriad-essentials:scaffold").enable();
+		t.waitTicks(2);
+		t.hold(Key.FORWARD, Key.SPRINT).forTicks(30);
+		t.waitTicks(4);
+		t.onGame(() -> Myriad.events().unsubscribe(sends));
+		Vec3 to = t.player().serverPosition();
+		int last = (int) Math.floor(to.z), n = last + 7 + 1, placed = bridged(t, -7, last);
+		String detail = String.format(Locale.ROOT, "%d/%d bridged, y=%.2f, %d picks, %d clicks", placed, n, to.y, sends.picks.get(), sends.clicks.get());
+		t.check(sends.picks.get() >= 1 && placed == n && to.y >= -0.1, detail);
 		t.note(detail);
 	}
 }
