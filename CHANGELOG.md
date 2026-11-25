@@ -3,6 +3,37 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.8.0
+
+Needs Myriad 2.6.0, for Minecraft 26.3, for its background effects and its quiet container opens.
+
+- **Background effects: Grain and Dither**, in Theme > Background > Style. Grain is film grain (Amount, Size,
+  Moving). Dither is halftone dots in drifting wisps of smoke, in the secondary colour (Color, Amount, Size, Scale,
+  Drift). Rows and buttons on them show them blurred, through core's frosting.
+- **Auto Craft: inputs and outputs.** Inputs and Outputs: look at a container and add it, or press Input Bind or
+  Output Bind on one; they're outlined while it runs. Once nothing more can be made from what you carry, what's made
+  goes into the outputs and the next round comes from the inputs: whole stacks, in the recipe's proportions, as much as
+  fits your inventory. Empty or missing inputs and full outputs are waited on. A shulker unloader's or loader's next
+  box is seen the moment it's there, then left alone for half a second, so its comparator sees it full: one emptied in
+  the tick it arrived left the unloader stuck.
+- **Auto Trader: several chests.** Input Chest and Output Chest are now Inputs and Outputs lists (saved ones carried
+  over): inputs are emptied in turn, outputs filled in turn, and a missing one is waited on rather than turning it off.
+- **`.containers <AutoCraft|AutoTrader> [input|output [add|remove|clear]]`** for macros, wheels and chat: toggles the
+  container you look at, or says how many it has (never where they are).
+- **Auto Craft, Auto Trader and Auto Rename run as jobs** (Crafting, Trading, Renaming in the Jobs window, where they
+  can be paused or cancelled). Their containers open with no screen and never take yours: they keep going under the UI,
+  a wheel or chat, and wait while your inventory or a chest is open, closing theirs so your clicks work. Before, they
+  closed whatever screen you had up.
+- **Printer: restock fills your inventory** with what ran out (a slot kept free), and a box it put down is picked back
+  up before it walks on. **Walk To Blocks walks along the build**: its goal moves ahead along the unbuilt blocks as you
+  go, so the building happens on the walk (about twice as fast down a row), with no sprint for the last few blocks
+  (stopping from a sprint while placing slipped on Grim).
+- **Scaffold runs as a job** (Scaffolding in the Jobs window).
+- **Villager Roller**: Min Level, Second Trade (Any, Bookshelf, Paper), Price (Any, At Most with Max Price, Lowest),
+  Keep Level V Under, and Level Up To with Glass, which trades the villager up after locking in and reports Keeper or
+  Miss; Log Rolls. It steps out of the lectern's block before putting it back. Lock Trade is under Other now (a saved
+  value is carried over).
+
 ## 2.7.2
 
 Needs Myriad 2.5.2, for Minecraft 26.3, which stops counting recipe book placements as clicks (2b2t doesn't).
