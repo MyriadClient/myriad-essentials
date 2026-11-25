@@ -671,7 +671,8 @@ public final class PrinterTests extends EssentialsSuite {
 	public void observerLast(TestContext t) {
 		Pass p = new Pass();
 		p.row = List.of("observer[facing=east]", "oak_log[axis=y]");
-		// Out of reach till the stand, so the watch sees both go in.
+		// Out of reach till the stand, so both go in while it's watched. Watched every tick from before the Printer is on:
+		// the pass's own watch starts once you've stood there a moment, and both can be in by then.
 		p.startX = -20.5;
 		p.stand = new int[] {0};
 		p.stopTicks = 100;
@@ -679,13 +680,23 @@ public final class PrinterTests extends EssentialsSuite {
 		int[] tick = {0};
 		var a = t.arena();
 		BlockPos observer = new BlockPos(a.x(X), a.y(Y), a.z(Z)), log = observer.east();
-		p.watch = () -> {
-			var level = Minecraft.getInstance().level;
-			tick[0]++;
-			if (firstSeen[0] < 0 && !level.getBlockState(observer).isAir()) firstSeen[0] = tick[0];
-			if (firstSeen[1] < 0 && !level.getBlockState(log).isAir()) firstSeen[1] = tick[0];
+		Object watch = new Object() {
+			@dev.myriadclient.api.event.Subscribe
+			private void onTick(dev.myriadclient.api.event.events.TickEvent.Post e) {
+				var level = Minecraft.getInstance().level;
+				if (level == null) return;
+				tick[0]++;
+				if (firstSeen[0] < 0 && !level.getBlockState(observer).isAir()) firstSeen[0] = tick[0];
+				if (firstSeen[1] < 0 && !level.getBlockState(log).isAir()) firstSeen[1] = tick[0];
+			}
 		};
-		Result r = printerPass(t, p);
+		t.onGame(() -> dev.myriadclient.api.Myriad.events().subscribe(watch));
+		Result r;
+		try {
+			r = printerPass(t, p);
+		} finally {
+			t.onGame(() -> dev.myriadclient.api.Myriad.events().unsubscribe(watch));
+		}
 		boolean after = firstSeen[0] > firstSeen[1] && firstSeen[1] > 0;
 		String detail = r.detail + "; observer at tick " + firstSeen[0] + ", log at " + firstSeen[1];
 		t.check(r.ok && after, detail);
