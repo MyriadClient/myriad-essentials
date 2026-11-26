@@ -3,6 +3,14 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.8.1
+
+Needs Myriad 2.6.0, for Minecraft 26.3.
+
+- **Signed releases.** Essentials now lists its signing key, so from this version on Myriad 2.7.0 and later take only
+  Essentials updates signed with it. Each release is signed offline once the released jar has been rebuilt from its
+  tag and found identical, and its jar now builds byte for byte the same from the same source.
+
 ## 2.8.0
 
 Needs Myriad 2.6.0, for Minecraft 26.3, for its background effects and its quiet container opens.
