@@ -3,6 +3,10 @@
 # from gradle.properties: `git tag v0.1.1 && git push origin v0.1.1`.
 #
 # Publishing uses the MAVEN_USERNAME and MAVEN_PASSWORD secrets: a maven token allowed to write dev/myriadclient.
+# The jar is attested (where and from what it was built) but not signed here: no signing key is ever in CI. The
+# maintainer rebuilds the tag, checks it matches this jar byte for byte, and signs it offline (Myriad's
+# tools/sign-release essentials); players' Myriad takes an update only once its .sig is on the release. Actions are
+# pinned by commit.
 
 name: release
 on:
@@ -11,17 +15,19 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
     runs-on: ubuntu-24.04
     steps:
       - name: checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: validate gradle wrapper
-        uses: gradle/actions/wrapper-validation@v6
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
       - name: setup jdk
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           java-version: '25'
           distribution: 'microsoft'
@@ -40,8 +46,12 @@ jobs:
           [ -s notes.md ] || echo "Myriad Essentials $version" > notes.md
           # Which Minecraft it's for, from the built jar's fabric.mod.json: Myriad's update check only offers releases for the player's.
           printf '\nMinecraft: %s\n' "$(unzip -p build/libs/myriad-essentials-$version.jar fabric.mod.json | jq -r '.depends.minecraft')" >> notes.md
+      - name: attest the jar's provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: build/libs/myriad-essentials-*.jar
       - name: create the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           body_path: notes.md
           files: build/libs/*.jar
