@@ -30,7 +30,8 @@
 	"custom": {
 		"myriad": {
 			"keys": [
-				"ed25519:ZW9yhFbw987SYNvs23DvHSAnLhXte8RfyQfEX1j8SgU"
+				"ed25519:ZW9yhFbw987SYNvs23DvHSAnLhXte8RfyQfEX1j8SgU",
+				"ed25519:kJS2ev_PWdfEjBokzpOCqliecb-93Kv7zYoRCPSF4Ks"
 			]
 		}
 	}

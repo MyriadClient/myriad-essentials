@@ -50,11 +50,14 @@ jobs:
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: build/libs/myriad-essentials-*.jar
-      - name: create the release
+      # A draft: it's published by tools/sign-release once the maintainer has signed it, so no one (and not the
+      # Myriad Library) sees it before its .sig is there.
+      - name: create the release (draft)
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           body_path: notes.md
           files: build/libs/*.jar
+          draft: true
       - name: publish to Myriad's maven
         env:
           ORG_GRADLE_PROJECT_myriadUsername: ${{ secrets.MAVEN_USERNAME }}
