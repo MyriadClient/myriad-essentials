@@ -3,6 +3,13 @@
 Myriad Essentials is versioned on its own, apart from [Myriad](https://github.com/MyriadClient/myriad-core) core. Each
 release says which core it needs (`myriad_version` in `gradle.properties`, the `depends` in `fabric.mod.json`).
 
+## 2.8.3
+
+Needs Myriad 2.6.0, for Minecraft 26.3. Nothing in the game changes.
+
+- **Shown in full in the Myriad Library.** Built with Myriad's Gradle plugin 2.9.0, so Browse and the website list
+  Essentials' modules and what's new before you install it.
+
 ## 2.8.2
 
 Needs Myriad 2.6.0, for Minecraft 26.3. Nothing in the game changes.
